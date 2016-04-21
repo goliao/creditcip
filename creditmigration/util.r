@@ -11,7 +11,7 @@ require(ggplot2)
 require(sandwich)
 require(stargazer)
 require(reshape2)
-
+require(sqldf)
 '%ni%' <- Negate('%in%')
 df2clip<-function(x)(write.table(x, "clipboard.csv", sep=","))
 # df2clip<-function(x)(write.table(x, "clipboard", sep="\t"))
@@ -125,4 +125,27 @@ ds<-function(dfin,matchpattern='.'){
   require(stringr)
   cn<-colnames(dfin) 
   try(cn[str_locate(as.character(cn),regex(matchpattern))[,1]>0] %>% na.omit() %>% as.character())
+}
+
+wgplot <- function(dfwide,idvar='date'){
+  dfwide %>% 
+  reshape2::melt(.,id.vars=idvar) %>%
+  #filter(type %in% fields) %>% 
+  ggplot(data=.,aes(x=date,y=value,colour=variable))+geom_line()+geom_point()
+}
+
+
+issfilter <- function(df_issraw){
+
+  df_issraw  %>% 
+  filter(amt>=50,ytofm>=2, ytofm<=99999,nrating<=16, (pub=="Public" | pub=="Sub."), 
+         mdealtype %ni% c("P","ANPX","M","EP","CEP","TM","PP","R144P"), 
+         secur %ni% c("Cum Red Pfd Shs", "Non-Cum Pref Sh" , "Preferred Shs" ,"Pfd Stk,Com Stk"),
+         tf_mid_desc!='Government Sponsored Enterprises',
+         nrating>1)
+}
+
+
+tabulate <- function(dfin,byvar='variable'){
+  dfin %>% group_by_(byvar) %>% dplyr::summarise_(count=length(byvar)) %>% arrange(desc(count))
 }
