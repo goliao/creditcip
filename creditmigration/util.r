@@ -12,6 +12,7 @@ require(sandwich)
 require(stargazer)
 require(reshape2)
 require(sqldf)
+require(magrittr)
 '%ni%' <- Negate('%in%')
 df2clip<-function(x)(write.table(x, "clipboard.csv", sep=","))
 # df2clip<-function(x)(write.table(x, "clipboard", sep="\t"))
@@ -147,5 +148,6 @@ issfilter <- function(df_issraw){
 
 
 tabulate <- function(dfin,byvar='variable'){
-  dfin %>% group_by_(byvar) %>% dplyr::summarise_(count=length(byvar)) %>% arrange(desc(count))
+  # dfin %>% group_by_(byvar) %>% dplyr::summarise_(count=length(byvar)) %>% arrange(desc(count))
+  table(dfin[byvar]) %>% as.data.frame() %>%  tbl_df() %>% arrange(desc(Freq))
 }

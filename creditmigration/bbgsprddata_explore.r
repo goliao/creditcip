@@ -5,8 +5,23 @@ source('util.r')
 require(sqldf)
 
 load('../data/bloomberg/bbg_gbonds_160413_sprd.rdata')
-df_yld<-unlist(prices, recursive=FALSE) %>% do.call(rbind.data.frame,.) %>%  
-  mutate(ticker=str_extract(rownames(.),'^.*(?=(\\.))')) %>% filter(ticker!="NA")
+a0<-unlist(prices, recursive=FALSE)
+str(a0)
+names(a0)
+
+a0$`JK354407 Corp`
+length(a0)
+nrow(globalbonds)
+
+tickernames<-names(a0)
+df_prices<-data.frame() %>% tbl_df()
+for (i in 1:length(tickernames)){
+  temp_new<-a0[[i]] %>% mutate(ticker=tickernames[i]) %>% tbl_df()
+  if (nrow(temp_new)==0) print (str_c('empty:#',i,' name:', tickernames[i]))
+  df_prices<-df_prices %>% dplyr::bind_rows(.,temp_new)
+}
+df_yld<-df_prices
+
 # df_yld_long<-df_yld %>% select(-BLP_CDS_BASIS_MID) %>%  gather(key = 'field',value='value',-date,-ticker) %>% dplyr::tbl_df()
 # df_yld_long %>% group_by(date, field) %>% summarise(Ndp=length(na.omit(value))) %>% 
 #   ggplot(.,aes(x=date,y=Ndp,colour=field))+geom_line()
@@ -56,18 +71,17 @@ df_sdc2<-df_sdc[!duplicated(df_sdc$isin),] %>% filter(isin!='-')  %>%
   
 # count number of observations by isin
 df_obs<-df_yld2 %>% group_by(isin) %>% summarise(.,ct=length(isin)) %>% arrange(desc(ct))
-df_obs %>% View
 # compare to number of expected obs by isin
 df_obs2<-sqldf('select A.*, B.expmonthlyobs from df_obs as A left join df_sdc2 as B on A.isin=B.isin')
-df_obs2 %>% mutate(obsdiff=expmonthlyobs-ct) %>% group_by(obsdiff) %>% summarise(ctt=length(obsdiff)) %>% View
+# df_obs2 %>% mutate(obsdiff=expmonthlyobs-ct) %>% group_by(obsdiff) %>% summarise(ctt=length(obsdiff)) %>% View
 
 # merging
 df_bond<-sqldf('select A.*, B.ccy,B.nrating, B.mat2,B.ytofm,B.i,B.descr,B.d,B.mdealtype,B.amt,B.pub,B.issue_type_desc from df_yld2 as A, df_sdc2 as B where A.isin=B.isin')
 df_bond2<-sqldf('select A.*, B.ccy,B.nrating, B.mat2,B.ytofm,B.i,B.descr,B.mdealtype from df_yld2 as A left join df_sdc2 as B on A.isin=B.isin')
 
-nrow(df_yld2)
-nrow(df_bond)
-df_bond %>% tabulate(.,'isin') %>% View
+# nrow(df_yld2)
+# nrow(df_bond)
+# df_bond %>% tabulate(.,'isin') %>% View
 
 # matching to newly downloaded sdc isins
 sdc_raw<-read.csv('../data/sdc/sdc_bbgmatch.csv',stringsAsFactors = FALSE)
@@ -81,12 +95,12 @@ df_sdcn2<-df_sdcnew[!duplicated(df_sdcnew$isin),] %>% filter(isin!='-')  %>% arr
 df_bond3<-sqldf('select A.*, B.ccy, B.descr, B.ytofm, B.d, B.mat2 from df_yld2 as A, df_sdcn2 as B where A.isin=B.isin')
 df_bond3<-sqldf('select A.*, B.ccy, B.descr, B.ytofm, B.d, B.mat2, B.issname, B.mdealtype from df_yld2 as A, df_sdcn2 as B where A.isin=B.isin')
 
-df_sdcn2 %>% ds
-
-nrow(df_yld2)
-nrow(df_bond)
-nrow(df_bond3)
-df_bond3 %>% tabulate(.,'isin') %>% View
+# df_sdcn2 %>% ds
+# 
+# nrow(df_yld2)
+# nrow(df_bond)
+# nrow(df_bond3)
+# df_bond3 %>% tabulate(.,'isin') %>% View
 
 # what's missing compare to earlier merge
 anti_join(df_bond,df_bond3,by='isin') %>% tbl_df() %>%  group_by(i) %>% top_n(.,1,desc(date)) %>% dplyr::arrange(pub) %>% select(1,10:26) %>% View
@@ -105,19 +119,21 @@ anti_join(df_yld2,df_bond,by='isin') %>% anti_join(.,df_bond3,by='isin') %>% tbl
 anti_join(df_yld2,df_bond,by='isin') %>% anti_join(.,df_bond3,by='isin') %>% tbl_df() %>% group_by(isin) %>% top_n(.,1,desc(date)) %>% select(ticker:crncy) %>% write.csv(.,file='GetBBGBondData.csv')
 
 #what's covered in sdc but not in bloomberg?
-bbgmiss<-anti_join(df_sdcn2,df_yld2,by='isin') %>% filter(ccy!='gbp',nrating_sp<=10,nrating_mdy<=10,nrating_sp!=0,nrating_mdy!=0,amt>=50,ytofm>2,ytofm<50,
+bbgmiss<-anti_join(df_sdcn2,df_yld2,by='isin') %>% filter(ccy!='gbp',nrating_sp<=10,nrating_mdy<=10,nrating_sp!=0,nrating_mdy!=0,amt>=100,ytofm>2,ytofm<50,
                                                  !grepl('Flt',typesec),!grepl('Zero Cpn',typesec),!grepl('Float',typesec),!grepl('Fl',descr),!grepl('Zero Cpn',descr)) 
+bbgmiss 
 bbgmiss  %>% xtabs(~typesec,data=.) %>% as.data.frame() %>% arrange(desc(Freq)) %>% View
 bbgmiss  %>% xtabs(~mktplace,data=.) %>% as.data.frame() %>% arrange(desc(Freq)) %>% View
 bbgmiss  %>% xtabs(~upsic,data=.) %>% as.data.frame() %>% arrange(desc(Freq)) %>% View
-bbgmiss %>% ds
+bbgmiss %>% View
 bbgmiss %>% tabulate(.,'issname') %>% View
 bbgmiss %>% write.csv(.,file='GetBBGTickerPrice.csv')
 df_sdcn2 %>% xtabs(~typesec,data=.) %>% as.data.frame() %>% View
  # explore on bbg why these are missing
 
-
-
+df_yld2 %>% filter()
+#############################
+bbgmiss %>% filter(isin=='XS1378880253')
 
 #######
 df_bond %>% xtabs(~ccy+mdealtype,data=.)
@@ -127,12 +143,6 @@ Hmisc::describe(df_sdcnew$mktplace)
 
 # out of the ones that are matched, what's the data coverage?
 # very good price coverage
-
-
-
-
-
-
 
 
 
@@ -160,10 +170,42 @@ df_sdc %>% filter(isin=='1312630') %>% View
 df_sdc2 %>% filter(isin=='1312630') %>% View
 
 
+# curl -v -X POST 'https://api.openfigi.com/v1/mapping'                 \
+# --header 'Content-Type: text/json'                           \
+# --header 'X-OPENFIGI-APIKEY: abcdefghijklmnopqrstuvwxyz'     \
+# --data '[{"idType":"ID_WERTPAPIER","idValue":"851399"}]'
+# 
+# curl -v -X POST 'https://api.openfigi.com/v1/mapping'   \
+# --header 'Content-Type: text/json'             \
+# --data '[{"idType":"ID_WERTPAPIER","idValue":"851399","exchCode":"US"}]'
 
+require('magrittr')
+require('httr')
 
+figireq<-'[{"idType":"ID_WERTPAPIER","idValue":"851399","exchCode":"US"},
+          {"idType":"ID_BB_UNIQUE","idValue":"JK354407"},
+          {"idType":"ID_BB","idValue":"JK354407"},
+          {"idType":"COMPOSITE_ID_BB_GLOBAL","idValue":"JK354407"},
+          {"idType":"TICKER","idValue":"JK354407 Corp"}]'
 
+r<-POST(url='https://api.openfigi.com/v1/mapping',add_headers(`Content-Type`='text/json',`X-OPENFIGI-APIKEY`='b0128aa2-fe78-4707-a8ec-d9623d6f9928'), body = figireq, encode = "json")
+r
+content(r)
+content(r)[[1]][[1]][[1]] %>% as.data.frame() %>% View
+unlist(content(r)[[1]],recursive = FALSE) 
 
+t1<-as.data.frame(content(r)[[1]][[1]][[1]])
+for (i in 2:134){
+  t1<-rbind(t1,content(r)[[1]][[1]][[i]] %>% as.data.frame())
+}
+t1 %>% View
+  
+content_type()
+content_type_json()
+add_headers(`Content-Type`='text/json')
+
+content_type_json() %>% str
+content_type_json()[1]
 ###### explore yields
 load('../data/bloomberg/bbg_gbonds_160413.rdata')
 
