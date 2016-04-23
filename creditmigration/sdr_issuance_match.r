@@ -1,3 +1,4 @@
+# assess degree of FX hedging by matching to SDR data
 rm(list=ls())
 setwd("/Users/gliao/Dropbox/Research/ccy basis/data/bbg0417_sdr")
 load(file='sdr.rdata')

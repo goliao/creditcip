@@ -3,22 +3,16 @@ setwd("/Users/gliao/Dropbox/Research/ccy basis/creditmigration")
 setwd("C:/Users/gliao/Dropbox/Research/ccy basis/creditmigration")
 source('util.r')
 require(sqldf)
-
+# load bbg bond sprd, unpack ----------------------------------------------
 load('../data/bloomberg/bbg_gbonds_160413_sprd.rdata')
-a0<-unlist(prices, recursive=FALSE)
-str(a0)
-names(a0)
-
-a0$`JK354407 Corp`
-length(a0)
-nrow(globalbonds)
-
-tickernames<-names(a0)
-df_prices<-data.frame() %>% tbl_df()
-for (i in 1:length(tickernames)){
-  temp_new<-a0[[i]] %>% mutate(ticker=tickernames[i]) %>% tbl_df()
-  if (nrow(temp_new)==0) print (str_c('empty:#',i,' name:', tickernames[i]))
-  df_prices<-df_prices %>% dplyr::bind_rows(.,temp_new)
+a0 <- unlist(prices, recursive = FALSE)
+tickernames <- names(a0)
+df_prices <- data.frame() %>% tbl_df()
+for (i in 1:length(tickernames)) {
+  temp_new <- a0[[i]] %>% mutate(ticker = tickernames[i]) %>% tbl_df()
+  if (nrow(temp_new) == 0)
+    print (str_c('empty:#', i, ' name:', tickernames[i]))
+  df_prices <- df_prices %>% dplyr::bind_rows(., temp_new)
 }
 df_yld<-df_prices
 
@@ -59,7 +53,9 @@ df_yld2<-left_join(df_yld,globalbonds,by='ticker') %>% tbl_df()
 #   gather(.,key='type',value='yield',-date) %>% 
 #   filter(type=='dif_crd') %>% ggplot(.,aes(x=date,y=yield,colour=type))+geom_line()
 
-### MERGE WITH SDC
+
+# Merge with sdc data main ------------------------------------------------
+
 raw<-read.dta13('sdc96_clean2.dta')
 df_sdc<-raw %>% tbl_df() %>%  select(i,tic,isin,cu,d,nat,amt,descr,ccy,rating, nrating,mat2,ytofm,everything()) %>% arrange(d)
 # filter and augment with expected number of monthly observations
@@ -79,10 +75,7 @@ df_obs2<-sqldf('select A.*, B.expmonthlyobs from df_obs as A left join df_sdc2 a
 df_bond<-sqldf('select A.*, B.ccy,B.nrating, B.mat2,B.ytofm,B.i,B.descr,B.d,B.mdealtype,B.amt,B.pub,B.issue_type_desc from df_yld2 as A, df_sdc2 as B where A.isin=B.isin')
 df_bond2<-sqldf('select A.*, B.ccy,B.nrating, B.mat2,B.ytofm,B.i,B.descr,B.mdealtype from df_yld2 as A left join df_sdc2 as B on A.isin=B.isin')
 
-# nrow(df_yld2)
-# nrow(df_bond)
-# df_bond %>% tabulate(.,'isin') %>% View
-
+# merge with sec new ------------------------------------------------------
 # matching to newly downloaded sdc isins
 sdc_raw<-read.csv('../data/sdc/sdc_bbgmatch.csv',stringsAsFactors = FALSE)
 rating_sp<-read.csv('rating.csv',stringsAsFactors = FALSE) %>% tbl_df() %>% rename(rating_sp=rating,nrating_sp=nrating)
@@ -95,13 +88,8 @@ df_sdcn2<-df_sdcnew[!duplicated(df_sdcnew$isin),] %>% filter(isin!='-')  %>% arr
 df_bond3<-sqldf('select A.*, B.ccy, B.descr, B.ytofm, B.d, B.mat2 from df_yld2 as A, df_sdcn2 as B where A.isin=B.isin')
 df_bond3<-sqldf('select A.*, B.ccy, B.descr, B.ytofm, B.d, B.mat2, B.issname, B.mdealtype from df_yld2 as A, df_sdcn2 as B where A.isin=B.isin')
 
-# df_sdcn2 %>% ds
-# 
-# nrow(df_yld2)
-# nrow(df_bond)
-# nrow(df_bond3)
-# df_bond3 %>% tabulate(.,'isin') %>% View
 
+# explore what's missing in which dataset ---------------------------------
 # what's missing compare to earlier merge
 anti_join(df_bond,df_bond3,by='isin') %>% tbl_df() %>%  group_by(i) %>% top_n(.,1,desc(date)) %>% dplyr::arrange(pub) %>% select(1,10:26) %>% View
 anti_join(df_bond,df_bond3,by='isin') %>% tbl_df() %>% group_by(i) %>% top_n(.,1,desc(date)) %>%  xtabs(~pub+mdealtype+issue_type_desc,data=.)
@@ -128,46 +116,19 @@ bbgmiss  %>% xtabs(~upsic,data=.) %>% as.data.frame() %>% arrange(desc(Freq)) %>
 bbgmiss %>% View
 bbgmiss %>% tabulate(.,'issname') %>% View
 bbgmiss %>% write.csv(.,file='GetBBGTickerPrice.csv')
-df_sdcn2 %>% xtabs(~typesec,data=.) %>% as.data.frame() %>% View
- # explore on bbg why these are missing
-
-df_yld2 %>% filter()
-#############################
-bbgmiss %>% filter(isin=='XS1378880253')
 
 #######
 df_bond %>% xtabs(~ccy+mdealtype,data=.)
 df_bond %>% tabulate(.,'isin')
-
 Hmisc::describe(df_sdcnew$mktplace)
 
 # out of the ones that are matched, what's the data coverage?
 # very good price coverage
 
-
-
-
-df_bond %>% ds
-
-df
-
-
-
-
 df_bond %>% mutate(datestr=as.character(date),matstr=as.character(mat2)) %>% select(-date,-mat2,-fac) %>% 
   write.dta(.,'bondsprdpanel.dta')
 
-
-
-
-summary(df_bond)
-
-df_yld2 %>% View
-df_bond %>% View
-
-df_sdc %>% ds(.,'mat')
-df_sdc %>% filter(isin=='1312630') %>% View
-df_sdc2 %>% filter(isin=='1312630') %>% View
+# openfigi ----------------------------------------------------------------
 
 
 # curl -v -X POST 'https://api.openfigi.com/v1/mapping'                 \
@@ -206,7 +167,9 @@ add_headers(`Content-Type`='text/json')
 
 content_type_json() %>% str
 content_type_json()[1]
-###### explore yields
+
+# explore yield -----------------------------------------------------------
+
 load('../data/bloomberg/bbg_gbonds_160413.rdata')
 
 df_yld<-unlist(prices, recursive=FALSE) %>% do.call(rbind.data.frame,.) %>%
@@ -236,4 +199,42 @@ missings %>% ggplot(.,aes(x=Nmissings))+geom_density()
 df_yld2 %>% group_by(date, crncy) %>% summarise(Ndp=length(ticker)) %>% 
   ggplot(.,aes(x=date,y=Ndp,colour=crncy))+geom_line()
 
+
+
+# Demeaned spread ---------------------------------------------------------
+
+df_bond2<-df_bond %>% rename(oas=OAS_SPREAD_BID,upco=id_bb_ultimate_co) %>% select(-fac)
+df_oas_issmean<-df_bond2 %>% group_by(date,upco) %>% summarise(oas_issmean=mean(oas))
+# demeaned oas spread for each bond; demeaning issuer*time specific means
+df_bond_de<-sqldf('select A.*, B.oas_issmean from df_bond2 as A left join df_oas_issmean as B on (A.date==B.date and A.upco==B.upco)') %>%
+  tbl_df() %>% mutate(oas_res=oas-oas_issmean) %>% select(date,oas, oas_issmean, oas_res,upco,ccy) %>% arrange(date) 
+# residual oas spread between eur and usd, issuer matched
+df_ccyres<-df_bond_de %>% group_by(date,ccy) %>% summarise(mean_oas_res=mean(na.omit(oas_res))) %>% mutate(ccy=tolower(ccy)) %>% 
+  dcast(.,date~ccy,value.var='mean_oas_res') %>% tbl_df() %>% mutate(euus_sprd=eur-usd)
+df_ccyres %>% melt(.,id.vars='date') %>% filter(variable=='euus_sprd') %>% 
+  ggplot(.,aes(x=date,y=value)) +geom_line()
+
+priceraw<-read.dta13('prices_extended.dta')
+
+# adjusting for xccy
+df_price<-df_ccyres %>% full_join(.,priceraw,by='date') %>% mutate(oas_res_eff=euus_sprd-eubs5) %>% 
+  select(date,oas_res_eff,euus_sprd) %>% filter(date>'2006-01-01') %>% wgplot(.)
+# filter issuance 
+df_reg_data<- df_sdc %>% as.data.frame() %>%  issfilter(.) %>% icollapse_all(.) %>% full_join(.,df_price,by='date')
+df_reg_data %>% tail()
+
+df_reg_data %>% 
+  lm(I_net_euus~oas_res_eff,data=.)
+
+regtemp<-function(dfreg){
+  reg10_1<- dfreg %>% lm(I_net_euus~Cdif_euus_30,data=.)
+  stargazer(reg10_1,type='text',report="vct*")
+}
+
+
+
+df_bond_de %>% filter(date=='2005-12-30') %>% View  
+nrow(df_bond2)
+nrow(df_oas_issmean)
+nrow(df_bond_de)
 
