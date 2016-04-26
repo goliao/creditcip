@@ -143,12 +143,13 @@ df_bond %>% mutate(datestr=as.character(date),matstr=as.character(mat2)) %>% sel
 require('magrittr')
 require('httr')
 
-figireq<-'[{"idType":"ID_WERTPAPIER","idValue":"851399","exchCode":"US"},
+figireq<-'[{"idType":"ID_ISIN","idValue":"XS1033736890"},
           {"idType":"ID_BB_UNIQUE","idValue":"JK354407"},
           {"idType":"ID_BB","idValue":"JK354407"},
           {"idType":"COMPOSITE_ID_BB_GLOBAL","idValue":"JK354407"},
-          {"idType":"TICKER","idValue":"JK354407 Corp"}]'
-
+          {"idType":"TICKER","idValue":"JK354407 Corp"},
+          {"idType":"ID_BB_GLOBAL","idValue":"BBG0005HH8B8"}]'
+# figireq<-'[{"idType":"ID_BB_GLOBAL","idValue":"BBG0005HH8B8"}]'
 r<-POST(url='https://api.openfigi.com/v1/mapping',add_headers(`Content-Type`='text/json',`X-OPENFIGI-APIKEY`='b0128aa2-fe78-4707-a8ec-d9623d6f9928'), body = figireq, encode = "json")
 r
 content(r)
@@ -167,38 +168,6 @@ add_headers(`Content-Type`='text/json')
 
 content_type_json() %>% str
 content_type_json()[1]
-
-# explore yield -----------------------------------------------------------
-
-load('../data/bloomberg/bbg_gbonds_160413.rdata')
-
-df_yld<-unlist(prices, recursive=FALSE) %>% do.call(rbind.data.frame,.) %>%
-  mutate(ticker=str_extract(rownames(.),'^.*(?=(\\.))')) %>% filter(ticker!="NA")
-
-df_yld2<-left_join(df_yld,globalbonds,by='ticker')
-
-agg_yld<-df_yld2 %>% group_by(date,crncy) %>%   summarise(yield=median(na.omit(YLD_YTM_MID))) 
-
-# plot yields for eur, usd
-agg_yld %>% ggplot(.,aes(x=date,y=yield,colour=crncy)) +geom_line()
-# plot EUR-USD agg yield spread
-agg_yld %>% dcast(.,date~crncy,value.var="yield") %>% mutate(dif_crd=EUR-USD) %>%
-  gather(.,key='type',value='yield',-date) %>% 
-  filter(type=='dif_crd') %>% ggplot(.,aes(x=date,y=yield,colour=type))+geom_line()
-
-df_yldw<-df_yld %>% dcast(.,date~ticker,value.var="yield")
-df_yldw %>% summarise_each(.,funs(length(is.na())))
-
-# describe the number of data points missing
-missings<-colSums(is.na(df_yldw[,-1])) %>% as.data.frame() 
-colnames(missings)<-'Nmissings'
-missings$ticker=rownames(missings)
-summary(missings)
-missings %>% ggplot(.,aes(x=Nmissings))+geom_density()
-# describe number of data points avaialbe for each currency at each time
-df_yld2 %>% group_by(date, crncy) %>% summarise(Ndp=length(ticker)) %>% 
-  ggplot(.,aes(x=date,y=Ndp,colour=crncy))+geom_line()
-
 
 
 # Demeaned spread ---------------------------------------------------------
@@ -221,10 +190,8 @@ df_price<-df_ccyres %>% full_join(.,priceraw,by='date') %>% mutate(oas_res_eff=e
   select(date,oas_res_eff,euus_sprd) %>% filter(date>'2006-01-01') %>% wgplot(.)
 # filter issuance 
 df_reg_data<- df_sdc %>% as.data.frame() %>%  issfilter(.) %>% icollapse_all(.) %>% full_join(.,df_price,by='date')
-df_reg_data %>% tail()
 
-df_reg_data %>% 
-  lm(I_net_euus~oas_res_eff,data=.)
+df_reg_data %>% lm(I_net_euus~oas_res_eff,data=.)
 
 regtemp<-function(dfreg){
   reg10_1<- dfreg %>% lm(I_net_euus~Cdif_euus_30,data=.)
@@ -232,9 +199,52 @@ regtemp<-function(dfreg){
 }
 
 
+# explore yield -----------------------------------------------------------
 
-df_bond_de %>% filter(date=='2005-12-30') %>% View  
-nrow(df_bond2)
-nrow(df_oas_issmean)
-nrow(df_bond_de)
+load('../data/bloomberg/bbg_gbonds_160413.rdata')
+
+a0 <- unlist(prices, recursive = FALSE)
+tickernames <- names(a0)
+df_yld <- data.frame() %>% tbl_df()
+for (i in 1:length(tickernames)) {
+  temp_new <- a0[[i]] %>% mutate(ticker = tickernames[i]) %>% tbl_df()
+  if (nrow(temp_new) == 0)
+    print (str_c('empty:#', i, ' name:', tickernames[i]))
+  df_yld <- df_yld %>% dplyr::bind_rows(., temp_new)
+}
+df_yld %<>% left_join(.,globalbonds,by='ticker')
+agg_yld<-df_yld %>% group_by(date,crncy) %>%   summarise(yield=median(na.omit(YLD_YTM_MID))) 
+
+# plot yields for eur, usd
+agg_yld %>% ggplot(.,aes(x=date,y=yield,colour=crncy)) +geom_line()
+# plot EUR-USD agg yield spread
+agg_yld %>% dcast(.,date~crncy,value.var="yield") %>% mutate(dif_crd=EUR-USD) %>%
+  gather(.,key='type',value='yield',-date) %>% 
+  filter(type=='dif_crd') %>% ggplot(.,aes(x=date,y=yield,colour=type))+geom_line()
+
+# describe the number of data points missing
+df_yldw<-df_yld %>% dcast(.,date~ticker,value.var="yield")
+df_yldw %>% summarise_each(.,funs(length(is.na())))
+missings<-colSums(is.na(df_yldw[,-1])) %>% as.data.frame() 
+colnames(missings)<-'Nmissings'
+missings$ticker=rownames(missings)
+summary(missings)
+missings %>% ggplot(.,aes(x=Nmissings))+geom_density()
+
+# describe number of data points avaialbe for each currency at each time
+df_yld %>% group_by(date, crncy) %>% summarise(Ndp=length(ticker)) %>% 
+  ggplot(.,aes(x=date,y=Ndp,colour=crncy))+geom_line()
+
+# yld sprd construct ------------------------------------------------------
+priceraw<-read.dta13('prices_extended.dta')
+# add bond maturity for each date in time
+
+# isolate swap yield curve from priceraw
+
+# merge df_yld with swap yield curve
+
+# take diff with matched 
+
+
+
 
