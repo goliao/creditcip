@@ -83,6 +83,7 @@ rating_mdy<-read.csv('rating.csv',stringsAsFactors = FALSE) %>% tbl_df() %>% ren
 df_sdcnew<-sdc_raw %>% mutate(d=mdy(d),mat2=mdy(mat2),amt=as.numeric(amt),ytofm=as.numeric(ytofm)) %>% tbl_df() %>% 
   left_join(.,rating_sp, by='rating_sp') %>% left_join(.,rating_mdy,by='rating_mdy') %>% 
   select(issname,ticker_sdc,isin,cusip,d,nat,amt,descr,ccy,mat2,ytofm,everything()) %>% arrange(d)
+save(df_sdcnew,file='sdcnew.rdata')
 df_sdcn2<-df_sdcnew[!duplicated(df_sdcnew$isin),] %>% filter(isin!='-')  %>% arrange(isin)
 
 df_bond3<-sqldf('select A.*, B.ccy, B.descr, B.ytofm, B.d, B.mat2 from df_yld2 as A, df_sdcn2 as B where A.isin=B.isin')
@@ -128,46 +129,6 @@ Hmisc::describe(df_sdcnew$mktplace)
 df_bond %>% mutate(datestr=as.character(date),matstr=as.character(mat2)) %>% select(-date,-mat2,-fac) %>% 
   write.dta(.,'bondsprdpanel.dta')
 
-# openfigi ----------------------------------------------------------------
-
-
-# curl -v -X POST 'https://api.openfigi.com/v1/mapping'                 \
-# --header 'Content-Type: text/json'                           \
-# --header 'X-OPENFIGI-APIKEY: abcdefghijklmnopqrstuvwxyz'     \
-# --data '[{"idType":"ID_WERTPAPIER","idValue":"851399"}]'
-# 
-# curl -v -X POST 'https://api.openfigi.com/v1/mapping'   \
-# --header 'Content-Type: text/json'             \
-# --data '[{"idType":"ID_WERTPAPIER","idValue":"851399","exchCode":"US"}]'
-
-require('magrittr')
-require('httr')
-
-figireq<-'[{"idType":"ID_ISIN","idValue":"XS1033736890"},
-          {"idType":"ID_BB_UNIQUE","idValue":"JK354407"},
-          {"idType":"ID_BB","idValue":"JK354407"},
-          {"idType":"COMPOSITE_ID_BB_GLOBAL","idValue":"JK354407"},
-          {"idType":"TICKER","idValue":"JK354407 Corp"},
-          {"idType":"ID_BB_GLOBAL","idValue":"BBG0005HH8B8"}]'
-# figireq<-'[{"idType":"ID_BB_GLOBAL","idValue":"BBG0005HH8B8"}]'
-r<-POST(url='https://api.openfigi.com/v1/mapping',add_headers(`Content-Type`='text/json',`X-OPENFIGI-APIKEY`='b0128aa2-fe78-4707-a8ec-d9623d6f9928'), body = figireq, encode = "json")
-r
-content(r)
-content(r)[[1]][[1]][[1]] %>% as.data.frame() %>% View
-unlist(content(r)[[1]],recursive = FALSE) 
-
-t1<-as.data.frame(content(r)[[1]][[1]][[1]])
-for (i in 2:134){
-  t1<-rbind(t1,content(r)[[1]][[1]][[i]] %>% as.data.frame())
-}
-t1 %>% View
-  
-content_type()
-content_type_json()
-add_headers(`Content-Type`='text/json')
-
-content_type_json() %>% str
-content_type_json()[1]
 
 
 # Demeaned spread ---------------------------------------------------------
@@ -248,3 +209,37 @@ priceraw<-read.dta13('prices_extended.dta')
 
 
 
+# explore daily data ------------------------------------------------------
+
+df_p_daily<-loadBBGdownload2df('../data/bloomberg/bbg_gbonds_160426_temp_daily.RData')
+save(df_p_daily,file='dailyprices.rdata')
+lubridate::mday()
+df_p_daily %<>% mutate(dofm=lubridate::mday(date)) 
+oas<-df_p_daily %>% group_by(dofm) %>% summarise(oas_dom=median(na.omit(OAS_SPREAD_BID)),
+                                                 yld_dom=median(na.omit(YLD_YTM_MID)))
+oas %>% ggplot(aes(x=dofm,y=yld_dom))+geom_line()
+oas %>% ggplot(aes(x=dofm,y=oas_dom))+geom_line()
+
+
+# assess data availability ------------------------------------------------
+df_pasw_mo<-loadBBGdownload2df('../data/bloomberg/bbg_gbonds_160426_mo_batch2_asw.RData')
+load(file='sdc_all.rdata')
+df_sdc_all %<>% distinct(isin)
+
+ac<-assessDataCoverage(bondinfo = df_sdc_all,bondprices = df_pasw_mo,field='ASSET_SWAP_SPD_MID')
+
+df_p<-loadBBGdownload2df('../data/bloomberg/bbg_gbonds_160426_mo_batch1.RData')
+df_p %>% View
+ac<-assessDataCoverage(bondinfo = df_sdc_all,bondprices = df_p)
+df_p
+ac<-assessDataCoverage(bondinfo = df_sdc_all,bondprices = df_p,field='OAS_SPREAD_BID')
+
+ac %>% filter(parsekeyable=='EF600203 Corp') %>% View
+
+
+
+bondprices %>% filter_('YLD_YTM_MID'!="NA") %>% filter(ticker=='EF600203 Corp') %>% View
+bondprices %>% filter(YLD_YTM_MID!="NA") %>% filter(ticker=='EF600203 Corp') %>% View
+
+bondprices[bondprices['YLD_YTM_MID']!="NA",] %>% filter(ticker=='EF600203 Corp') %>% View
+bondprices[bondprices[field]!="NA",] %>% filter(ticker=='EF600203 Corp')

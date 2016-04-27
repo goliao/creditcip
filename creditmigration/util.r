@@ -151,3 +151,136 @@ tabulate <- function(dfin,byvar='variable'){
   # dfin %>% group_by_(byvar) %>% dplyr::summarise_(count=length(byvar)) %>% arrange(desc(count))
   table(dfin[byvar]) %>% as.data.frame() %>%  tbl_df() %>% arrange(desc(Freq))
 }
+
+unpackbbgprices<-function(prices){
+  # use when prices are batched in a list of say 20 groups
+  a0 <- unlist(prices, recursive = FALSE)
+tickernames <- names(a0)
+df_prices <- data.frame() %>% tbl_df()
+for (i in 1:length(tickernames)) {
+  temp_new <- a0[[i]] %>% mutate(ticker = tickernames[i]) %>% tbl_df()
+  if (nrow(temp_new) == 0)
+    print (str_c('empty:#', i, ' name:', tickernames[i]))
+  df_prices %<>% dplyr::bind_rows(., temp_new)
+}
+df_prices
+}
+
+
+
+requestfigibyisin<-function(df_isins){
+ # given a dataframe of isins, get a dataframe of isin and figi mappings 
+  require('magrittr')
+  require('httr')
+require('jsonlite')
+require('tidyjson')
+# figireq<-'[{"idType":"ID_ISIN","idValue":"XS1033736890"},
+# {"idType":"ID_BB_UNIQUE","idValue":"JK354407"},
+# {"idType":"ID_BB","idValue":"JK354407"},
+# {"idType":"COMPOSITE_ID_BB_GLOBAL","idValue":"JK354407"},
+# {"idType":"TICKER","idValue":"JK354407 Corp"},
+# {"idType":"ID_BB_GLOBAL","idValue":"BBG0005HH8B8"}]'
+# # figireq<-'[{"idType":"ID_BB_GLOBAL","idValue":"BBG0005HH8B8"}]'
+print(str_c('min est:',nrow(df_isins)/10000))
+  ptm <- proc.time()
+  counter <- 0 # count request up to 100, for figi limit of 100 request per minute
+  df_isin2figi_all<-as.data.frame(list()) %>% tbl_df()
+  for (j in 1:ceiling(nrow(df_isins)/100)){
+    counter <- counter+1
+    if (counter==100){
+      # if ((proc.time() - ptm)[[3]]<=65){ # let it sleep to a full minute if it hasn't been a full minute
+      #   print ((proc.time() - ptm)[[3]])
+      #   Sys.sleep(65-((proc.time() - ptm)[[3]]))
+      #   counter %>% print
+      #   ptm <- proc.time()
+      #   counter <- 0
+      # } else { # continue and reset counters and time
+      ## let it sleep till the next minute regardless
+        Sys.sleep(60-Sys.time() %>% second())
+        print(str_c("row (j):",j*100))
+        counter %>% print
+        ptm <- proc.time()
+        counter <- 0
+      # }
+      save(df_isin2figi_all,file='temp_dfisinfigi.rdata')
+    }
+    tempreq <- df_isins %>% slice(((j-1)*100+1):min(j*100,nrow(.)))
+    figireq<- tempreq %>%  mutate(idType='ID_ISIN',idValue=isin) %>% select(-isin)  %>% jsonlite::toJSON() 
+    r<-POST(url='https://api.openfigi.com/v1/mapping',add_headers(`Content-Type`='text/json',`X-OPENFIGI-APIKEY`='b0128aa2-fe78-4707-a8ec-d9623d6f9928'), body = figireq, encode = "json")
+    # responsejson %<>% bind_rows(.,r %>% content(as="text") %>% fromJSON(simplifyDataFrame = TRUE))
+    tryCatch({
+      responsejson <-   r %>% content(as = "text") %>% fromJSON(simplifyDataFrame = TRUE)
+    }, error = function(err) {
+      warning(r %>% content(as = "text") %>% str_sub(.,1,50))
+      flush.console()
+      ptm <- proc.time()
+      counter <- 0
+      Sys.sleep(60-Sys.time() %>% second())
+      r<-POST(url='https://api.openfigi.com/v1/mapping',add_headers(`Content-Type`='text/json',`X-OPENFIGI-APIKEY`='b0128aa2-fe78-4707-a8ec-d9623d6f9928'), body = figireq, encode = "json")
+      responsejson <-  r %>% content(as = "text") %>% fromJSON(simplifyDataFrame = TRUE)
+    })
+    
+    # extract 100x100 results at a time
+    df_isin2figi<-as.data.frame(list()) %>% tbl_df()
+    if (nrow(responsejson)!=nrow(tempreq)) stop('response not mathcing request row numbers') 
+    for  (i in 1:nrow(responsejson)){
+      if (ncol(responsejson)==1) { # only data column
+        df_isin2figi %<>% bind_rows(.,responsejson$data[i][[1]] %>% mutate(isin=tempreq$isin[i][[1]]))
+      } else{ # data column and error column
+        if (is.na(responsejson$error[i][[1]]))  df_isin2figi %<>% bind_rows(.,responsejson$data[i][[1]] %>% mutate(isin=tempreq$isin[i][[1]]))
+      }
+    }
+    df_isin2figi_all %<>% bind_rows(.,df_isin2figi)
+  }
+  #this is the isin to figi mapping that contains 
+  df_isin2figi_all
+  
+}
+
+countdups<-function(dfin,field='isin'){
+  (dfin %>% nrow)-(dfin %>% distinct_(field) %>% nrow)
+}
+
+loadBBGdownload2df<-function(filename='bbg_gbonds_160426_mo_batch2_asw.RData'){
+  # takes in a filename associated with bbg download; spits out price dataframe with field as colnames and a variable type
+  load(filename)
+  a0 <- unlist(prices, recursive = FALSE)
+  tickernames <- names(a0)
+  df_prices <- data.frame() %>% tbl_df()
+  for (i in 1:length(tickernames)) {
+    temp_new <- a0[[i]] %>% mutate(ticker = tickernames[i]) %>% tbl_df()
+    if (nrow(temp_new) == 0)
+      print (str_c('empty:#', i, ' name:', tickernames[i]))
+    df_prices <- df_prices %>% dplyr::bind_rows(., temp_new)
+  }
+  df_prices
+}
+
+assessDataCoverage<-function(bondinfo,bondprices,field='YLD_YTM_MID',lastdate=ymd('2016-04-01'),startdate=ymd('2005-01-01')){
+  # check monthly data coverage; bondinfo is essentially sdc infomation on maturity etc, bondprice is from bbg download
+  # 
+  #   bondprices<-df_p
+  #   bondinfo<-df_sdc_all
+  #   field="ASSET_SWAP_SPD_MID"
+  #   lastdate=ymd('2016-04-01')
+  #   startdate=ymd('2005-01-01')
+  #   bondprices %>% View
+  #   
+  # bondprieces
+  #count unique bond tickers
+  print('unique securities:')
+  bondprices %>% tabulate('ticker') %>% nrow %>% print
+  # add expected number of months
+  bondprices %<>% rename(parsekeyable=ticker) 
+  bondinfo %<>% mutate(expmonthlyobs=ceiling((pmin(as.numeric(lastdate),as.numeric(mat2))-pmax(as.numeric(settlement2),as.numeric(startdate)))/30.5)) 
+  # count number of observations by isin # compare to number of expected obs by isin
+  bondfreq<-bondprices[bondprices[field]!="NA",] %>% tabulate('parsekeyable') %>% rename(parsekeyable=Var1)
+  df_obs<-bondfreq %>% inner_join(bondinfo,by='parsekeyable') %>% mutate(obsdiff=expmonthlyobs-Freq, obscoverage=ifelse(expmonthlyobs>=12,Freq/expmonthlyobs,1))
+  df_obs %>% tabulate('obsdiff')
+  print('coverage:')
+  df_obs$obscoverage %>% summary %>% print
+  df_obs %>% rename(actmonthlyobs=Freq) %>% select(parsekeyable,isin,obsdiff,obscoverage,expmonthlyobs,actmonthlyobs,mat2,settlement2)
+  # df_obs2<-sqldf('select A.*, B.expmonthlyobs from df_obs as A left join df_sdc2 as B on A.isin=B.isin')
+  # df_obs2 %>% mutate(obsdiff=expmonthlyobs-ct) %>% group_by(obsdiff) %>% summarise(ctt=length(obsdiff)) %>% View 
+}
+

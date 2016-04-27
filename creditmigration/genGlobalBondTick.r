@@ -6,6 +6,7 @@ source('util.r')
 
 # BBG generated -----------------------------------------------------------
 # takes in bbg tiker and ultimate parent info and spits out global bonds tickers
+# this is the earliest batch of downloads
 raw<-read.dta13('sdc96_clean2.dta')
 bondinfo<-read.csv("../data/bloomberg/bbg_bsrch_all-usd-eur-ig-small.csv")
 colnames(bondinfo)<-c('ticker','isin','id_bb_co','id_bb_ultimate_co','crncy')
@@ -19,6 +20,7 @@ save(globalbonds,file='J:/data/globalbondtickers.rdata')
 
 
 # SDC generated isin ------------------------------------------------------
+# this is generated more or less for query from figi, so that sdc can be matched to figi to parsekeyables
 df_sdc_raw<-read.dta13('sdc96_clean2.dta') %>% tbl_df() %>%  select(i,tic,isin,cu,d,nat,amt,descr,ccy,rating, nrating,mat2,ytofm,everything()) %>% arrange(d)
 df_sdc <- df_sdc_raw %>% sample_frac(1)
 #find issuances that are global in EU and USD
@@ -61,131 +63,91 @@ bbg_isin_req %>% write.csv(file='isin_sdc.csv')
 # bbg_isin_req_euus <- df_sdc_generous %>% 
 #   filter(ccy %in% c('EUR','USD') ,isin != '-') %>% select(isin) %>% dplyr::distinct(isin) %>% print
 # # eur usd small
-# bbg_isin_req_euus <- df_sdc_generous %>%
-#   filter(amt>=100, ytofm>=2,pub!='Govt.',ccy %in% c('EUR', 'USD') , isin != '-') %>% select(isin) %>% dplyr::distinct(isin) %>% print
-
+bbg_isin_req_euus <- df_sdc_generous %>%
+  filter(amt>=100, ytofm>=2,pub!='Govt.',ccy %in% c('EUR', 'USD') , isin != '-') %>% select(isin) %>% dplyr::distinct(isin) %>% print
+save('sdc_generated_isin.rdata')
 
 # isin to figi ------------------------------------------------------------
-
-require('magrittr')
-require('httr')
-require('jsonlite')
-require('tidyjson')
-# figireq<-'[{"idType":"ID_ISIN","idValue":"XS1033736890"},
-# {"idType":"ID_BB_UNIQUE","idValue":"JK354407"},
-# {"idType":"ID_BB","idValue":"JK354407"},
-# {"idType":"COMPOSITE_ID_BB_GLOBAL","idValue":"JK354407"},
-# {"idType":"TICKER","idValue":"JK354407 Corp"},
-# {"idType":"ID_BB_GLOBAL","idValue":"BBG0005HH8B8"}]'
-# # figireq<-'[{"idType":"ID_BB_GLOBAL","idValue":"BBG0005HH8B8"}]'
+#let's be very bold and get all isin figi mappings
+sdc0_isins<-df_sdc %>% distinct(isin) %>% filter(isin != '-') %>% select(isin)
+load(file='sdcnew.rdata')
+# new additions
+newadditions<-df_sdcnew %>% filter(isin!='-') %>% distinct(isin) %>% anti_join(sdc0_isins,by='isin') %>% select(isin)
+sdc_isins<-sdc0_isins %>% full_join(df_sdcnew %>% filter(isin!='-') %>% distinct(isin) %>% select(isin),by='isin')
+isin2figi<-sdc_isins %>% requestfigibyisin(.)
+save(isin2figi,file='isin2figi.rdata')
 
 
-ptm <- proc.time()
-counter <- 0 # count request up to 100, for figi limit of 100 request per minute
-df_isin2figi_all<-as.data.frame(list()) %>% tbl_df()
-for (j in 1:ceiling(nrow(bbg_isin_req)/100)){
-  counter <- counter+1
-  if (counter==100){
-    if ((proc.time() - ptm)[[3]]<=65){ # let it sleep to a full minute if it hasn't been a full minute
-      print ((proc.time() - ptm)[[3]])
-      Sys.sleep(60-((proc.time() - ptm)[[3]]))
-      counter %>% print
-      ptm <- proc.time()
-      counter <- 0
-    } else { # continue and reset counters and time
-      print(str_c("row (j):",j*100))
-      counter %>% print
-      ptm <- proc.time()
-      counter <- 0
-    }
-    save(df_isin2figi_all,file='temp_dfisinfigi.rdata')
-  }
-  tempreq <- bbg_isin_req %>% slice(((j-1)*100+1):min(j*100,nrow(.)))
-  figireq<- tempreq %>%  mutate(idType='ID_ISIN',idValue=isin) %>% select(-isin)  %>% jsonlite::toJSON() 
-  r<-POST(url='https://api.openfigi.com/v1/mapping',add_headers(`Content-Type`='text/json',`X-OPENFIGI-APIKEY`='b0128aa2-fe78-4707-a8ec-d9623d6f9928'), body = figireq, encode = "json")
-  # responsejson %<>% bind_rows(.,r %>% content(as="text") %>% fromJSON(simplifyDataFrame = TRUE))
-  tryCatch({
-    responsejson <-   r %>% content(as = "text") %>% fromJSON(simplifyDataFrame = TRUE)
-  }, error = function(err) {
-    warning('too many requests')
-    ptm <- proc.time()
-    counter <- 0
-    Sys.sleep(60-Sys.time() %>% second())
-    r<-POST(url='https://api.openfigi.com/v1/mapping',add_headers(`Content-Type`='text/json',`X-OPENFIGI-APIKEY`='b0128aa2-fe78-4707-a8ec-d9623d6f9928'), body = figireq, encode = "json")
-    responsejson <-  r %>% content(as = "text") %>% fromJSON(simplifyDataFrame = TRUE)
-  })
-  
-  # extract 100 results at a time
-  df_isin2figi<-as.data.frame(list()) %>% tbl_df()
-  if (nrow(responsejson)!=nrow(tempreq)) stop('response not mathcing request row numbers') 
-  for  (i in 1:nrow(responsejson)){
-    if (ncol(responsejson)==1) { # only data column
-      df_isin2figi %<>% bind_rows(.,responsejson$data[i][[1]] %>% mutate(isin=tempreq$isin[i][[1]]))
-    } else{ # data column and error column
-      if (is.na(responsejson$error[i][[1]]))  df_isin2figi %<>% bind_rows(.,responsejson$data[i][[1]] %>% mutate(isin=tempreq$isin[i][[1]]))
-    }
-  }
-  df_isin2figi_all %<>% bind_rows(.,df_isin2figi)
-}
+# generate sdc comprehensive with isin and parsekeyables ------------------
+load(file='isin2figi.rdata')
+df_sdc0<-read.dta13('sdc96_clean2.dta') %>% tbl_df() %>%  select(i,tic,isin,cu,d,nat,amt,descr,ccy,rating, nrating,mat2,ytofm,everything()) %>% arrange(d) %>% filter(isin!='-')
+df_sdc0 %<>% select(.,-starts_with("E",ignore.case=FALSE))
+df_sdc0 %<>% distinct(deal_no)
+load(file='sdcnew.rdata')
+df_sdcnew %<>% filter(isin!='-')
+df_sdcnew %<>% rename(i=issname,rank_domicile_nation=domnat,tic=ticker_sdc,cu=cusip,mkt=mktplace,mdy=rating_mdy,sp=rating_sp,PackageID=id_package_sdc,upnames=upco,issue_type_desc=typesec,upsicp=upsic,sicp=sic_main,deal_no=sdcdealnumber)
+df_sdcnew %<>% mutate(PackageID=as.numeric(PackageID))
+parsekeyfigi<-read.csv(file='parsekeyablefigi.csv',stringsAsFactors = FALSE) %>% tbl_df() %>% select(parsekeyable,figi)
+parsekeyfigiisin<-parsekeyfigi %>% left_join(isin2figi,by='figi') %>% select(parsekeyable,figi,isin,everything())
+#merge the two sdc files together
+df_sdc0 %>% ds %>% sort()
+(df_sdcnew %>% ds)[(df_sdcnew %>% ds) %ni% (df_sdc0 %>% ds)] %>% sort
+df_sdcnew_add<-df_sdcnew %>% anti_join(df_sdc0,by='deal_no')
+df_sdc_full<- df_sdc0 %>% full_join(df_sdcnew_add)
 
-df_isin2figi_all
+df_sdc_all<-df_sdc_full %>% left_join(isin2figi,by='isin') %>% left_join(parsekeyfigi,by='figi')
+# there are some dups since isin to figi has dupes
+(isin2figi %>% nrow)-(isin2figi %>% distinct(isin) %>% nrow)
+# but this can be easily removed
+df_sdc_all %>% distinct(deal_no)
+save(df_sdc_all,file='sdc_all.rdata')
 
-save(df_isin2figi,file='df_isin2figi.rdata')
+# sdc_bbg_matched ---------------------------------------------------------
+load('isin2figi.rdata')
+# use figi paraskeyable matching
+parsekeyfigi<-read.csv(file='parsekeyablefigi.csv',stringsAsFactors = FALSE) %>% tbl_df() %>% select(parsekeyable,figi)
 
+# how many that's in bbg but not in sdc  
+parsekeyfigi %>% anti_join(isin2figi,by='figi')
 
+# how many that's in sdc parent but not in bbg eur usd
+df_isin2figi_all %>% anti_join(parsekeyfigi,by='figi')
 
+# union
+sdc_bbg<-df_isin2figi_all %>% distinct(figi) %>% inner_join(parsekeyfigi,by='figi')
 
+# from sdc eur us small, get paraskeyable that can be used for download, this include Non-IG
+bbg_ticker_download<-bbg_isin_req_euus %>% inner_join(df_isin2figi_all,by='isin') %>% distinct(figi) %>% inner_join(parsekeyfigi,by='figi') %>% print
 
+# # from bbg search on ig, get ones that has overlap with sdc
+bbgig<-read.csv(file='bbgIGbsrch.csv',stringsAsFactors = FALSE) %>% tbl_df() %>% print
+    # filter down to overlap with sdc global issuance
+bbgsrch<-sdc_bbg %>% semi_join(bbgig,by='parsekeyable') %>% print
 
-responsejson[3,2][[1]] %>% str
-responsejson %>% View
+# exclude ones I have already downloaded monthly data and formulate batch 1
+load('globalbondtickers.rdata')
+downloaded_mo<-globalbonds %>% tbl_df() %>% mutate(parsekeyable=as.character(ticker)) %>% select(parsekeyable)
+bdownload_batch1_mo<-bbgsrch %>% anti_join(downloaded_mo,by='parsekeyable') %>% select(parsekeyable) %>% print
+bdownload_batch2_daily<-bbgsrch %>% select(parsekeyable) %>% print
+bdownload_batch1_mo %<>% mutate(fac=sample(1:20,nrow(.),replace=TRUE)) %>% print
+bdownload_batch2_daily %<>% mutate(fac=sample(1:20,nrow(.),replace=TRUE)) %>% print
+save(bdownload_batch1_mo,bdownload_batch2_daily,file='bbgdownload_042616.rdata')
 
+## download "HY" that's really not HY
+bbgall<-read.csv(file='bsrch_eurusd_all.csv',stringsAsFactors = FALSE) %>% tbl_df() %>% print
+bbgHY<-sdc_bbg %>% semi_join(bbgall %>% anti_join(bbgig,by='parsekeyable'),by='parsekeyable') 
+bbgHY_sdc<-bbgHY %>% left_join(df_sdc,by='isin')
+bbgHY_sdc %>% distinct(isin) %>% filter(nrating==1) %>% View
+bbgHY_sdc %>% distinct(isin) %>% tabulate('i') %>% View
+bdownload_batch3hy<-bbgHY  %>% select(parsekeyable) %>% mutate(fac=sample(1:20,nrow(.),replace=TRUE)) %>%  print
+save(bdownload_batch3hy,file='bbgdownload_042616B.rdata')
 
-  
-jsonlite::fromJSON(r[[1]])
-r %>% str
-content(r)[[1]][[1]] %>% fromJSON(.,simplifyDataFrame = TRUE)
-content(r)[[1]][[1]][[1]] %>% as.data.frame() %>% View
-content(r)[[49]]
+# what information we are missing in sdc ----------------------------------
+# very little information is missing in sdc
+df_sdc_raw<-read.dta13('sdc96_clean2.dta') %>% tbl_df() %>%  select(i,tic,isin,cu,d,nat,amt,descr,ccy,rating, nrating,mat2,ytofm,everything()) %>% arrange(d)
+df_sdc <- df_sdc_raw %>% sample_frac(1)
+bbgsrch_sdc<-bbgsrch %>% left_join(df_sdc,by='isin')
 
-content(r) %>% str
-  json_types()
-unlist(content(r)[[1]],recursive = FALSE) 
-
-t1<-as.data.frame(content(r)[[1]][[1]][[1]])
-for (i in 2:134){
-  t1<-rbind(t1,content(r)[[1]][[1]][[i]] %>% as.data.frame())
-}
-t1 %>% View
-
-content_type()
-content_type_json()
-add_headers(`Content-Type`='text/json')
-
-content_type_json() %>% str
-content_type_json()[1]
-
-
-
-# test --------------------------------------------------------------------
-
-people <- '
-[
-  {
-  "name": "bob",
-  "age": 32
-  }, 
-  {
-  "name": "susan", 
-  "age": 54
-  }
-  ]'
-  
-  # Structure the data
-  people %>%    
-    gather_keys
-    gather_array %>%          # gather (stack) the array by index
-    spread_values(            # spread (widen) values to widen the data.frame
-      name = jstring("name"), # value of "name" becomes a character column
-      age = jnumber("age")    # value of "age" becomes a numeric column
-    )
+bbgsrch_sdc %>% ds
+bbgsrch_sdc %>% distinct(isin) %>% tabulate('upnat') %>% View
+bbgsrch_sdc %>% distinct(isin) %>% tabulate('mdy') %>% View
