@@ -2,19 +2,99 @@ rm(list=ls(all=TRUE))
 setwd("/Users/gliao/Dropbox/Research/ccy basis/creditmigration")
 setwd("C:/Users/gliao/Dropbox/Research/ccy basis/creditmigration")
 source('util.r')
-require(sqldf)
-# load bbg bond sprd, unpack ----------------------------------------------
-load('../data/bloomberg/bbg_gbonds_160413_sprd.rdata')
-a0 <- unlist(prices, recursive = FALSE)
-tickernames <- names(a0)
-df_prices <- data.frame() %>% tbl_df()
-for (i in 1:length(tickernames)) {
-  temp_new <- a0[[i]] %>% mutate(ticker = tickernames[i]) %>% tbl_df()
-  if (nrow(temp_new) == 0)
-    print (str_c('empty:#', i, ' name:', tickernames[i]))
-  df_prices <- df_prices %>% dplyr::bind_rows(., temp_new)
+
+# combine all price data --------------------------------------------------
+#load the old sprd data
+df_spd<-loadBBGdownload2df('../data/bloomberg/bbg_gbonds_160413_sprd.rdata') %>% mutate(batch=0)
+df_yld<-loadBBGdownload2df('../data/bloomberg/bbg_gbonds_160413.rdata') %>% mutate(batch=0)
+
+df_p<-df_spd %>% full_join(df_yld)
+df_batch1<-loadBBGdownload2df('../data/bloomberg/bbg_gbonds_160426_mo_batch1.RData') %>% mutate(batch=1)
+df_p %<>% full_join(df_batch1)
+df_batch2<-loadBBGdownload2df('../data/bloomberg/bbg_gbonds_160426_mo_batch2_asw.RData') %>% mutate(batch=1)
+df_p %<>% full_join(df_batch2)
+df_batch3<-loadBBGdownload2df('../data/bloomberg/bbg_gbonds_160426_mo_batch3_HY.RData') %>% mutate(batch=2)
+df_p %<>% full_join(df_batch3)
+df_batch4<-loadBBGdownload2df('../data/bloomberg/bbg_gbonds_160426_mo_batch3_HY_asw.RData') %>% mutate(batch=2)
+df_p %<>% full_join(df_batch4)
+# df_p %>% group_by(ticker,date) %>% summarise(ct=length(date)) %>% arrange(desc(ct))
+tickersloaded<-df_p %>% group_by(parsekeyable) %>% summarise(ct=length(date)) %>% arrange(desc(ct)) %>% select(parsekeyable)
+#save(df_p,tickersloaded,file='bbg_bond_prices.rdata')
+load('bbg_bond_prices.rdata')
+
+# see which fields to use based on sample data -------------------------------------------------
+# concluded that oas and yld are the ones to use, other flds do not start till 2010
+df_pt<-loadBBGdownload2df('../data/bloomberg/sample_flds_test.rdata')
+load('sdc_all.rdata')
+# df_sampleticker<-df_pt %>% group_by(ticker) %>% rename(parsekeyable=ticker) %>% summarise(ct=length(date)) %>% left_join(df_sdc_all %>% distinct(parsekeyable))
+# df_sampleticker %>% filter(ccy=='EUR') %>% select(isin) %>% write.csv(file='sample_eur_isin.csv')
+df_pt %<>% filter(date>='2005-01-01',date<='2016-04-01')
+
+#df_pt<-df_p %>% filter(date>='2005-01-01',date<='2016-04-01')
+ac<-df_pt %>% filter(date>='2005-01-01',date<='2016-04-01') %>%
+  assessDataCoverage(bondinfo=df_sdc_all,bondprices=df_pt,field='YLD_YTM_MID')
+
+
+assessDataCoverage<-function(bondinfo,bondprices,field='YLD_YTM_MID',lastdate='lastobs',startdate='firstobs'){
+  # check monthly data coverage; bondinfo is essentially sdc infomation on maturity etc, bondprice is from bbg download
+  # 
+  #   bondprices<-df_p %>% filter(date>='2005-01-01',date<='2016-04-01') 
+  #   bondinfo<-df_sdc_all
+  #   field="YLD_YTM_MID"
+  # field="BLP_Z_SPRD_MID"
+  # lastdate='lastobs'
+  # startdate='firstobs'
+  # #   
+  #count unique bond tickers
+  if (startdate=='firstobs') {
+    startdate = min(bondprices$date)
+    str_c('startdate: ', startdate) %>% print
+  }
+  if (lastdate == 'lastobs') {
+    lastdate = max(bondprices$date)
+    str_c('lastdate: ', lastdate) %>% print
+  }
+  
+  
+  if ('parsekeyable' %ni% (bondprices %>% ds)) bondprices %<>% rename(parsekeyable=ticker) 
+  str_c('unique securities: ',bondprices %>% tabulate('parsekeyable') %>% nrow) %>% print
+  
+  # add expected number of months
+  bondinfo %<>% distinct(parsekeyable) %>%  mutate(expmonthlyobs=ceiling((pmin(as.numeric(lastdate),as.numeric(mat2))-pmax(as.numeric(d),as.numeric(startdate)))/30.5)) 
+  # count number of observations by isin # compare to number of expected obs by isin
+  bondtickers <- bondprices %>% group_by(parsekeyable) %>% summarise(obs_allflds=length(parsekeyable))
+  fldfreq<-bondprices[!is.na(bondprices[field]),] %>% select_('date','parsekeyable',field) %>% group_by(parsekeyable) %>% summarize(obs_specfld=length(date))
+  bondtickers %<>% left_join(fldfreq,by='parsekeyable')
+  bondtickers %<>% mutate(obs_specfld=ifelse(is.na(obs_specfld),0,obs_specfld))
+  df_obs<-bondtickers %>% inner_join(bondinfo,by='parsekeyable') %>% mutate(obsdiff=expmonthlyobs-obs_specfld, obscoverage=ifelse(expmonthlyobs>=12,obs_specfld/expmonthlyobs,1)) %>% select(parsekeyable,isin,obsdiff,obscoverage,obs_allflds,obs_specfld,expmonthlyobs,mat2,d,settlement2)
+  print('coverage:')
+  str_c('# obs matching sdc:',df_obs %>% nrow()) %>% print
+  df_obs$obscoverage %>% summary %>% print
+  ggplot(df_obs,aes(x=obscoverage))+stat_ecdf()
+  print('all fld obs diff from expected number of obs')
+  df_obs %>% mutate(allflddiff=expmonthlyobs-obs_allflds) %$%summary(allflddiff) %>% print
+  df_obs
+  # df_obs2<-sqldf('select A.*, B.expmonthlyobs from df_obs as A left join df_sdc2 as B on A.isin=B.isin')
+  # df_obs2 %>% mutate(obsdiff=expmonthlyobs-ct) %>% group_by(obsdiff) %>% summarise(ctt=length(obsdiff)) %>% View 
 }
-df_yld<-df_prices
+
+df_obs %>% arrange(desc(obscoverage)) %>% View
+bondprices %>% filter(parsekeyable=='EH728416 Corp') %>% View
+df_sdc_all %>% filter(parsekeyable=='EH728416 Corp') %>% write.csv(file='temp.csv')
+
+
+df_yld_long<-df_pt %>%  melt(.,id.vars=c('date','parsekeyable'),
+         measure.vars=((df_pt %>% ds)[(df_pt %>% ds) %ni% c('date','parsekeyable','batch')]),
+         variable.name='field') %>% dplyr::tbl_df()
+df_yld_long %>% group_by(date, field) %>% summarise(Ndp=length(na.omit(value))) %>%  ggplot(.,aes(x=date,y=Ndp,colour=field))+geom_line()
+df_yld_long %>% group_by(date, field) %>% summarise(Ndp=length(na.omit(value))) %>% dcast(date~field) %>% View
+
+
+
+
+# load bbg bond sprd, unpack ----------------------------------------------
+df_yld<-loadBBGdownload2df('../data/bloomberg/bbg_gbonds_160413_sprd.rdata')
+load('../data/bloomberg/bbg_gbonds_160413_sprd.rdata')
 
 # df_yld_long<-df_yld %>% select(-BLP_CDS_BASIS_MID) %>%  gather(key = 'field',value='value',-date,-ticker) %>% dplyr::tbl_df()
 # df_yld_long %>% group_by(date, field) %>% summarise(Ndp=length(na.omit(value))) %>% 
@@ -211,10 +291,11 @@ priceraw<-read.dta13('prices_extended.dta')
 
 # explore daily data ------------------------------------------------------
 
-df_p_daily<-loadBBGdownload2df('../data/bloomberg/bbg_gbonds_160426_temp_daily.RData')
-save(df_p_daily,file='dailyprices.rdata')
-lubridate::mday()
+# df_p_daily<-loadBBGdownload2df('../data/bloomberg/bbg_gbonds_160426_temp_daily.RData')
+# save(df_p_daily,file='dailyprices.rdata')
+load('dailyprices.rdata')
 df_p_daily %<>% mutate(dofm=lubridate::mday(date)) 
+aa<-df_p_daily %>% group_by((dofm)) %>% summarise(ct=length(na.omit(YLD_YTM_MID))) %>% ggplot(aa,aes(x=`(dofm)`,y=ct))+geom_line()
 oas<-df_p_daily %>% group_by(dofm) %>% summarise(oas_dom=median(na.omit(OAS_SPREAD_BID)),
                                                  yld_dom=median(na.omit(YLD_YTM_MID)))
 oas %>% ggplot(aes(x=dofm,y=yld_dom))+geom_line()
@@ -225,6 +306,7 @@ oas %>% ggplot(aes(x=dofm,y=oas_dom))+geom_line()
 df_pasw_mo<-loadBBGdownload2df('../data/bloomberg/bbg_gbonds_160426_mo_batch2_asw.RData')
 load(file='sdc_all.rdata')
 df_sdc_all %<>% distinct(isin)
+countdups(df_sdc_all %>% filter(!is.na(parsekeyable)),'parsekeyable')
 
 ac<-assessDataCoverage(bondinfo = df_sdc_all,bondprices = df_pasw_mo,field='ASSET_SWAP_SPD_MID')
 
@@ -233,13 +315,38 @@ df_p %>% View
 ac<-assessDataCoverage(bondinfo = df_sdc_all,bondprices = df_p)
 df_p
 ac<-assessDataCoverage(bondinfo = df_sdc_all,bondprices = df_p,field='OAS_SPREAD_BID')
-
 ac %>% filter(parsekeyable=='EF600203 Corp') %>% View
 
-
+df_p<-loadBBGdownload2df('../data/bloomberg/bbg_gbonds_160426_mo_batch3_HY.RData')
+df_p
+ac<-assessDataCoverage(bondinfo = df_sdc_all,bondprices = df_p)
+ac<-assessDataCoverage(bondinfo = df_sdc_all,bondprices = df_p,field='OAS_SPREAD_BID')
 
 bondprices %>% filter_('YLD_YTM_MID'!="NA") %>% filter(ticker=='EF600203 Corp') %>% View
 bondprices %>% filter(YLD_YTM_MID!="NA") %>% filter(ticker=='EF600203 Corp') %>% View
 
 bondprices[bondprices['YLD_YTM_MID']!="NA",] %>% filter(ticker=='EF600203 Corp') %>% View
 bondprices[bondprices[field]!="NA",] %>% filter(ticker=='EF600203 Corp')
+
+df_p_daily %>% filter(ticker=='EF600203 Corp') %>% View
+
+df_yld %>% ds
+ac<-assessDataCoverage(bondinfo = df_sdc_all,bondprices = df_yld,field='BLP_ASW_SPREAD_MID')
+ac<-assessDataCoverage(bondinfo = df_sdc_all,bondprices = df_yld,field='BLP_Z_SPRD_MID')
+
+ac
+ac %>% View
+
+df_yld
+df_yld<-loadBBGdownload2df('../data/bloomberg/bbg_gbonds_160413_sprd.rdata')
+
+
+ac<-assessDataCoverage(bondinfo = df_sdc_all,bondprices = df_yld,field='OAS_SPREAD_BID')
+
+df_yld2<-left_join(df_yld,globalbonds,by='ticker') %>% tbl_df()
+ab<-df_yld2 %>% distinct(isin) %>% semi_join(df_sdc_all,by='isin')
+
+### why are these two a little different????
+nrow(ac)
+nrow(ab)
+ab %>% anti_join(ac,by='isin') %>% View

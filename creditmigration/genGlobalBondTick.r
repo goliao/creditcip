@@ -1,4 +1,4 @@
-# Generate global bond tickers/isins
+# generate global bond tickers/isins
 rm(list=ls(all=TRUE))
 setwd("/Users/gliao/Dropbox/Research/ccy basis/creditmigration")
 setwd("C:/Users/gliao/Dropbox/Research/ccy basis/creditmigration")
@@ -71,36 +71,82 @@ save('sdc_generated_isin.rdata')
 #let's be very bold and get all isin figi mappings
 sdc0_isins<-df_sdc %>% distinct(isin) %>% filter(isin != '-') %>% select(isin)
 load(file='sdcnew.rdata')
-# new additions
+# new additions of sdc data
 newadditions<-df_sdcnew %>% filter(isin!='-') %>% distinct(isin) %>% anti_join(sdc0_isins,by='isin') %>% select(isin)
 sdc_isins<-sdc0_isins %>% full_join(df_sdcnew %>% filter(isin!='-') %>% distinct(isin) %>% select(isin),by='isin')
 isin2figi<-sdc_isins %>% requestfigibyisin(.)
-save(isin2figi,file='isin2figi.rdata')
+source('util.r')
+isin2figi2<-sdc_isins %>% sample_frac(1) %>% requestfigibyisin(.)
+save(isin2figi,isin2figi2,isin2figi_incorrect,file='isin2figi_examine.rdata')
+# save(isin2figi,file='isin2figi.rdata')
+load(file='isin2figi.rdata')
+
+
+# something is wrong in the retreival process
+isin2figi %>% countdups('isin')
+isin2figi %>% countdups('figi')
+ifdup<-isin2figi %>% showdups('figi') 
+reqdup<-sdc_isins %>% mutate(rowN=row_number()) %>% semi_join((isin2figi %>% showdups('figi')),by='isin') %>% arrange(rowN) 
+ifdup %>% filter(isin=='US140420NE62')
+ifdup %>% filter(figi=='BBG005M0YQR9') %>% View
+reqdup %>% filter((isin=='US12548TAG58' | isin=='US140420NE62'))
+rectified<-reqdup %>% select(isin) %>% requestfigibyisin(.) %<>% filter(!is.na(figi))
+
+rectified %>% showdups('figi')
+rectified %>% filter(figi=='BBG005M0YQR9') %>% View
+
+isin2figi_correct<-isin2figi %>% anti_join(reqdup,by='isin') %>% bind_rows(rectified)
+isin2figi_correct %>% showdups('figi')
+isin2figi_correct %>% showdups('isin')
+isin2figi_correct %>% nrow()
+
 
 
 # generate sdc comprehensive with isin and parsekeyables ------------------
 load(file='isin2figi.rdata')
 df_sdc0<-read.dta13('sdc96_clean2.dta') %>% tbl_df() %>%  select(i,tic,isin,cu,d,nat,amt,descr,ccy,rating, nrating,mat2,ytofm,everything()) %>% arrange(d) %>% filter(isin!='-')
 df_sdc0 %<>% select(.,-starts_with("E",ignore.case=FALSE))
-df_sdc0 %<>% distinct(deal_no)
+df_sdc0 %<>% distinct(isin)
 load(file='sdcnew.rdata')
 df_sdcnew %<>% filter(isin!='-')
-df_sdcnew %<>% rename(i=issname,rank_domicile_nation=domnat,tic=ticker_sdc,cu=cusip,mkt=mktplace,mdy=rating_mdy,sp=rating_sp,PackageID=id_package_sdc,upnames=upco,issue_type_desc=typesec,upsicp=upsic,sicp=sic_main,deal_no=sdcdealnumber)
-df_sdcnew %<>% mutate(PackageID=as.numeric(PackageID))
+df_sdcnew %<>% rename(i=issname,rank_domicile_nation=domnat,tic=ticker_sdc,cu=cusip,mkt=mktplace,mdy=rating_mdy,sp=rating_sp,PackageID=id_package_sdc,upnames=upco,issue_type_desc=typesec,upsicp=upsic,sicp=sic_main,deal_no=sdcdealnumber) %>% mutate(PackageID=as.numeric(PackageID))
+df_sdcnew %<>% distinct(isin)
+#merge the two sdc files together
+df_sdcnew_add<-df_sdcnew %>% anti_join(df_sdc0,by='isin')
+df_sdc_full<- df_sdc0 %>% full_join(df_sdcnew)
 parsekeyfigi<-read.csv(file='parsekeyablefigi.csv',stringsAsFactors = FALSE) %>% tbl_df() %>% select(parsekeyable,figi)
 parsekeyfigiisin<-parsekeyfigi %>% left_join(isin2figi,by='figi') %>% select(parsekeyable,figi,isin,everything())
-#merge the two sdc files together
-df_sdc0 %>% ds %>% sort()
-(df_sdcnew %>% ds)[(df_sdcnew %>% ds) %ni% (df_sdc0 %>% ds)] %>% sort
-df_sdcnew_add<-df_sdcnew %>% anti_join(df_sdc0,by='deal_no')
-df_sdc_full<- df_sdc0 %>% full_join(df_sdcnew_add)
+
+parsekeyfigi %>% countdups('parsekeyable')
+parsekeyfigi %>% countdups('figi')
+
+
+showdups<-function(dfin,key='figi'){
+  # duplicatedkey<-isin2figi[[key]][duplicated(isin2figi[[key]])]
+  # multiple
+  dupindex<-duplicated(dfin[,key])
+  duplicatedkey<-dfin[dupindex,key]
+  dfin %>% semi_join(duplicatedkey,by=key)
+}
+
+parsekeyfigiisin %>% countdups('figi')
+
+parsekeyfigiisin %>% showdups(c('parsekeyable')) %>% View
+
+
+
 
 df_sdc_all<-df_sdc_full %>% left_join(isin2figi,by='isin') %>% left_join(parsekeyfigi,by='figi')
 # there are some dups since isin to figi has dupes
-(isin2figi %>% nrow)-(isin2figi %>% distinct(isin) %>% nrow)
+isin2figi %>% countdups()
+df_sdc_all %>% countdups()
 # but this can be easily removed
 df_sdc_all %>% distinct(deal_no)
 save(df_sdc_all,file='sdc_all.rdata')
+
+isin2figi %>% filter(isin=='US312923XE00')
+isin2figinew %>% filter(isin=='US312923XE00')
+
 
 # sdc_bbg_matched ---------------------------------------------------------
 load('isin2figi.rdata')
