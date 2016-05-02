@@ -22,6 +22,9 @@ tickersloaded<-df_p %>% group_by(parsekeyable) %>% summarise(ct=length(date)) %>
 #save(df_p,tickersloaded,file='bbg_bond_prices.rdata')
 load('bbg_bond_prices.rdata')
 
+df_p %>% showdups(c('parsekeyable','date')) %>% tabulate('parsekeyable')
+
+df_p
 # see which fields to use based on sample data -------------------------------------------------
 # concluded that oas and yld are the ones to use, other flds do not start till 2010
 df_pt<-loadBBGdownload2df('../data/bloomberg/sample_flds_test.rdata')
@@ -30,66 +33,29 @@ load('sdc_all.rdata')
 # df_sampleticker %>% filter(ccy=='EUR') %>% select(isin) %>% write.csv(file='sample_eur_isin.csv')
 df_pt %<>% filter(date>='2005-01-01',date<='2016-04-01')
 
-#df_pt<-df_p %>% filter(date>='2005-01-01',date<='2016-04-01')
+df_pt<-df_p %>% filter(date>='2005-01-01',date<='2016-04-01')
+df_pt %>% ds
 ac<-df_pt %>% filter(date>='2005-01-01',date<='2016-04-01') %>%
-  assessDataCoverage(bondinfo=df_sdc_all,bondprices=df_pt,field='YLD_YTM_MID')
+  assessDataCoverage(bondinfo=df_sdc_bbg,bondprices=.,field='OAS_SPREAD_BID')
+
+ac %>% mutate(allflddiff=expmonthlyobs-obs_allflds) %>% filter(allflddiff %ni% c(-1,0,1)) %>%  
+  left_join(df_sdc_bbg) %>% arrange(allflddiff) %>% select(figi,name,ticker,i,d,mat2,everything()) %>% 
+  write.csv(file='temp.csv')
+
+# df_obs %>% arrange(desc(obscoverage)) %>% View
+# bondprices %>% filter(parsekeyable=='EH728416 Corp') %>% View
+# df_sdc_all %>% filter(parsekeyable=='EH728416 Corp') %>% write.csv(file='temp.csv')
+# df_sdc_bbg %>% filter(isin=='FR0010359810') %>% select(figi,name,ticker,i,d,mat2,everything()) %>% View
 
 
-assessDataCoverage<-function(bondinfo,bondprices,field='YLD_YTM_MID',lastdate='lastobs',startdate='firstobs'){
-  # check monthly data coverage; bondinfo is essentially sdc infomation on maturity etc, bondprice is from bbg download
-  # 
-  #   bondprices<-df_p %>% filter(date>='2005-01-01',date<='2016-04-01') 
-  #   bondinfo<-df_sdc_all
-  #   field="YLD_YTM_MID"
-  # field="BLP_Z_SPRD_MID"
-  # lastdate='lastobs'
-  # startdate='firstobs'
-  # #   
-  #count unique bond tickers
-  if (startdate=='firstobs') {
-    startdate = min(bondprices$date)
-    str_c('startdate: ', startdate) %>% print
-  }
-  if (lastdate == 'lastobs') {
-    lastdate = max(bondprices$date)
-    str_c('lastdate: ', lastdate) %>% print
-  }
-  
-  
-  if ('parsekeyable' %ni% (bondprices %>% ds)) bondprices %<>% rename(parsekeyable=ticker) 
-  str_c('unique securities: ',bondprices %>% tabulate('parsekeyable') %>% nrow) %>% print
-  
-  # add expected number of months
-  bondinfo %<>% distinct(parsekeyable) %>%  mutate(expmonthlyobs=ceiling((pmin(as.numeric(lastdate),as.numeric(mat2))-pmax(as.numeric(d),as.numeric(startdate)))/30.5)) 
-  # count number of observations by isin # compare to number of expected obs by isin
-  bondtickers <- bondprices %>% group_by(parsekeyable) %>% summarise(obs_allflds=length(parsekeyable))
-  fldfreq<-bondprices[!is.na(bondprices[field]),] %>% select_('date','parsekeyable',field) %>% group_by(parsekeyable) %>% summarize(obs_specfld=length(date))
-  bondtickers %<>% left_join(fldfreq,by='parsekeyable')
-  bondtickers %<>% mutate(obs_specfld=ifelse(is.na(obs_specfld),0,obs_specfld))
-  df_obs<-bondtickers %>% inner_join(bondinfo,by='parsekeyable') %>% mutate(obsdiff=expmonthlyobs-obs_specfld, obscoverage=ifelse(expmonthlyobs>=12,obs_specfld/expmonthlyobs,1)) %>% select(parsekeyable,isin,obsdiff,obscoverage,obs_allflds,obs_specfld,expmonthlyobs,mat2,d,settlement2)
-  print('coverage:')
-  str_c('# obs matching sdc:',df_obs %>% nrow()) %>% print
-  df_obs$obscoverage %>% summary %>% print
-  ggplot(df_obs,aes(x=obscoverage))+stat_ecdf()
-  print('all fld obs diff from expected number of obs')
-  df_obs %>% mutate(allflddiff=expmonthlyobs-obs_allflds) %$%summary(allflddiff) %>% print
-  df_obs
-  # df_obs2<-sqldf('select A.*, B.expmonthlyobs from df_obs as A left join df_sdc2 as B on A.isin=B.isin')
-  # df_obs2 %>% mutate(obsdiff=expmonthlyobs-ct) %>% group_by(obsdiff) %>% summarise(ctt=length(obsdiff)) %>% View 
-}
-
-df_obs %>% arrange(desc(obscoverage)) %>% View
-bondprices %>% filter(parsekeyable=='EH728416 Corp') %>% View
-df_sdc_all %>% filter(parsekeyable=='EH728416 Corp') %>% write.csv(file='temp.csv')
-
-
-df_yld_long<-df_pt %>%  melt(.,id.vars=c('date','parsekeyable'),
+df_yld_long<-df_p %>%  melt(.,id.vars=c('date','parsekeyable'),
          measure.vars=((df_pt %>% ds)[(df_pt %>% ds) %ni% c('date','parsekeyable','batch')]),
-         variable.name='field') %>% dplyr::tbl_df()
+         variable.name='field') %>% dplyr::tbl_df() %>% filter(!is.na(value)) %>% distinct(date,parsekeyable,field) 
 df_yld_long %>% group_by(date, field) %>% summarise(Ndp=length(na.omit(value))) %>%  ggplot(.,aes(x=date,y=Ndp,colour=field))+geom_line()
 df_yld_long %>% group_by(date, field) %>% summarise(Ndp=length(na.omit(value))) %>% dcast(date~field) %>% View
 
-
+df_yld_long %>% showdups(c('date','parsekeyable','field'))
+df_yld_long %>% distinct(parsekeyable) %>% nrow
 
 
 # load bbg bond sprd, unpack ----------------------------------------------

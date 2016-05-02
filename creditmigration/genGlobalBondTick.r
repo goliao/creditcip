@@ -75,77 +75,159 @@ load(file='sdcnew.rdata')
 newadditions<-df_sdcnew %>% filter(isin!='-') %>% distinct(isin) %>% anti_join(sdc0_isins,by='isin') %>% select(isin)
 sdc_isins<-sdc0_isins %>% full_join(df_sdcnew %>% filter(isin!='-') %>% distinct(isin) %>% select(isin),by='isin')
 isin2figi<-sdc_isins %>% requestfigibyisin(.)
-source('util.r')
 isin2figi2<-sdc_isins %>% sample_frac(1) %>% requestfigibyisin(.)
-save(isin2figi,isin2figi2,isin2figi_incorrect,file='isin2figi_examine.rdata')
+save(isin2figi,isin2figi2,file='isin2figi_examine.rdata')
 # save(isin2figi,file='isin2figi.rdata')
 load(file='isin2figi.rdata')
 
+isin2figi
+load(file='temp_dfisinfigi.rdata')
+df_isin2figi_all %>% filter(!is.na(figi))
 
 # something is wrong in the retreival process
 isin2figi %>% countdups('isin')
 isin2figi %>% countdups('figi')
 ifdup<-isin2figi %>% showdups('figi') 
 reqdup<-sdc_isins %>% mutate(rowN=row_number()) %>% semi_join((isin2figi %>% showdups('figi')),by='isin') %>% arrange(rowN) 
-ifdup %>% filter(isin=='US140420NE62')
-ifdup %>% filter(figi=='BBG005M0YQR9') %>% View
 reqdup %>% filter((isin=='US12548TAG58' | isin=='US140420NE62'))
 rectified<-reqdup %>% select(isin) %>% requestfigibyisin(.) %<>% filter(!is.na(figi))
 
 rectified %>% showdups('figi')
 rectified %>% filter(figi=='BBG005M0YQR9') %>% View
 
-isin2figi_correct<-isin2figi %>% anti_join(reqdup,by='isin') %>% bind_rows(rectified)
-isin2figi_correct %>% showdups('figi')
-isin2figi_correct %>% showdups('isin')
-isin2figi_correct %>% nrow()
+isin2figi<-isin2figi %>% anti_join(reqdup,by='isin') %>% bind_rows(rectified)
+isin2figi %>% showdups('figi')
+isin2figi %>% showdups('isin')
+isin2figi %>% nrow()
+isin2figi %>% filter(isin=='US312923XE00')
+isin2figinew %>% filter(isin=='US312923XE00')
 
 
+## new with datatable
+rm(list=ls())
+source('util.r')
+load(file='isin2figi.rdata')
+ifold<-data.table(isin2figi)
+rm(isin2figi)
+load(file='isin2figi_examine.rdata')
+if1<-data.table(isin2figi[[1]])
+if2<-data.table(isin2figi2[[1]])
+
+# check that the nonduplicated if1 and if2 mappings are the same, by figi
+setkey(if1,figi)
+setkey(if2,figi)
+#no dup versions
+if1_nd<-if1[if1[,.N,figi][N==1,figi]]
+if2_nd<-if2[if2[,.N,figi][N==1,figi]]
+if12_nd<-if1_nd[if2_nd,nomatch=0] #inner merge
+if12_nd[isin!=i.isin] # good, at least they agree when there are no dups
+
+# bind 1 and 2 together, take all verified mappings
+if12<-rbind(if1,if2)
+setkey(if12,figi,isin)
+if12[,N:=.N,by=.(figi,isin)]
+if12<-unique(if12[N==2])
+if12<-if12[!is.na(figi)][,N:=NULL]
+# bind 1 & 2 request with old mapping
+ifnew<-rbind(if12,ifold)
+setkey(ifnew,figi,isin)
+ifnew[,N:=.N,by=.(figi,isin)]
+ifnew<-unique(ifnew[N==2])[!is.na(figi)][,N:=NULL]
+ifnew<-ifnew[!is.na(isin)]
+# what's still missing from sdc
+isinmiss<-sdc_isins %>% anti_join(ifnew,by='isin')
+ifsup1<-requestfigibyisin(isinmiss)
+ifsup2<-isinmiss %>% sample_frac(1) %>% requestfigibyisin()
+#check supplemental similarity
+dt.ifsup1<-data.table(ifsup1[[1]])
+dt.ifsup2<-data.table(ifsup2[[1]])
+dt.ifsup<-rbind(dt.ifsup1,dt.ifsup2)
+setkey(dt.ifsup,figi,isin)
+dt.ifsup[,N:=.N,by=.(figi,isin)]
+dt.ifsup<-unique(dt.ifsup[N==2])[,N:=NULL]
+dt.ifsup<-dt.ifsup[!is.na(figi)][!is.na(isin)]
+setkey(ifnew,isin,figi)
+setkey(dt.ifsup,isin,figi)
+ifnew<-rbind(ifnew,dt.ifsup)
+isin2figi<-ifnew
+save(isin2figi,file='isin2figiNew.rdata')
+
+parsekeyfigi<-read.csv(file='parsekeyablefigi.csv',stringsAsFactors = FALSE) %>% tbl_df() %>% select(parsekeyable,figi) %>% data.table()
+showdups.dt(parsekeyfigi,'figi')
+showdups.dt(isin2figi,'figi')
+setkey(parsekeyfigi,figi)
+setkey(isin2figi,figi)
+pfi<-parsekeyfigi[isin2figi][!is.na(parsekeyable)]
+save(pfi,file='pfi.rdata')
+
+pfi
 
 # generate sdc comprehensive with isin and parsekeyables ------------------
-load(file='isin2figi.rdata')
-df_sdc0<-read.dta13('sdc96_clean2.dta') %>% tbl_df() %>%  select(i,tic,isin,cu,d,nat,amt,descr,ccy,rating, nrating,mat2,ytofm,everything()) %>% arrange(d) %>% filter(isin!='-')
-df_sdc0 %<>% select(.,-starts_with("E",ignore.case=FALSE))
-df_sdc0 %<>% distinct(isin)
+rm(list=ls())
+source('util.r')
+load(file='pfi.rdata')
+df_sdc0<-read.dta13('sdc96_clean2.dta') 
+dt_sdc0<- data.table(df_sdc0) 
+setkey(dt_sdc0,isin)
+dt_sdc0<-dt_sdc0[isin!='-',.(i,tic,isin,cu,d,nat,amt,descr,ccy,rating, nrating,mat2,ytofm,master_deal_type,issue_type_desc,mdealtype,secur,tf_mid_desc)][order(isin,-amt)]
+dt_sdc0 %<>% filter(
+  amt >= 50,
+  ytofm >= 1,
+  ytofm <= 99999,
+  mdealtype %ni% c("P", "ANPX", "M", "EP", "CEP", "TM", "PP"),
+  secur %ni% c(
+    "Cum Red Pfd Shs",
+    "Non-Cum Pref Sh" ,
+    "Preferred Shs" ,
+    "Pfd Stk,Com Stk"
+  ),
+  tf_mid_desc != 'Government Sponsored Enterprises',!grepl('Flt', secur),!grepl('Zero Cpn', secur),!grepl('Float', secur),!grepl('Fl', descr),!grepl('Zero Cpn', descr),!grepl('Mortgage-backed', issue_type_desc),!grepl('Asset-backed', issue_type_desc),!grepl('Federal Credit Agency', issue_type_desc),!grepl('Loan', descr)
+) 
 load(file='sdcnew.rdata')
 df_sdcnew %<>% filter(isin!='-')
 df_sdcnew %<>% rename(i=issname,rank_domicile_nation=domnat,tic=ticker_sdc,cu=cusip,mkt=mktplace,mdy=rating_mdy,sp=rating_sp,PackageID=id_package_sdc,upnames=upco,issue_type_desc=typesec,upsicp=upsic,sicp=sic_main,deal_no=sdcdealnumber) %>% mutate(PackageID=as.numeric(PackageID))
-df_sdcnew %<>% distinct(isin)
-#merge the two sdc files together
-df_sdcnew_add<-df_sdcnew %>% anti_join(df_sdc0,by='isin')
-df_sdc_full<- df_sdc0 %>% full_join(df_sdcnew)
-parsekeyfigi<-read.csv(file='parsekeyablefigi.csv',stringsAsFactors = FALSE) %>% tbl_df() %>% select(parsekeyable,figi)
-parsekeyfigiisin<-parsekeyfigi %>% left_join(isin2figi,by='figi') %>% select(parsekeyable,figi,isin,everything())
+df_sdcnew %<>% filter(
+  amt >= 50,
+  ytofm >= 1,
+  ytofm <= 99999,
+  mdealtype %ni% c("P", "ANPX", "M", "EP", "CEP", "TM", "PP"),
+  !grepl('Fl', descr),!grepl('Zero Cpn', descr),!grepl('Mortgage-backed', issue_type_desc),!grepl('Asset-backed', issue_type_desc),!grepl('Federal Credit Agency', issue_type_desc),!grepl('Loan', descr)
+) 
+dt_sdcnew<-data.table(df_sdcnew)
+setkey(dt_sdcnew,isin)
+dt_sdcall<-rbind(dt_sdc0,dt_sdcnew,fill=TRUE)
+setkey(pfi,isin)
+setkey(dt_sdcall,isin)
+dt_sdc2<-dt_sdcall[pfi][order(parsekeyable,-amt)]
+setkey(dt_sdc2,parsekeyable,isin)
+# get rid of non-matches between sdc and bloomberg based on coupon and mat date
+dt_sdc2[,`:=`(matbbg=mdy(str_extract(ticker,"\\d\\d\\/\\d\\d\\/\\d\\d")),couponbbg=as.numeric(str_extract(ticker,"(?<=\\s)\\d+\\.*(\\d+)?(?=\\s)")),couponsdc=as.numeric(str_extract(descr,"^\\d+.\\d*(?=\\%)")))]
+dt_sdc2[,matdiff:=(matbbg-mat2)/365]
+dt_sdc2[matdiff!=0 & couponbbg!=couponsdc,.(isin,matdiff,ytofm,d,mat2,matbbg,couponsdc,couponbbg,descr,i,name,tic,ticker)] %>% View
 
-parsekeyfigi %>% countdups('parsekeyable')
-parsekeyfigi %>% countdups('figi')
+dt_sdc2<-dt_sdc2[matdiff==0 | couponbbg==couponsdc] 
+sdc<-dt_sdc2[!is.na(ccy)] %>% distinct(parsekeyable,isin)
+save(sdc,file='sdc.rdata')
 
-
-showdups<-function(dfin,key='figi'){
-  # duplicatedkey<-isin2figi[[key]][duplicated(isin2figi[[key]])]
-  # multiple
-  dupindex<-duplicated(dfin[,key])
-  duplicatedkey<-dfin[dupindex,key]
-  dfin %>% semi_join(duplicatedkey,by=key)
-}
-
-parsekeyfigiisin %>% countdups('figi')
-
-parsekeyfigiisin %>% showdups(c('parsekeyable')) %>% View
-
-
-
-
-df_sdc_all<-df_sdc_full %>% left_join(isin2figi,by='isin') %>% left_join(parsekeyfigi,by='figi')
-# there are some dups since isin to figi has dupes
-isin2figi %>% countdups()
-df_sdc_all %>% countdups()
-# but this can be easily removed
-df_sdc_all %>% distinct(deal_no)
-save(df_sdc_all,file='sdc_all.rdata')
-
-isin2figi %>% filter(isin=='US312923XE00')
-isin2figinew %>% filter(isin=='US312923XE00')
+# 
+# df_sdc0 %<>% distinct(isin)
+# 
+# load(file='sdcnew.rdata')
+# df_sdcnew %<>% filter(isin!='-')
+# df_sdcnew %<>% rename(i=issname,rank_domicile_nation=domnat,tic=ticker_sdc,cu=cusip,mkt=mktplace,mdy=rating_mdy,sp=rating_sp,PackageID=id_package_sdc,upnames=upco,issue_type_desc=typesec,upsicp=upsic,sicp=sic_main,deal_no=sdcdealnumber) %>% mutate(PackageID=as.numeric(PackageID))
+# df_sdcnew %<>% distinct(isin)
+# #merge the two sdc files together
+# df_sdc_full<- df_sdc0 %>% full_join((df_sdcnew %>% anti_join(df_sdc0,by='isin')))
+# parsekeyfigi<-read.csv(file='parsekeyablefigi.csv',stringsAsFactors = FALSE) %>% tbl_df() %>% select(parsekeyable,figi)
+# parsekeyfigiisin<-parsekeyfigi %>% left_join(isin2figi,by='figi') %>% select(parsekeyable,figi,isin,everything())
+# df_sdc_all<-df_sdc_full %>% left_join(isin2figi,by='isin') %>% left_join(parsekeyfigi,by='figi')
+# 
+# parsekeyfigiisin %>% countdups('parsekeyable')
+# parsekeyfigiisin %>% countdups('figi')
+# 
+# df_sdc_bbg<-parsekeyfigiisin %>% filter(!is.na(isin)) %>% left_join(df_sdc_full,by='isin')
+# save(df_sdc_all,df_sdc_bbg,file='sdc_all.rdata')
+# 
 
 
 # sdc_bbg_matched ---------------------------------------------------------
@@ -187,6 +269,22 @@ bbgHY_sdc %>% distinct(isin) %>% filter(nrating==1) %>% View
 bbgHY_sdc %>% distinct(isin) %>% tabulate('i') %>% View
 bdownload_batch3hy<-bbgHY  %>% select(parsekeyable) %>% mutate(fac=sample(1:20,nrow(.),replace=TRUE)) %>%  print
 save(bdownload_batch3hy,file='bbgdownload_042616B.rdata')
+
+
+
+## download what's remaining in bbg but not in sdc again
+load('bbg_bond_prices.rdata')
+downloaded<-df_p %>% distinct(parsekeyable) %>% select(parsekeyable)
+bbgall<-read.csv(file='bsrch_eurusd_all.csv',stringsAsFactors = FALSE) %>% tbl_df() %>% print
+undownloaded<-bbgall %>% anti_join(downloaded)
+load('sdc_all.rdata')
+undownloaded_unmatched<-undownloaded %>% anti_join(df_sdc_bbg,by='parsekeyable')
+downloaded_unmatched<-downloaded %>% anti_join(df_sdc_bbg,by='parsekeyable')
+undownloaded_matched<-undownloaded %>% semi_join(df_sdc_bbg,by='parsekeyable')
+# get isin for downloaded unmatched
+downloaded_unmatched %>% write.csv(file='downloaded_unmatched.csv')
+#get isin, ccy, upparent, issue date, amt, etc
+undownloaded_unmatched %>% write.csv(file='undownloaded_unmatched.csv')
 
 # what information we are missing in sdc ----------------------------------
 # very little information is missing in sdc

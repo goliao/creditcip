@@ -13,6 +13,7 @@ require(stargazer)
 require(reshape2)
 require(sqldf)
 require(magrittr)
+require(data.table)
 '%ni%' <- Negate('%in%')
 df2clip<-function(x)(write.table(x, "clipboard.csv", sep=","))
 # df2clip<-function(x)(write.table(x, "clipboard", sep="\t"))
@@ -238,7 +239,7 @@ print(str_c('min est:',nrow(df_isins)/10000))
     for  (i in 1:nrow(responsejson)){
       if (ncol(responsejson)==1) { # only data column
         temp_isin2figi %<>% bind_rows(.,responsejson$data[i][[1]] %>% mutate(isin=tempreq$isin[i][[1]]))
-      } else{ # data column and error column
+      } else{ # data column and error column #####something is not right
         if (is.na(responsejson$error[i][[1]]))
           temp_isin2figi %<>% bind_rows(.,responsejson$data[i][[1]] %>% mutate(isin=tempreq$isin[i][[1]]))
         else
@@ -249,7 +250,7 @@ print(str_c('min est:',nrow(df_isins)/10000))
     df_isin2figi_all %<>% bind_rows(.,temp_isin2figi)
   }
   #this is the isin to figi mapping that contains 
-  c(df_isin2figi_all,diag_response)
+  list(df_isin2figi_all,diag_response)
 }
 
 countdups<-function(dfin,field='isin'){
@@ -271,13 +272,14 @@ loadBBGdownload2df<-function(filename='bbg_gbonds_160426_mo_batch2_asw.RData'){
   df_prices %>% rename(parsekeyable=ticker)
 }
 
+
 assessDataCoverage<-function(bondinfo,bondprices,field='YLD_YTM_MID',lastdate='lastobs',startdate='firstobs'){
   # check monthly data coverage; bondinfo is essentially sdc infomation on maturity etc, bondprice is from bbg download
   # 
-  #   bondprices<-df_yld
+  #   bondprices<-df_p %>% filter(date>='2005-01-01',date<='2016-04-01') 
   #   bondinfo<-df_sdc_all
-  #   field="ASSET_SWAP_SPD_MID"
-  #field="BLP_Z_SPRD_MID"
+  #   field="YLD_YTM_MID"
+  # field="BLP_Z_SPRD_MID"
   # lastdate='lastobs'
   # startdate='firstobs'
   # #   
@@ -312,4 +314,46 @@ assessDataCoverage<-function(bondinfo,bondprices,field='YLD_YTM_MID',lastdate='l
   df_obs
   # df_obs2<-sqldf('select A.*, B.expmonthlyobs from df_obs as A left join df_sdc2 as B on A.isin=B.isin')
   # df_obs2 %>% mutate(obsdiff=expmonthlyobs-ct) %>% group_by(obsdiff) %>% summarise(ctt=length(obsdiff)) %>% View 
+}
+showdups<-function(dfin,key='figi'){
+  # duplicatedkey<-isin2figi[[key]][duplicated(isin2figi[[key]])]
+  # multiple
+  dupindex<-duplicated(dfin[,key])
+  duplicatedkey<-dfin[dupindex,key]
+  dfin %>% semi_join(duplicatedkey,by=key)
+}
+
+
+showdups.dt<-function(dfin,vars=key(dfin)){
+  print('showing duplicates in:')
+  print(vars)
+  oldkey<-key(dfin)
+  setkeyv(dfin,vars)
+  dupkey<-dfin[,.N,by=vars][N>1,vars,with=FALSE]
+  dfout<-dfin[dupkey]
+  if(length(oldkey)>0) {
+    if (!identical(oldkey,vars)) setkeyv(dfin,oldkey)
+  }
+  else {
+    warning('set key(s) to vars:',vars)
+  }
+  dfout
+}
+
+
+
+openfigi.response2DT<-function(res){
+  # not used
+  aa<-list()
+  # i=1
+  for (i in 1:length(res)){
+    aa[[i]]<-data.table()
+    # tryCatch(aa[[i]]<-rbindlist(res[[i]]))
+     for (j in 1:length(res[[i]])){
+      aa[[i]]<-rbind(aa[[i]],data.table(res[[i]][[j]]))
+    }
+    print(i)
+  }
+  bb<-rbindlist(aa,fill=TRUE)
+  bb
 }
