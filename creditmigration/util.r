@@ -257,21 +257,34 @@ countdups<-function(dfin,field='isin'){
   (dfin %>% nrow)-(dfin %>% distinct_(field) %>% nrow)
 }
 
-loadBBGdownload2df<-function(filename='bbg_gbonds_160426_mo_batch2_asw.RData'){
+
+loadBBGdownload2df<-function(filename='../data/bloomberg/bbg_gbonds_160426_mo_batch1.RData'){
   # takes in a filename associated with bbg download; spits out price dataframe with field as colnames and a variable type
   load(filename)
   a0 <- unlist(prices, recursive = FALSE)
-  tickernames <- names(a0)
-  df_prices <- data.frame() %>% tbl_df()
-  for (i in 1:length(tickernames)) {
-    temp_new <- a0[[i]] %>% mutate(ticker = tickernames[i]) %>% tbl_df()
-    if (nrow(temp_new) == 0)
-      print (str_c('empty:#', i, ' name:', tickernames[i]))
-    df_prices <- df_prices %>% dplyr::bind_rows(., temp_new)
-  }
-  df_prices %>% rename(parsekeyable=ticker)
+  # old slow version
+  # tickernames <- names(a0)
+  # df_prices <- data.frame() %>% tbl_df()
+  # for (i in 1:length(tickernames)) {
+  #   temp_new <- a0[[i]] %>% mutate(ticker = tickernames[i]) %>% tbl_df()
+  #   if (nrow(temp_new) == 0)
+  #     print (str_c('empty:#', i, ' name:', tickernames[i]))
+  #   df_prices <- df_prices %>% dplyr::bind_rows(., temp_new)
+  # }
+  # df_prices %>% rename(parsekeyable=ticker)
+  dtw<-data.table::rbindlist(a0,use.names=TRUE,idcol=TRUE)
+  dtl<-melt(dtw,id.vars=c('date','.id'),variable.name='field')[!is.na(value)]
+  setnames(dtl,'.id','parsekeyable')
+  setkey(dtl,date,parsekeyable)
+  dtl
 }
 
+melt.gl<-function(dfin,idvars=c('date','parsekeyable','batch')){
+  #Deprecated: not useful: a wrapper for melt that sets measure.vars to be anything other than idvars
+  setkey_(dfin,idvars)
+  dtl_out<-melt(dfin,id.vars=idvars,measure.vars=((dfin %>% ds)[(dfin %>% ds) %ni% idvars]),
+              variable.name='field')[!is.na(value)]
+}
 
 assessDataCoverage<-function(bondinfo,bondprices,field='YLD_YTM_MID',lastdate='lastobs',startdate='firstobs'){
   # check monthly data coverage; bondinfo is essentially sdc infomation on maturity etc, bondprice is from bbg download

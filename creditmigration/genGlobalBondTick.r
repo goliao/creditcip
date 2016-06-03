@@ -160,7 +160,6 @@ setkey(isin2figi,figi)
 pfi<-parsekeyfigi[isin2figi][!is.na(parsekeyable)]
 save(pfi,file='pfi.rdata')
 
-pfi
 
 # generate sdc comprehensive with isin and parsekeyables ------------------
 rm(list=ls())
@@ -169,7 +168,7 @@ load(file='pfi.rdata')
 df_sdc0<-read.dta13('sdc96_clean2.dta') 
 dt_sdc0<- data.table(df_sdc0) 
 setkey(dt_sdc0,isin)
-dt_sdc0<-dt_sdc0[isin!='-',.(i,tic,isin,cu,d,nat,amt,descr,ccy,rating, nrating,mat2,ytofm,master_deal_type,issue_type_desc,mdealtype,secur,tf_mid_desc)][order(isin,-amt)]
+dt_sdc0<-dt_sdc0[isin!='-',.(i,tic,isin,cu,upcusip,d,nat,amt,descr,ccy,rating, nrating,mat2,ytofm,master_deal_type,issue_type_desc,mdealtype,secur,tf_mid_desc)][order(isin,-amt)]
 dt_sdc0 %<>% filter(
   amt >= 50,
   ytofm >= 1,
@@ -209,7 +208,18 @@ dt_sdc2<-dt_sdc2[matdiff==0 | couponbbg==couponsdc]
 sdc<-dt_sdc2[!is.na(ccy)] %>% distinct(parsekeyable,isin)
 save(sdc,file='sdc.rdata')
 
-# 
+# Test comparing isins directly downloaded from bloomberg with those matched via isin. no errors made, but missing a few observations
+# dt_bbgisin<-fread("temp_bbgisindirectmapping.csv")
+# dt_bbgisin[,source:=1]
+# sdc[,source:=0]
+# setkey(sdc,isin)
+# setkey(dt_bbgisin,isin)
+# comp<-sdc[dt_bbgisin][!is.na(parsekeyable),.(isin,parsekeyable,source,i.parsekeyable,i.source)]
+# comp[parsekeyable!=i.parsekeyable]
+# addmapping<-dt_bbgisin %>% anti_join(sdc,by=c('isin'))
+# dt_sdcall %>% semi_join(addmapping,by='isin')
+
+# # 
 # df_sdc0 %<>% distinct(isin)
 # 
 # load(file='sdcnew.rdata')
