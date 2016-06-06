@@ -29,91 +29,139 @@ sdc %<>% semi_join(tickersloaded,by='parsekeyable')
 sdc[ccy=='USD',ccy:='usd']
 sdc[ccy=='EUR',ccy:='eur']
 
+
+# MERGE RATING AND ADD MATURITY BUCKETS -----------------------------------
 ## need to augment nrating for ones that are missing 
 # todo: augment nratings even more with bbg data; do this next
 setkey(dtl,parsekeyable)
 setkey(sdc,parsekeyable)
 dtl2<-dtl[sdc[,.(ccy,mat2,nrating,upcusip,parsekeyable)],nomatch=0]
-dtoas<-dtl2[field=='OAS_SPREAD_BID',!"field",with=FALSE]
 ###
 
-#get rid of days with only single observation
-dtoas<-dtoas[date %ni% dtoas[,.N,by=c('date','ccy')][N==1,date]]
 
-# Version 0: demean method
-setkey(dtl2,date,upcusip,ccy,field)
-dt_oas_upmean<-dtoas[,.(oas_upmean=mean(value)),by=.(date,upcusip)]
-setkey(dt_oas_upmean,date,upcusip)
-setkey(dtoas,date,upcusip)
-# demeaned oas spread for each bond; demeaning issuer*time specific means; residualize and aggregate up to ccy level
-dtoas_ccy<-dtoas[dt_oas_upmean][,.(date,ccy,oas_updemeaned=value-oas_upmean)][oas_updemeaned!=0,.(oas_demean_ccy=mean(oas_updemeaned)),by=.(date,ccy)]
- #create a spread
-dtoas_ccy[,oas_euus:=(.SD[ccy=='eur',oas_demean_ccy]-.SD[ccy=='usd',oas_demean_ccy]),by=.(date)]
-dtoas_ccy %>% ggplot(aes(x=date,y=oas_euus))+geom_line()
+# residualizing  ----------------------------------------------------------
+ccyfe<-getccyFE(dtl2,fieldstr='OAS_SPREAD_BID')
+ccyfe_yield<-getccyFE(dtl2,fieldstr='YLD_YTM_MID')
+ccyfe_as<-getccyFE(dtl2,fieldstr='ASSET_SWAP_SPD_MID')
 
-# version 1::
-regcoef<-dtoas[,lm(value~ccy+upcusip,data=.SD)$coefficients['ccyusd'],by='date']
+feg<-ccyfe_as[ccyfe_yield][ccyfe]
+setnames(feg,c('euus','i.euus','i.euus.1'),c('euus_oas','euus_yld','euus_as'))
+ggplotw(feg)
 
-# version 2:: get rid of price obs with only single ccy per date per upcusip; that is, obs is counted only when upcusip has both ccys
-tokeep<-dtoas[,.N,by=c('date','upcusip','ccy')][,.N,by=c('date','upcusip')][N==2][,.(date,upcusip)]
+#create yield spread for aggregate 
+dtl2[,ytm:=as.numeric((mat2-date)/365)]
+#winsorize by value a little
+dtl3<-dtl2[field=='YLD_YTM_MID',pctl:=percent_rank(value),by=.(date,ccy)][pctl>=.01 & pctl<=.99 & field=='YLD_YTM_MID']
+# get rid of up where up doesn't have bonds in both ccys for each date
+tokeep<-dtl3[,.N,by=c('date','upcusip','ccy')][,.N,by=c('date','upcusip')][N==2][,.(date,upcusip)]
 setkey(tokeep,date,upcusip)
-regcoef2<-dtoas[tokeep][,lm(value~ccy+upcusip,data=.SD)$coefficients['ccyusd'],by='date']
+setkey(dtl3,date,upcusip)
+dtl3<-dtl3[tokeep]
 
-#save(regcoef,regcoef2,file='temp_ccyferegcoef.rdata')
-load(file='temp_ccyferegcoef.rdata')
+# winsorize by ytm a little
+dtl3<-dtl3[,pctl:=percent_rank(ytm),by=.(date,ccy)][pctl>=.01 & pctl<.99]
 
-# compare v1 & v2
-setnames(regcoef2,'V1','V2')
-tmp<-merge(regcoef,regcoef2,by='date') %>% melt(id.vars='date')
-setkey(tmp,date,variable)
-tmp
-tmp %>% ggplot(aes(x=date,y=value,colour=variable))+geom_line()
+# graph avg ytm by ccy by date
+ytm_cc<-dtl3[,.(mean(na.omit(ytm))),by=.(date,ccy)]
+setnames(ytm_cc,'V1','ytm_avg')
+ytm_cc %>% qplot(x=date,y=ytm_avg,colour=ccy,data=.,geom='line')
 
-# compare v1 and demeaning method
-temp_comp<-merge(regcoef,dtoas_ccy,by='date')
-temp_comp[,euussprd:=-V1]
-temp_comp %>% melt(id.vars='date', measure.vars=c('euussprd','oas_euus')) %>%  ggplot(aes(x=date,y=value,colour=variable))+geom_line()
-
-
-# Let's try cross sectional reg for one single date
-dailyregdata<-dtoas[date=='2004-01-30']
-tdg<-dailyregdata[upcusip %in% (dailyregdata[,.N,by=c('upcusip','ccy')][,.N,by='upcusip'][N!=1,upcusip])]
-lm(value~ccy+upcusip,dailyregdata)$coefficients['ccyusd']
-lm(value~ccy+upcusip,tdg)$coefficients['ccyusd']
-
-#small sample test
-testsamp<-tdg[5:9,.(value,ccy,upcusip)]
-setkey(testsamp,upcusip,ccy)
-lm(value~ccy+upcusip,testsamp)$coefficients['ccyusd']
-lm(value~ccy+upcusip,testsamp)
-#lm(value~ccy+upcusip+ccy*upcusip,testsamp)
-testres<-testsamp[,upmean:=mean(value),by=upcusip][,demeaned:=value-upmean][,mean(demeaned),by='ccy']
--(testres[ccy=='eur',V1]-testres[ccy=='usd',V1])
-
-reg1<-lm(value~upcusip,testsamp)
-testsamp$res<-reg1$residuals
-lm(res~ccy,testsamp)
-
-lm(demeaned~ccy,testsamp)
-testsamp %>% write.csv(file=('temp.csv'))
-
-
-
-
-
-## aggregate by ccy for each up, subtract up mean, then aggregate again to ccy level
-# dtoas_ccy2<-dtoas[,.(oas_up=mean(value)),by=.(date,upcusip,ccy)][dt_oas_upmean][,.(date,ccy,oas_updemeanccy=oas_up-oas_upmean)][oas_updemeanccy!=0,.(oas_demean_ccy=mean(oas_updemeanccy)),by=.(date,ccy)]
-# dtoas_ccy2[,oas_euus:=(.SD[ccy=='eur',oas_demean_ccy]-.SD[ccy=='usd',oas_demean_ccy]),by=.(date)]
-# dtoas_ccy2 %>% ggplot(aes(x=date,y=oas_euus))+ge om_line()
-# #why are these two different? ## think about it more
-
+# bring in the bbg prices
 priceraw<-read.dta13('prices_extended.dta') %>% data.table()
 priceraw %>% ds('date')
 setkey(priceraw,date)
+ussw_colnames<-priceraw %>% ds('ussw') %>% str_extract(regex('ussw.*')) %>% sort %>% unique
+eusa_colnames<-priceraw %>% ds('eusa') %>% str_extract(regex('eusa.*')) %>% sort %>% unique
+swapus<-priceraw[date>='1996-06-28',c('date',ussw_colnames),with=FALSE]
+swapeu<-priceraw[date>='1999-01-29',c('date',eusa_colnames),with=FALSE]
+swapprices<-swapus %>% left_join(swapeu,by='date')
 
-# adjusting for xccy
- %>% mutate(oas_res_eff=euus_sprd-eubs5) %>% 
-  select(date,oas_res_eff,euus_sprd) %>% filter(date>'2006-01-01') %>% wgplot(.)
+#interpolate 
+swapusl<-swapus %>% gather('tenor','ussw',-date) %>% mutate(tenor=as.numeric(str_extract(tenor,regex('\\d+')))) %>% as.data.table()
+setkey(swapusl,date)
+ytm_us<-swapusl[ytm_cc[ccy=='usd']]
+usswyld<-ytm_us[!is.na(ussw),approx(x=tenor,y=ussw,xout=ytm_avg),by=date] %>% rename(ytm=x,usswyld=y) %>% unique %>% select(-ytm)
+usswyld %>% qplot(date,usswyld,data=.,geom='line')
+
+swapeul<-swapeu %>% gather('tenor','eusa',-date) %>% mutate(tenor=as.numeric(str_extract(tenor,regex('\\d+')))) %>% as.data.table()
+setkey(swapeul,date)
+ytm_eu<-swapeul[ytm_cc[ccy=='eur']]
+euswyld<-ytm_eu[!is.na(eusa),approx(x=tenor,y=eusa,xout=ytm_avg),by=date] %>% rename(ytm=x,eusayld=y) %>% unique() %>% select(-ytm)
+euswyld %>% qplot(date,eusayld,data=.,geom='line')
+
+
+yldsprdcomp<-merge(usswyld,euswyld,by='date') %>% mutate(euus_swapsprd=eusayld-usswyld) %>% right_join(feg,by='date') %>% mutate(euus_yldsprd=euus_yld*100-euus_swapsprd) %>% 
+  select(date,euus_yldsprd,euus_yld,euus_oas) %>% mutate(euus_yld=100*euus_yld) 
+yldsprdcomp %>% ggplotw()
+# euus_oas  :  oas directly from bloomberg
+# euus_yld  : yld spread directly from bloomberg, not adjusting for underlying swap or treasury yld
+# euus_yldsprd : euus_yld subtracting maturity avgd swap yield spread btw eu and us
+save.image('temp.rdata')
+
+# next step, try to generate yield sprd at the individual bond level instead of taking avg 
+swappricesl<-swapprices %>% melt(id.vars='date',variable.name='field')
+swappricesl[,ccy:=stringr::str_sub(field,1,2)][ccy=='eu',ccy:='eur'][ccy=='us',ccy:='usd'][,tenor:=as.numeric(str_extract(field,regex('\\d+')))]
+setkey(swappricesl,date,ccy,tenor,field)
+setkey(dtl3,date,ccy)
+swappricesl[date=='2004-01-30' & ccy=='eur']
+
+intrwrap<-function(dfin,sp,bylist){
+  splocal<-sp[date==bylist$date & ccy==bylist$ccy]
+  if (nrow(splocal)==0) {
+    print(str_c('NAs on',bylist$date,bylist$ccy))
+    #browser()
+    rep(0,nrow(dfin))
+  } else{
+    tryCatch(dfout<-approx(x=splocal$tenor,y=splocal$value,xout=dfin$ytm),
+             error=function(err){
+               print(err)
+               browser()
+             })
+    dfout$y
+  }
+}
+dtl3[!is.na(ytm),swapyld:=intrwrap(.SD,swappricesl,.BY),by=.(date,ccy)][swapyld==0,swapyld:=NA]
+dtl3[,yldsprd:=value*100-swapyld]
+dtl3[yldsprd!='NA'] %>% str
+dtl3[!is.na(yldsprd)]
+
+setkey(dtl3,date,upcusip)
+
+dfreg<-dtl3[yldsprd!='NA',.(date,ccy,upcusip,value=yldsprd,field='yldsprd')]
+ccyfe_yieldsprd<-getccyFE(dfreg,fieldstr='yldsprd')
+setnames(ccyfe_yieldsprd,'euus','euus_yldsprd')
+ccyfe_yieldsprd %>% ggplotw()
+
+feg2<-feg[ccyfe_yieldsprd]
+feg2[,euus_yld:=NULL]
+feg2 %>% ggplotw()
+feg<-feg2
+
+
+
+
+# compare to baml
+Cdif_euus<-priceraw[,c('date',ds(priceraw,'Cdif_euus'),ds(priceraw,'eubs')),with=FALSE]
+
+dfeu<-feg %>% left_join(Cdif_euus,by='date')
+dfeu[,.(date,euus_yldsprd,Cdif_euus_30)] %>% ggplotw()
+
+dfeu %>% mutate(euus_oas_eff=euus_oas-eubs5,euus_yldsprd_eff=euus_yldsprd-eubs5) %>% 
+  select(date,euus_oas_eff,euus_yldsprd_eff,euus_oas,euus_yldsprd) %>% filter(date>'2004-01-01') %>% wgplot(.)
+
+dfeu %>% mutate(euus_oas_eff=euus_oas-eubs5,euus_yldsprd_eff=euus_yldsprd-eubs5) %>% 
+  select(date,euus_yldsprd_eff,euus_yldsprd) %>% filter(date>'2004-01-01') %>% wgplot(.)
+
+dfeu %>% mutate(euus_oas_eff=euus_oas-eubs5,euus_yldsprd_eff=euus_yldsprd-eubs5) %>% 
+  select(date,euus_yldsprd_eff,Cdif_euus_30_eff) %>% filter(date>'2004-01-01') %>% wgplot(.)
+
+dfeu %>% mutate(euus_oas_eff=euus_oas-eubs5,euus_yldsprd_eff=euus_yldsprd-eubs5) %>% 
+  select(date,euus_yldsprd,Cdif_euus_30) %>% filter(date>'2004-01-01') %>% wgplot(.)
+
+
+# previous stuff ----------------------------------------------------------
+
+
 
 # plot ccy spread directly
 dtoas[,.(oas_ccy=mean(value)),by=.(date,ccy)][,.(oas_euus=(.SD[ccy=='eur',oas_ccy]-.SD[ccy=='usd',oas_ccy])),by=.(date)] %>% 

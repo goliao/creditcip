@@ -14,6 +14,7 @@ require(reshape2)
 require(sqldf)
 require(magrittr)
 require(data.table)
+require(beepr)
 '%ni%' <- Negate('%in%')
 df2clip<-function(x)(write.table(x, "clipboard.csv", sep=","))
 # df2clip<-function(x)(write.table(x, "clipboard", sep="\t"))
@@ -116,6 +117,13 @@ df_fus
 plotgl <- function(dfin,fields=c('I_net_euus'),afteryr=2002){
   dfin %>% 
   filter(year>=afteryr) %>%
+  tidyr::gather(.,'type','value',-date) %>% 
+  filter(type %in% fields) %>% 
+  ggplot(data=.,aes(x=date,y=value,colour=type))+geom_line()+geom_point()
+
+}
+ggplotw<-function(dfin, fields=ds(dfin)){
+  dfin %>% 
   tidyr::gather(.,'type','value',-date) %>% 
   filter(type %in% fields) %>% 
   ggplot(data=.,aes(x=date,y=value,colour=type))+geom_line()+geom_point()
@@ -370,3 +378,94 @@ openfigi.response2DT<-function(res){
   bb<-rbindlist(aa,fill=TRUE)
   bb
 }
+
+
+getccyFE<-function(dfin,fieldstr='OAS_SPREAD_BID',version=2,winsor=.05){
+#  dfin<-dtl2
+print(str_c('FE on field: ',fieldstr))
+  df2<-dfin[field==fieldstr,.(date,ccy,value,upcusip)]
+  setkey(df2,date,upcusip,ccy)
+
+
+  # Version 0: demean method
+  # df2[,upmean:=mean(value),by=.(date,upcusip)]
+  # # demeaned oas spread for each bond; demeaning issuer*time specific means; residualize and aggregate up to ccy level
+  # df2_ccy<-df2[,.(date,ccy,demeaned=value-upmean)][demeaned!=0,.(demean_ccy=mean(demeaned)),by=.(date,ccy)]
+  # #create a spread
+  # df2_ccy[,euus:=(.SD[ccy=='eur',demean_ccy]-.SD[ccy=='usd',demean_ccy]),by=.(date)]
+  # df2_ccy %>% ggplot(aes(x=date,y=euus))+geom_line()
+#winsorize each date
+  if (winsor!=0){
+    df2[,pctl:=percent_rank(value),by=date]
+    df2<-df2[pctl>=winsor & pctl<=(1-winsor)]
+  }
+
+    #get rid of days with only single observation
+  df2<-df2[date %ni% df2[,.N,by=c('date','ccy')][N==1,date]]
+
+  # version 1:: run regression directly on data set without taking out bonds that do not have matching pairs
+  if (version==1){
+    regcoef<-df2[,lm(value~ccy+upcusip,data=.SD)$coefficients['ccyusd'],by='date']
+  } else if (version==2){
+  # version 2:: FAST: get rid of price obs with only single ccy per date per upcusip; that is, obs is counted only when upcusip has both ccys
+    tokeep<-df2[,.N,by=c('date','upcusip','ccy')][,.N,by=c('date','upcusip')][N==2][,.(date,upcusip)]
+    setkey(tokeep,date,upcusip)
+    regcoef<-df2[tokeep][,lm(value~ccy+upcusip,data=.SD)$coefficients['ccyusd'],by='date']
+  }
+  require(beepr)
+  beep()
+  regcoef[,`:=`(euus=-V1,V1=NULL)]
+  #save(regcoef,regcoef2,file='temp_ccyferegcoef.rdata')
+  #load(file='temp_ccyferegcoef.rdata')
+  regcoef
+
+}
+
+winsorize<-function(dfin){
+  dfin[,pctl:=percent_rank(value)][pctl>=.01 & pctl<=.99]
+  # tempdf<-dti %>% mutate(pctl=percent_rank(value))
+  # tempdf[pctl>=.01 & pctl<=.99]
+}
+
+# dreg1<-df2[date=='2004-01-30']
+# dreg2<-df2[tokeep][date=='2004-01-30']
+# reg1<-lm(value~ccy+upcusip,data=dreg1)
+# reg2<-lm(value~ccy+upcusip,data=dreg2)
+
+# summary(reg1)
+# summary(reg2)
+
+# # compare v1 & v2
+# setnames(regcoef2,'V1','V2')
+# tmp<-merge(regcoef,regcoef2,by='date') %>% melt(id.vars='date')
+# setkey(tmp,date,variable)
+# tmp
+# tmp %>% ggplot(aes(x=date,y=value,colour=variable))+geom_line()
+
+# # compare v1 and demeaning method
+# temp_comp<-merge(regcoef,dtoas_ccy,by='date')
+# temp_comp[,euussprd:=-V1]
+# temp_comp %>% melt(id.vars='date', measure.vars=c('euussprd','oas_euus')) %>%  ggplot(aes(x=date,y=value,colour=variable))+geom_line()
+
+
+# # Let's try cross sectional reg for one single date
+# dailyregdata<-df2[date=='2004-01-30']
+# tdg<-dailyregdata[upcusip %in% (dailyregdata[,.N,by=c('upcusip','ccy')][,.N,by='upcusip'][N!=1,upcusip])]
+# lm(value~ccy+upcusip,dailyregdata)$coefficients['ccyusd']
+# lm(value~ccy+upcusip,tdg)$coefficients['ccyusd']
+
+# #small sample test
+# testsamp<-tdg[5:9,.(value,ccy,upcusip)]
+# setkey(testsamp,upcusip,ccy)
+# lm(value~ccy+upcusip,testsamp)$coefficients['ccyusd']
+# lm(value~ccy+upcusip,testsamp)
+# #lm(value~ccy+upcusip+ccy*upcusip,testsamp)
+# testres<-testsamp[,upmean:=mean(value),by=upcusip][,demeaned:=value-upmean][,mean(demeaned),by='ccy']
+# -(testres[ccy=='eur',V1]-testres[ccy=='usd',V1])
+
+# reg1<-lm(value~upcusip,testsamp)
+# testsamp$res<-reg1$residuals
+# lm(res~ccy,testsamp)
+
+# lm(demeaned~ccy,testsamp)
+# testsamp %>% write.csv(file=('temp.csv'))
