@@ -165,6 +165,7 @@ save(pfi,file='pfi.rdata')
 rm(list=ls())
 source('util.r')
 load(file='pfi.rdata')
+
 df_sdc0<-read.dta13('sdc96_clean2.dta') 
 dt_sdc0<- data.table(df_sdc0) 
 setkey(dt_sdc0,isin)
@@ -207,6 +208,19 @@ dt_sdc2[matdiff!=0 & couponbbg!=couponsdc,.(isin,matdiff,ytofm,d,mat2,matbbg,cou
 dt_sdc2<-dt_sdc2[matdiff==0 | couponbbg==couponsdc] 
 sdc<-dt_sdc2[!is.na(ccy)] %>% distinct(parsekeyable,isin)
 save(sdc,file='sdc.rdata')
+
+save.image(file='temp160608.rdata')
+##check for and add additional mapping with bbg derived isin to parsekeyable
+pi2<-fread('parsekeyable_isin_match_bbg.csv')[isin!='#N/A Requesting Data...'] # new bbg downloaded parsekeyable <-> isin
+pi1<-pfi[,.(isin,parsekeyable)]
+pi2 %<>% anti_join(pi1,by='isin')
+# check how many downloaded prices there are from bbg and in the SDC database
+dt_sdcall %>% semi_join(pi2,by='isin') # only 2!!!
+# which ones exists on bbg but not SDC???
+figidatamissing<-pi2 %>% anti_join(dt_sdc0,by='isin') %>% anti_join(dt_sdcnew,by='isin')
+figiadd<-figidatamissing[,.(isin)] %>% requestfigibyisin()
+todownload<-figiadd[[1]] %>% as.data.table()
+todownload %>% write.csv('todownloadbbg.csv') # good to download ccy,rating, upcusip for additional use with existing data
 
 # Test comparing isins directly downloaded from bloomberg with those matched via isin. no errors made, but missing a few observations
 # dt_bbgisin<-fread("temp_bbgisindirectmapping.csv")

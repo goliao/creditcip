@@ -16,8 +16,25 @@ require(magrittr)
 require(data.table)
 require(beepr)
 '%ni%' <- Negate('%in%')
+source('dbutil.r')
 df2clip<-function(x)(write.table(x, "clipboard.csv", sep=","))
 # df2clip<-function(x)(write.table(x, "clipboard", sep="\t"))
+
+icollapse2<-function(dfin,ccyA="EUR",natA="Eurozone"){
+  # newer version of collapsing 
+  dfin<-dfin %>% as.data.table()
+  dfin[,yrmo:=as.numeric(format(d,'%Y%m'))]
+  df_fUSD<-dfin[modnat==natA & ccy=='USD',.(I_fUSD=sum(amt)/1000),by=yrmo]
+  df_usF<-dfin[modnat=='United States' & ccy==ccyA,.(I_usF=sum(amt)/1000),by=yrmo]
+  df_both<-dfin[modnat %in% c(natA,'United States') & ccy %in% c(ccyA,'USD'),.(I_both=sum(amt)/1000),by=yrmo]
+  setkey(df_fUSD,yrmo)
+  setkey(df_usF,yrmo)
+  setkey(df_both,yrmo)
+  df_all<-df_both %>% merge(df_fUSD,by='yrmo',all=TRUE) %>% merge(df_usF,by='yrmo',all=TRUE)
+  df_all[is.na(I_fUSD),I_fUSD:=0][is.na(I_usF),I_usF:=0][,date:=as.Date(str_c(yrmo,"01"),format="%Y%m%d")]
+  df_all[,I_net_fus:=I_fUSD-I_usF][,i_net_fus:=I_net_fus/I_both]
+  df_all %>% expandfulldates(.) %>%  rename(I_net_euus=I_net_fus,i_net_euus=i_net_fus) %>% as.data.table()
+}
 
 icollapse <- function(dfin,ccyA="EUR",natA="Eurozone"){
   # dfin=df2
@@ -420,7 +437,30 @@ print(str_c('FE on field: ',fieldstr))
   regcoef
 
 }
-
+intrwrap<-function(dfin,sp,bylist){
+  splocal<-sp[date==bylist$date & ccy==bylist$ccy]
+  if (nrow(splocal)==0) {
+    print(str_c('NAs on',bylist$date,bylist$ccy))
+    #browser()
+    rep(0,nrow(dfin))
+  } else{
+    tryCatch(dfout<-approx(x=splocal$tenor,y=splocal$value,xout=dfin$ytm),
+             error=function(err){
+               print(err)
+               browser()
+             })
+    dfout$y
+  }
+}
+mergebymonth<-function(dfin1,dfin2){
+  dfin1<-as.data.table(dfin1)
+  dfin2<-as.data.table(dfin2)
+  dfin1[,yrmo:=as.numeric(format(date,'%Y%m'))]
+  dfin2[,yrmo:=as.numeric(format(date,'%Y%m'))]
+  dfjoin<-merge(dfin1,dfin2,by='yrmo')
+  dfjoin[,date:=as.Date(str_c(yrmo,"01"),format="%Y%m%d")]
+  dfjoin
+}
 winsorize<-function(dfin){
   dfin[,pctl:=percent_rank(value)][pctl>=.01 & pctl<=.99]
   # tempdf<-dti %>% mutate(pctl=percent_rank(value))

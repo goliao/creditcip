@@ -1,42 +1,18 @@
-rm(list=ls(all=TRUE))
-setwd("/Users/gliao/Dropbox/Research/ccy basis/creditmigration")
-setwd("C:/Users/gliao/Dropbox/Research/ccy basis/creditmigration")
-source('util.r')
-
-# combine all price data --------------------------------------------------
-#load the old sprd data
-dtl_spd<-loadBBGdownload2df('../data/bloomberg/bbg_gbonds_160413_sprd.rdata')  %>% mutate(batch=0) 
-dtl_yld2<-loadBBGdownload2df('../data/bloomberg/bbg_gbonds_160413.rdata')  %>% mutate(batch=0) 
-dtl_batch1<-loadBBGdownload2df('../data/bloomberg/bbg_gbonds_160426_mo_batch1.RData') %>% mutate(batch=1) 
-dtl_batch2<-loadBBGdownload2df('../data/bloomberg/bbg_gbonds_160426_mo_batch2_asw.RData')  %>% mutate(batch=1) 
-dtl_batch3<-loadBBGdownload2df('../data/bloomberg/bbg_gbonds_160426_mo_batch3_HY.RData') %>% mutate(batch=2)
-dtl_batch4<-loadBBGdownload2df('../data/bloomberg/bbg_gbonds_160426_mo_batch3_HY_asw.RData') %>% mutate(batch=2)
-dtl<-rbind(dtl_spd,dtl_yld2,dtl_batch1,dtl_batch2,dtl_batch3,dtl_batch4)
-# get rid of duplicates, keep more recent downloads
-setkey(dtl,date,parsekeyable,field)
-dtl<-unique(dtl, fromLast = TRUE)
-tickersloaded<-dtl[,parsekeyable,by=parsekeyable][,.(parsekeyable)]
-#save(dtl,tickersloaded,file='bbg_bond_prices.rdata')
-
-
 # New merge: price with sdc -----------------------------------------------
 rm(list=ls(all=TRUE))
 source('util.r')
-load('bbg_bond_prices.rdata')
-load('sdc.rdata')
-sdc %<>% semi_join(tickersloaded,by='parsekeyable')
-# minor renaming
-sdc[ccy=='USD',ccy:='usd']
-sdc[ccy=='EUR',ccy:='eur']
+load('gldb.RDATA')
 
+sdc %<>% semi_join(dtl,by='parsekeyable')
 
 # MERGE RATING AND ADD MATURITY BUCKETS -----------------------------------
-## need to augment nrating for ones that are missing 
-# todo: augment nratings even more with bbg data; do this next
 setkey(dtl,parsekeyable)
 setkey(sdc,parsekeyable)
-dtl2<-dtl[sdc[,.(ccy,mat2,nrating,upcusip,parsekeyable)],nomatch=0]
+dtl2<-dtl[sdc[,.(ccy,mat2,rating,nrating,upcusip,parsekeyable,isin)],nomatch=0]
 ###
+## need to augment nrating for ones that are missing 
+# todo: augment nratings even more with bbg data; do this next
+#dtl2[is.na(rating) & is.na(nrating)]
 
 
 # residualizing  ----------------------------------------------------------
@@ -67,8 +43,6 @@ setnames(ytm_cc,'V1','ytm_avg')
 ytm_cc %>% qplot(x=date,y=ytm_avg,colour=ccy,data=.,geom='line')
 
 # bring in the bbg prices
-priceraw<-read.dta13('prices_extended.dta') %>% data.table()
-priceraw %>% ds('date')
 setkey(priceraw,date)
 ussw_colnames<-priceraw %>% ds('ussw') %>% str_extract(regex('ussw.*')) %>% sort %>% unique
 eusa_colnames<-priceraw %>% ds('eusa') %>% str_extract(regex('eusa.*')) %>% sort %>% unique
@@ -96,7 +70,6 @@ yldsprdcomp %>% ggplotw()
 # euus_oas  :  oas directly from bloomberg
 # euus_yld  : yld spread directly from bloomberg, not adjusting for underlying swap or treasury yld
 # euus_yldsprd : euus_yld subtracting maturity avgd swap yield spread btw eu and us
-save.image('temp.rdata')
 
 # next step, try to generate yield sprd at the individual bond level instead of taking avg 
 swappricesl<-swapprices %>% melt(id.vars='date',variable.name='field')
@@ -105,25 +78,9 @@ setkey(swappricesl,date,ccy,tenor,field)
 setkey(dtl3,date,ccy)
 swappricesl[date=='2004-01-30' & ccy=='eur']
 
-intrwrap<-function(dfin,sp,bylist){
-  splocal<-sp[date==bylist$date & ccy==bylist$ccy]
-  if (nrow(splocal)==0) {
-    print(str_c('NAs on',bylist$date,bylist$ccy))
-    #browser()
-    rep(0,nrow(dfin))
-  } else{
-    tryCatch(dfout<-approx(x=splocal$tenor,y=splocal$value,xout=dfin$ytm),
-             error=function(err){
-               print(err)
-               browser()
-             })
-    dfout$y
-  }
-}
+
 dtl3[!is.na(ytm),swapyld:=intrwrap(.SD,swappricesl,.BY),by=.(date,ccy)][swapyld==0,swapyld:=NA]
 dtl3[,yldsprd:=value*100-swapyld]
-dtl3[yldsprd!='NA'] %>% str
-dtl3[!is.na(yldsprd)]
 
 setkey(dtl3,date,upcusip)
 
@@ -137,6 +94,9 @@ feg2[,euus_yld:=NULL]
 feg2 %>% ggplotw()
 feg<-feg2
 
+#save.image('temp.rdata')
+load(file='temp.rdata')
+source('util.r')
 
 
 
@@ -158,10 +118,49 @@ dfeu %>% mutate(euus_oas_eff=euus_oas-eubs5,euus_yldsprd_eff=euus_yldsprd-eubs5)
 dfeu %>% mutate(euus_oas_eff=euus_oas-eubs5,euus_yldsprd_eff=euus_yldsprd-eubs5) %>% 
   select(date,euus_yldsprd,Cdif_euus_30) %>% filter(date>'2004-01-01') %>% wgplot(.)
 
+dfeu %>% select(date,euus_yldsprd,eubs5) %>% wgplot()
+
+
+raw<-read.dta13('sdc96_clean2.dta') %>% as.data.table()
+df1<-raw[!is.na(raw$amt) & ccy %in% c('USD',"EUR",'AUD',"JPY",'GBP'),]
+# current 
+
+
+# new icollapse -----------------------------------------------------------
+dfin<-df1  %>% 
+  filter(amt>=50,ytofm>=2, ytofm<=99999,nrating<=16, (pub=="Public" | pub=="Sub."), 
+         mdealtype %ni% c("P","ANPX","M","EP","CEP","TM","PP","R144P"), 
+         secur %ni% c("Cum Red Pfd Shs", "Non-Cum Pref Sh" , "Preferred Shs" ,"Pfd Stk,Com Stk"),
+         tf_mid_desc!='Government Sponsored Enterprises',
+         nrating>1)
+dfin<-dfin[ccy %in% c('USD','EUR') & amt>=100]
+# retain sdc where isin/cusip matches credit spread
+
+dfin %<>% semi_join(dtl3,by='upcusip')
+
+#dfin %>% semi_join(dtl3,by='isin')
+
+
+dfreg<-icollapse2(dfin) %>% mergebymonth(dfeu)
+dfreg[,euus_yldsprd_eff:=euus_yldsprd-eubs5]
+dfreg %>% write.dta('temp.dta')
+dfreg[date>='2006-01-01',.(date,i_net_euus,Cdif_euus_30,euus_yldsprd)] %>% ggplotw()
+
+dfreg<-dfreg[date>='2006-01-01']
+#dfreg[,i_net_euus:=i_net_euus*100]
+reg2<- dfreg %>% lm(lead(i_net_euus)~Cdif_euus_30,data=.)
+reg3<- dfreg %>% lm(lead(i_net_euus)~Cdif_euus_30_eff,data=.)
+reg4<- dfreg %>% lm(lead(i_net_euus)~euus_yldsprd,data=.)
+reg5<- dfreg %>% lm(lead(i_net_euus)~euus_yldsprd_eff,data=.)
+reg6<- dfreg %>% lm(lead(i_net_euus)~euus_oas,data=.)
+
+stargazer(reg2,reg3,reg4,reg5,reg6,type='text',report="vct*")
+
+
+dfreg[date>='2006-01-01',.(date,i_net_euus)] %>% ggplotw()
+
 
 # previous stuff ----------------------------------------------------------
-
-
 
 # plot ccy spread directly
 dtoas[,.(oas_ccy=mean(value)),by=.(date,ccy)][,.(oas_euus=(.SD[ccy=='eur',oas_ccy]-.SD[ccy=='usd',oas_ccy])),by=.(date)] %>% 
@@ -185,6 +184,7 @@ dtoas[,,by=.(date,upcusip)]
 dtl2[field=='OAS_SPREAD_BID',.(mean(value)),by=.(date,ccy)] %>% ggplot(.,aes(x=date,y=V1,colour=ccy))+geom_line()
 # demeaned oas spread for each bond; demeaning issuer*time specific means
 dt_oas_upmean %>% View
+
 
 
 
