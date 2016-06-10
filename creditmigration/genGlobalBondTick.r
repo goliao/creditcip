@@ -169,7 +169,7 @@ load(file='pfi.rdata')
 df_sdc0<-read.dta13('sdc96_clean2.dta') 
 dt_sdc0<- data.table(df_sdc0) 
 setkey(dt_sdc0,isin)
-dt_sdc0<-dt_sdc0[isin!='-',.(i,tic,isin,cu,upcusip,d,nat,amt,descr,ccy,rating, nrating,mat2,ytofm,master_deal_type,issue_type_desc,mdealtype,secur,tf_mid_desc)][order(isin,-amt)]
+dt_sdc0<-dt_sdc0[isin!='-',.(i,tic,isin,cu,upcusip,d,nat,amt,descr,ccy,rating, nrating,mat2,ytofm,master_deal_type,issue_type_desc,mdealtype,secur,tf_mid_desc,sic1,sic2,upsicp,sicp)][order(isin,-amt)]
 dt_sdc0 %<>% filter(
   amt >= 50,
   ytofm >= 1,

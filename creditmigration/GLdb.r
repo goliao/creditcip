@@ -27,7 +27,14 @@ source('util.r')
 load('sdc.rdata')
 sdc[ccy=='USD',ccy:='usd']
 sdc[ccy=='EUR',ccy:='eur']
+sdc[,matdiff:=as.numeric(matdiff)]
+# insert rating for new sdc data
+sdc[is.na(nrating),nrating:=nrating_sp]
+sdc[nrating==0,nrating:=nrating_mdy]
+sdc[,nrating_sp:=NULL]
+sdc[,nrating_mdy:=NULL]
 DBwrite('BondRef',sdc)
+resave(sdc,file='gldb.RData')
 
 load('bbg_bond_prices.rdata')
 DBwrite('glsecval',dtl)

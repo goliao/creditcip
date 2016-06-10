@@ -5,17 +5,37 @@ load('gldb.RDATA')
 
 sdc %<>% semi_join(dtl,by='parsekeyable')
 
+# set induatry code
+# sdc[,.(upsic2=str_sub(upsicp,1,2),upsic1=str_sub(upsicp,1,1))][,.N,by=upsic1]
+sdc<-sdc %>% mutate(upsic1=as.numeric(str_sub(as.character(upsicp),1,1))) %>% as.data.table()
+sdc[is.na(sic1),sic1:=upsic1]
+sdc[,sicfac:=factor(sic1)]
+
+
 # MERGE RATING AND ADD MATURITY BUCKETS -----------------------------------
 setkey(dtl,parsekeyable)
 setkey(sdc,parsekeyable)
-dtl2<-dtl[sdc[,.(ccy,mat2,rating,nrating,upcusip,parsekeyable,isin)],nomatch=0]
-###
-## need to augment nrating for ones that are missing 
-# todo: augment nratings even more with bbg data; do this next
-#dtl2[is.na(rating) & is.na(nrating)]
+dtl2<-dtl[sdc[abs(matdiff)<.1,.(ccy,mat2,rating,nrating,upcusip,parsekeyable,isin,ytofm,sicfac,sic1)],nomatch=0]
+
+dtl2[,ytm:=as.numeric((mat2-date)/365)]
+
+dtl3<-dtl2[ytm>0.1][!is.na(nrating)] %>% bucketrating() %>% bucketytm()
+
+yldsprd2<-resyldsprd(dtl3,priceraw,regversion=2)
+yldsprd3<-resyldsprd(dtl3,priceraw,regversion=3) %>% rename(euus_yldsprd_3=euus_yldsprd)
+yldsprd4<-resyldsprd(dtl3,priceraw,regversion=4) %>% rename(euus_yldsprd_4=euus_yldsprd)
+yldsprd5<-resyldsprd(dtl3,priceraw,regversion=5) %>% rename(euus_yldsprd_5=euus_yldsprd)
+
+yldsprd4[yldsprd5] %>% ggplotw()
+yldsprd2[yldsprd3][yldsprd4]  %>% ggplotw()
 
 
-# residualizing  ----------------------------------------------------------
+# finance vs nonfiannce
+ys_nf<-dtl3[sic1!=6] %>% resyldsprd(.,priceraw,regversion=4) %>% rename(euus_yldsprd_nf=euus_yldsprd)
+ys_f<-dtl3[sic1==6] %>% resyldsprd(.,priceraw,regversion=4) %>% rename(euus_yldsprd_f=euus_yldsprd)
+ys_nf[ys_f] %>% ggplotw()
+
+# Old residualizing  ----------------------------------------------------------
 ccyfe<-getccyFE(dtl2,fieldstr='OAS_SPREAD_BID')
 ccyfe_yield<-getccyFE(dtl2,fieldstr='YLD_YTM_MID')
 ccyfe_as<-getccyFE(dtl2,fieldstr='ASSET_SWAP_SPD_MID')
