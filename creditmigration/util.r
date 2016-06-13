@@ -517,18 +517,25 @@ print(str_c('FE on field: ',fieldstr))
   regcoef
 }
 
-resyldsprdv2<-function(dtlin,pricein,regversion=2){
+resyldsprdv2<-function(dtlin,pricein,regversion=2,globaluponly=1){
   # Residualize yld sprd ----------------------------------------------------
   #create yield spread for aggregate 
 
   dtlin[,ytm:=as.numeric((mat2-date)/365)]
   #winsorize by value a little
-  dtl<-dtlin[field=='YLD_YTM_MID',pctl:=percent_rank(value),by=.(date,ccy)][pctl>=.01 & pctl<=.99 & field=='YLD_YTM_MID']
+  dtl<-dtlin[field=='YLD_YTM_MID'][,pctl:=percent_rank(value),by=.(date,ccy)][pctl>=.01 & pctl<=.99]
+  
+  # get rid of dates with only one ccy
+  setkey(dtl,date)
+  dtl<-dtl[dtl[,.N,by=c('date','ccy')][,.N,date][N!=1,.(date)]]
+
+  if (globaluponly){
   # get rid of up where up doesn't have bonds in both ccys for each date
-  tokeep<-dtl[,.N,by=c('date','upcusip','ccy')][,.N,by=c('date','upcusip')][N!=1][,.(date,upcusip)]
-  setkey(tokeep,date,upcusip)
-  setkey(dtl,date,upcusip)
-  dtl<-dtl[tokeep]
+    tokeep<-dtl[,.N,by=c('date','upcusip','ccy')][,.N,by=c('date','upcusip')][N!=1][,.(date,upcusip)]
+    setkey(tokeep,date,upcusip)
+    setkey(dtl,date,upcusip)
+    dtl<-dtl[tokeep]
+  }
   
   # next step, try to generate yield sprd at the individual bond level instead of taking avg 
   # bring in the bbg prices
@@ -552,8 +559,8 @@ resyldsprdv2<-function(dtlin,pricein,regversion=2){
   setkey(dtl,date,upcusip)
 
   dtl<-dtl[value!='NA'] #get rid of ones that can't be interpolated for one reason or another
-  ccyfe_yieldsprd<-getccyFE2(dtl,fieldstr='yldsprd',version=regversion)
-  ccyfe_yieldsprd
+  lsout<-getccyFE2(dtl,fieldstr='yldsprd',version=regversion)
+  lsout
 }
 getccyFE2<-function(dfin,fieldstr='OAS_SPREAD_BID',version=2,winsor=.01){
 #  dfin<-dtl2
@@ -572,7 +579,12 @@ print(str_c('FE on field: ',fieldstr))
 
 # set alphabetical order such that dummies are on foreign ccys
   df2[ccy=='usd',ccy:='1usd']
-  
+        
+# introduce liquidity measure based on bond age
+    df2[,liq:=ytm/ytofm]
+    df2<-df2[liq %between% c(0,1.1)]
+    df2[liq<.5,liq_bucket:=0]
+    df2[liq>=.5,liq_bucket:=1]
   regfun<-function(dt,regversion=1){
       if (regversion==1){
         # regversion 1:: run regression directly on data set without taking out bonds that do not have matching pairs
@@ -586,16 +598,18 @@ print(str_c('FE on field: ',fieldstr))
       } else if (regversion==5){
        # regversion 5: regversion 3+ 3 rating buckets as dummies
         reg<-lm(value~ccy+upcusip+ytm_bucket+rating_bucket+sicfac,data=dt)
+      } else if (regversion==6){
+       # regversion 6, add illiqudity index
+        reg<-lm(value~ccy+upcusip+ytm_bucket+rating_bucket+sicfac+liq_bucket,data=dt)
       }
       data.table(ccyeur=reg$coefficients['ccyeur'],ccygbp=reg$coefficients['ccygbp'])
   }
 
   regcoef<-df2[,regfun(.SD,version),by='date']
-  require(beepr)
+  setkey(regcoef,date)
+  lsout<-list(regcoef,df2)
   beep()
-  #save(regcoef,regcoef2,file='temp_ccyferegcoef.rdata')
-  #load(file='temp_ccyferegcoef.rdata')
-  regcoef
+  lsout
 }
 
 bucketrating<-function(dtlin){

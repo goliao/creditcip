@@ -101,6 +101,30 @@ bondref2[!is.na(parsekeyable),.N]
 
 
 
+# Additional downloads
+
+# a function to access what to download
+
+tic<-priceraw %>% ds('eubs')
+prl<-melt(priceraw[!is.na(date)],id.vars='date',variable.name='ticker')[!is.na(value)]
+ticdt<-prl[,.(firstdt=min(date),lastdt=max(date)),by=ticker]
+
+
+ticdt[ticker %like% 'eubs']
+ticdt[ticker %like% 'bpbs']
+ticdt[ticker %like% 'jybs']
+ticdt[ticker %like% 'adbs']
+ticdt[ticker %like% 'eusa']
+ticdt[ticker %like% 'bpsw']
+ticdt[ticker %like% 'ussw']
+ticdt[ticker %like% 'jysw']
+ticdt[ticker %like% 'adsw']
+
+ticdt[,.N,lastdt]
+
+
+priceraw %>% ds('eubs')
+
 # todo --------------------------------------------------------------------
 
 

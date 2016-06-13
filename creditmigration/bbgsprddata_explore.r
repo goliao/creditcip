@@ -19,23 +19,49 @@ dtl2<-dtl[bondref[abs(matdiff)<.1,.(ccy,mat2,rating,nrating,upcusip,parsekeyable
 dtl2[,ytm:=as.numeric((mat2-date)/365)]
 dtl3<-dtl2[ytm>0.1][!is.na(nrating)] %>% bucketrating() %>% bucketytm()
 
-yldsprd2<-resyldsprdv2(dtl3,priceraw,regversion=1)
+#dtl3[date=='2015-11-30',.N,by=c('rating_bucket','ccy')][order(ccy,rating_bucket)]
+
+yldsprd2<-resyldsprdv2(dtl3,priceraw,regversion=5)[[1]]
+yldsprd3<-resyldsprdv2(dtl3,priceraw,regversion=3)[[1]]
+yldsprd4<-resyldsprdv2(dtl3,priceraw,regversion=4)
+regres<-resyldsprdv2(dtl3,priceraw,regversion=5)
+
+regdt<-regres[[2]]
+regdt[,.N,by=.(date,ccy)] %>% ggplot(aes(x=date,y=N,colour=ccy))+geom_line()
+dtl2[,.N,by=.(date,ccy)] %>% ggplot(aes(x=date,y=N,colour=ccy))+geom_line()
+
+regdt[,.N,by=.(date,ccy)][ccy=='1usd'] %>% View
+regres[[1]] %>% ggplotw()
+newadditions<-regdt[ccy=='1usd' & date=='2014-07-31'] %>% anti_join(regdt[ccy=='1usd' & date=='2014-06-30'],by='isin')
+bondref %>% semi_join(newadditions,by='isin') # why are prices here missing?
+
+
 yldsprd2 %>% ggplotw()
-priceraw[,.(date,eubs5,bpbs5)][yldsprd2] %>% ggplotw()
-
-
-yldsprd3<-resyldsprd(dtl3,priceraw,regversion=3) %>% rename(euus_yldsprd_3=euus_yldsprd)
-yldsprd4<-resyldsprd(dtl3,priceraw,regversion=4) %>% rename(euus_yldsprd_4=euus_yldsprd)
-yldsprd5<-resyldsprd(dtl3,priceraw,regversion=5) %>% rename(euus_yldsprd_5=euus_yldsprd)
-
+priceraw[,.(date,eubs5,eubs10,bpbs5,bpbs10)][yldsprd2][,.(date,eubs5,ccyeur)] %>% ggplotw()
+priceraw[,.(date,eubs5,bpbs5,bpbs10)][yldsprd2][,.(date,bpbs10,ccygbp)] %>% ggplotw()
 yldsprd4[yldsprd5] %>% ggplotw()
-yldsprd2[yldsprd3][yldsprd4]  %>% ggplotw()
+yldsprd5[yldsprd3][yldsprd4]  %>% ggplotw()
 
 
 # finance vs nonfiannce
-ys_nf<-dtl3[sic1!=6] %>% resyldsprd(.,priceraw,regversion=4) %>% rename(euus_yldsprd_nf=euus_yldsprd)
-ys_f<-dtl3[sic1==6] %>% resyldsprd(.,priceraw,regversion=4) %>% rename(euus_yldsprd_f=euus_yldsprd)
-ys_nf[ys_f] %>% ggplotw()
+ys_nf<-dtl3[sic1!=6] %>% resyldsprdv2(.,priceraw,regversion=4)
+ys_f<-dtl3[sic1==6] %>% resyldsprdv2(.,priceraw,regversion=4) 
+# for gbp
+priceraw[,.(date,bpbs5)][ys_nf] %>% ggplotw()
+priceraw[,.(date,bpbs5)][ys_f] %>% ggplotw()
+
+#illiquid vs liquid split
+# define illiquid as bonds that passed its prime, ytm/(ytofm)<.5
+ys_liq<-(dtl3[liq>.5] %>% resyldsprdv2(.,priceraw,regversion=5))[[1]]
+ys_iliq<-(dtl3[liq<=.5] %>% resyldsprdv2(.,priceraw,regversion=5))[[1]]
+setnames(ys_iliq,'ccyeur','ccyeur_iliq')
+ys_liq[ys_iliq][,.(date,ccyeur,ccyeur_iliq)] %>% ggplotw()
+# including it as a factor doesn't chg much however
+ys<-resyldsprdv2(dtl3,priceraw,regversion=1)[[1]]
+ysliq<-resyldsprdv2(dtl3,priceraw,regversion=6)[[1]]
+ys[ysliq] %>% ggplotw()
+
+priceraw %>% ds('eubs')
 
 # Old residualizing  ----------------------------------------------------------
 ccyfe<-getccyFE(dtl2,fieldstr='OAS_SPREAD_BID')
