@@ -3,25 +3,27 @@ rm(list=ls(all=TRUE))
 source('util.r')
 load('gldb.RDATA')
 
-sdc %<>% semi_join(dtl,by='parsekeyable')
+bondref<-bondref[!is.na(parsekeyable)] %>% issfilter(.)
+bondref %<>% semi_join(dtl,by='parsekeyable')
 
 # set induatry code
-# sdc[,.(upsic2=str_sub(upsicp,1,2),upsic1=str_sub(upsicp,1,1))][,.N,by=upsic1]
-sdc<-sdc %>% mutate(upsic1=as.numeric(str_sub(as.character(upsicp),1,1))) %>% as.data.table()
-sdc[is.na(sic1),sic1:=upsic1]
-sdc[,sicfac:=factor(sic1)]
-
+# bondref[,.(upsic2=str_sub(upsicp,1,2),upsic1=str_sub(upsicp,1,1))][,.N,by=upsic1]
+bondref<-bondref %>% mutate(upsic1=as.numeric(str_sub(as.character(upsicp),1,1))) %>% as.data.table()
+bondref[is.na(sic1),sic1:=upsic1]
+bondref[,sicfac:=factor(sic1)]
 
 # MERGE RATING AND ADD MATURITY BUCKETS -----------------------------------
 setkey(dtl,parsekeyable)
-setkey(sdc,parsekeyable)
-dtl2<-dtl[sdc[abs(matdiff)<.1,.(ccy,mat2,rating,nrating,upcusip,parsekeyable,isin,ytofm,sicfac,sic1)],nomatch=0]
-
+setkey(bondref,parsekeyable)
+dtl2<-dtl[bondref[abs(matdiff)<.1,.(ccy,mat2,rating,nrating,upcusip,parsekeyable,isin,ytofm,sicfac,sic1)],nomatch=0]
 dtl2[,ytm:=as.numeric((mat2-date)/365)]
-
 dtl3<-dtl2[ytm>0.1][!is.na(nrating)] %>% bucketrating() %>% bucketytm()
 
-yldsprd2<-resyldsprd(dtl3,priceraw,regversion=2)
+yldsprd2<-resyldsprdv2(dtl3,priceraw,regversion=1)
+yldsprd2 %>% ggplotw()
+priceraw[,.(date,eubs5,bpbs5)][yldsprd2] %>% ggplotw()
+
+
 yldsprd3<-resyldsprd(dtl3,priceraw,regversion=3) %>% rename(euus_yldsprd_3=euus_yldsprd)
 yldsprd4<-resyldsprd(dtl3,priceraw,regversion=4) %>% rename(euus_yldsprd_4=euus_yldsprd)
 yldsprd5<-resyldsprd(dtl3,priceraw,regversion=5) %>% rename(euus_yldsprd_5=euus_yldsprd)

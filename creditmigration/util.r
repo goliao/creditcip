@@ -353,16 +353,16 @@ assessDataCoverage<-function(bondinfo,bondprices,field='YLD_YTM_MID',lastdate='l
   # df_obs2<-sqldf('select A.*, B.expmonthlyobs from df_obs as A left join df_sdc2 as B on A.isin=B.isin')
   # df_obs2 %>% mutate(obsdiff=expmonthlyobs-ct) %>% group_by(obsdiff) %>% summarise(ctt=length(obsdiff)) %>% View 
 }
-showdups<-function(dfin,key='figi'){
-  # duplicatedkey<-isin2figi[[key]][duplicated(isin2figi[[key]])]
-  # multiple
-  dupindex<-duplicated(dfin[,key])
-  duplicatedkey<-dfin[dupindex,key]
-  dfin %>% semi_join(duplicatedkey,by=key)
-}
+# showdups<-function(dfin,key='figi'){
+#   # duplicatedkey<-isin2figi[[key]][duplicated(isin2figi[[key]])]
+#   # multiple
+#   dupindex<-duplicated(dfin[,key])
+#   duplicatedkey<-dfin[dupindex,key]
+#   dfin %>% semi_join(duplicatedkey,by=key)
+# }
 
 
-showdups.dt<-function(dfin,vars=key(dfin)){
+showdups<-function(dfin,vars=key(dfin)){
   print('showing duplicates in:')
   print(vars)
   oldkey<-key(dfin)
@@ -465,7 +465,6 @@ resyldsprd<-function(dtlin,pricein,regversion=2){
   setnames(ccyfe_yieldsprd,'euus','euus_yldsprd')
   ccyfe_yieldsprd
 }
-
 getccyFE<-function(dfin,fieldstr='OAS_SPREAD_BID',version=2,winsor=.01){
 #  dfin<-dtl2
 print(str_c('FE on field: ',fieldstr))
@@ -518,6 +517,87 @@ print(str_c('FE on field: ',fieldstr))
   regcoef
 }
 
+resyldsprdv2<-function(dtlin,pricein,regversion=2){
+  # Residualize yld sprd ----------------------------------------------------
+  #create yield spread for aggregate 
+
+  dtlin[,ytm:=as.numeric((mat2-date)/365)]
+  #winsorize by value a little
+  dtl<-dtlin[field=='YLD_YTM_MID',pctl:=percent_rank(value),by=.(date,ccy)][pctl>=.01 & pctl<=.99 & field=='YLD_YTM_MID']
+  # get rid of up where up doesn't have bonds in both ccys for each date
+  tokeep<-dtl[,.N,by=c('date','upcusip','ccy')][,.N,by=c('date','upcusip')][N!=1][,.(date,upcusip)]
+  setkey(tokeep,date,upcusip)
+  setkey(dtl,date,upcusip)
+  dtl<-dtl[tokeep]
+  
+  # next step, try to generate yield sprd at the individual bond level instead of taking avg 
+  # bring in the bbg prices
+  setkey(pricein,date)
+  ussw_colnames<-pricein %>% ds('ussw') %>% str_extract(regex('ussw.*')) %>% sort %>% unique
+  eusa_colnames<-pricein %>% ds('eusa') %>% str_extract(regex('eusa.*')) %>% sort %>% unique
+  bpsw_colnames<-pricein %>% ds('bpsw') %>% str_extract(regex('bpsw.*')) %>% sort %>% unique
+  swapus<-pricein[date>='1996-06-28',c('date',ussw_colnames),with=FALSE]
+  swapeu<-pricein[date>='1999-01-29',c('date',eusa_colnames),with=FALSE]
+  swapgb<-pricein[date>='1996-06-28',c('date',bpsw_colnames),with=FALSE]
+  swapprices<-swapus %>% left_join(swapeu,by='date') %>% left_join(swapgb,by='date')
+  
+  swappricesl<-swapprices %>% melt(id.vars='date',variable.name='field')
+  swappricesl[,ccy:=stringr::str_sub(field,1,2)][ccy=='eu',ccy:='eur'][ccy=='us',ccy:='usd'][ccy=='bp',ccy:='gbp'][,tenor:=as.numeric(str_extract(field,regex('\\d+')))]
+  swappricesl[field=='bpswsc',tenor:=.25]
+  setkey(swappricesl,date,ccy,tenor,field)
+  setkey(dtl,date,ccy)
+  
+  dtl[!is.na(ytm),swapyld:=intrwrap(.SD,swappricesl,.BY),by=.(date,ccy)][swapyld==0,swapyld:=NA]
+  dtl[,value:=value*100-swapyld][,field:='yldsprd']
+  setkey(dtl,date,upcusip)
+
+  dtl<-dtl[value!='NA'] #get rid of ones that can't be interpolated for one reason or another
+  ccyfe_yieldsprd<-getccyFE2(dtl,fieldstr='yldsprd',version=regversion)
+  ccyfe_yieldsprd
+}
+getccyFE2<-function(dfin,fieldstr='OAS_SPREAD_BID',version=2,winsor=.01){
+#  dfin<-dtl2
+print(str_c('FE on field: ',fieldstr))
+  # df2<-dfin[field==fieldstr,.(date,ccy,value,upcusip,ytm,rating_bucket)]
+  df2<-dfin[field==fieldstr]
+  setkey(df2,date,upcusip,ccy)
+
+#winsorize each date
+  if (winsor!=0){
+    df2[,pctl:=percent_rank(value),by=date]
+    df2<-df2[pctl>=winsor & pctl<=(1-winsor)]
+  }
+    #get rid of days with only single observation
+  df2<-df2[date %ni% df2[,.N,by=c('date','ccy')][N==1,date]]
+
+# set alphabetical order such that dummies are on foreign ccys
+  df2[ccy=='usd',ccy:='1usd']
+  
+  regfun<-function(dt,regversion=1){
+      if (regversion==1){
+        # regversion 1:: run regression directly on data set without taking out bonds that do not have matching pairs
+        reg<-lm(value~ccy+upcusip,data=dt)
+      } else if (regversion==3){
+        # regversion 3: like regversion 2 but also adds maturity considerations in regression
+        reg<-lm(value~ccy+upcusip+ytm_bucket,data=dt)
+      } else if (regversion==4){
+        # regversion 4: regversion 3+ 3 rating buckets as dummies
+        reg<-lm(value~ccy+upcusip+ytm_bucket+rating_bucket,data=dt)
+      } else if (regversion==5){
+       # regversion 5: regversion 3+ 3 rating buckets as dummies
+        reg<-lm(value~ccy+upcusip+ytm_bucket+rating_bucket+sicfac,data=dt)
+      }
+      data.table(ccyeur=reg$coefficients['ccyeur'],ccygbp=reg$coefficients['ccygbp'])
+  }
+
+  regcoef<-df2[,regfun(.SD,version),by='date']
+  require(beepr)
+  beep()
+  #save(regcoef,regcoef2,file='temp_ccyferegcoef.rdata')
+  #load(file='temp_ccyferegcoef.rdata')
+  regcoef
+}
+
 bucketrating<-function(dtlin){
   # creates new column called rating bucket as factor with 4 levels 
   dtlout<-dtlin
@@ -537,6 +617,26 @@ bucketytm<-function(dtlin){
   dtlout[ytm >10,ytm_bucket:=4]
   dtlout[,ytm_bucket:=factor(ytm_bucket)]
   dtlout
+}
+
+
+issfilter<-function(dtin){
+dtout<-dtin
+dtout %<>% filter(
+   amt >= 50,
+   ytofm >= 1,
+   ytofm <= 99999,
+   mdealtype %ni% c("P", "ANPX", "M", "EP", "CEP", "TM", "PP"),
+   secur %ni% c(
+     "Cum Red Pfd Shs",
+     "Non-Cum Pref Sh" ,
+     "Preferred Shs" ,
+     "Pfd Stk,Com Stk"
+   ),
+   !grepl('Government Sponsored Enterprises',tf_mid_desc),!grepl('Flt', secur),!grepl('Zero Cpn', secur),!grepl('Float', secur),!grepl('Fl', descr),
+   !grepl('Zero Cpn', descr),!grepl('Mortgage-backed', issue_type_desc),!grepl('Asset-backed', issue_type_desc),!grepl('Federal Credit Agency', issue_type_desc),!grepl('Loan', descr)
+ ) 
+dtout %>% as.data.table()
 }
 # dreg1<-df2[date=='2004-01-30']
 # dreg2<-df2[tokeep][date=='2004-01-30']

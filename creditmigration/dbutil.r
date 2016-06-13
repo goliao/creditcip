@@ -1,33 +1,57 @@
 #dbutil
 
 
-require('RMySQL')
+# require('RMySQL')
+require('RSQLite')
+
+# DBimport<-function(name='sdc'){
+# con <- dbConnect(MySQL(), dbname="gldb", host="localhost", user='root')
+# # dtout<-dbGetQuery(con,'select * from sdc') %>% as.data.table()
+# dtout<-dbReadTable(con,name) %>% as.data.table()
+# RMySQL::dbDisconnect(con)
+# dtout
+# }
+
+# DBwrite<-function(name='',dfin,bool_overwrite=FALSE){
+# con <- dbConnect(MySQL(), dbname="gldb", host="localhost", user='root')
+# # dtout<-dbGetQuery(con,'select * from sdc') %>% as.data.table()
+# dtout<-dbWriteTable(con,name,dfin,overwrite=bool_overwrite) %>% as.data.table()
+# RMySQL::dbDisconnect(con)
+# dtout
+# }
 
 
-DBimport<-function(name='sdc'){
-con <- dbConnect(MySQL(), dbname="gldb", host="localhost", user='root')
+# DBsql<-function(sql=''){
+# con <- dbConnect(MySQL(), dbname="gldb", host="localhost", user='root')
+# dtout<-dbGetQuery(con,sql) %>% as.data.table()
+# RMySQL::dbDisconnect(con)
+# dtout
+# }
+
+
+gdbread<-function(name='sdc'){
+con <- dbConnect(drv=SQLite(), dbname="gldb.sqlite3")
 # dtout<-dbGetQuery(con,'select * from sdc') %>% as.data.table()
 dtout<-dbReadTable(con,name) %>% as.data.table()
-RMySQL::dbDisconnect(con)
+dbDisconnect(con)
 dtout
 }
 
-DBwrite<-function(name='',dfin,bool_overwrite=FALSE){
-con <- dbConnect(MySQL(), dbname="gldb", host="localhost", user='root')
+gdbwrite<-function(name='',dfin,bool_overwrite=FALSE){
+con <- dbConnect(SQLite(), dbname="gldb")
 # dtout<-dbGetQuery(con,'select * from sdc') %>% as.data.table()
 dtout<-dbWriteTable(con,name,dfin,overwrite=bool_overwrite) %>% as.data.table()
-RMySQL::dbDisconnect(con)
+dbDisconnect(con)
 dtout
 }
 
 
-DBsql<-function(sql=''){
-con <- dbConnect(MySQL(), dbname="gldb", host="localhost", user='root')
+gdbsql<-function(sql=''){
+con <- dbConnect(SQLite(), dbname="gldb")
 dtout<-dbGetQuery(con,sql) %>% as.data.table()
-RMySQL::dbDisconnect(con)
+dbDisconnect(con)
 dtout
 }
-
 
 #dbListTables(con)
 #vignette('databases',package='dplyr')
@@ -45,3 +69,5 @@ resave <- function(..., list = character(), file) {
    for (var in var.names) assign(var, get(var, envir = parent.frame()))
    save(list = unique(c(previous, var.names)), file = file)
 }
+
+
