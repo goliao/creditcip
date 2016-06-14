@@ -1,8 +1,8 @@
-library(foreign)
-library(stringr)
-library(xts)
-library(tidyr)
-library(dplyr)
+require(foreign)
+require(stringr)
+require(xts)
+require(tidyr)
+require(dplyr)
 require('readstata13')
 require('ggfortify')
 require('doBy')
@@ -16,7 +16,7 @@ require(magrittr)
 require(data.table)
 require(beepr)
 '%ni%' <- Negate('%in%')
-source('dbutil.r')
+#source('dbutil.r')
 df2clip<-function(x)(write.table(x, "clipboard.csv", sep=","))
 # df2clip<-function(x)(write.table(x, "clipboard", sep="\t"))
 
@@ -524,7 +524,6 @@ resyldsprdv2<-function(dtlin,pricein,regversion=2,globaluponly=1){
   dtlin[,ytm:=as.numeric((mat2-date)/365)]
   #winsorize by value a little
   dtl<-dtlin[field=='YLD_YTM_MID'][,pctl:=percent_rank(value),by=.(date,ccy)][pctl>=.01 & pctl<=.99]
-  
   # get rid of dates with only one ccy
   setkey(dtl,date)
   dtl<-dtl[dtl[,.N,by=c('date','ccy')][,.N,date][N!=1,.(date)]]
@@ -652,45 +651,88 @@ dtout %<>% filter(
  ) 
 dtout %>% as.data.table()
 }
-# dreg1<-df2[date=='2004-01-30']
-# dreg2<-df2[tokeep][date=='2004-01-30']
-# reg1<-lm(value~ccy+upcusip,data=dreg1)
-# reg2<-lm(value~ccy+upcusip,data=dreg2)
-
-# summary(reg1)
-# summary(reg2)
-
-# # compare v1 & v2
-# setnames(regcoef2,'V1','V2')
-# tmp<-merge(regcoef,regcoef2,by='date') %>% melt(id.vars='date')
-# setkey(tmp,date,variable)
-# tmp
-# tmp %>% ggplot(aes(x=date,y=value,colour=variable))+geom_line()
-
-# # compare v1 and demeaning method
-# temp_comp<-merge(regcoef,dtoas_ccy,by='date')
-# temp_comp[,euussprd:=-V1]
-# temp_comp %>% melt(id.vars='date', measure.vars=c('euussprd','oas_euus')) %>%  ggplot(aes(x=date,y=value,colour=variable))+geom_line()
 
 
-# # Let's try cross sectional reg for one single date
-# dailyregdata<-df2[date=='2004-01-30']
-# tdg<-dailyregdata[upcusip %in% (dailyregdata[,.N,by=c('upcusip','ccy')][,.N,by='upcusip'][N!=1,upcusip])]
-# lm(value~ccy+upcusip,dailyregdata)$coefficients['ccyusd']
-# lm(value~ccy+upcusip,tdg)$coefficients['ccyusd']
+downloadbbg<-function(tickers,filestr=str_c('bbg_',today(),'.RData'),startdt=ymd('1996-01-01'),periodstr='MONTHLY',fieldstr='PX_LAST',splitN=1){
+  require(Rblpapi)
+  if (is.data.table(tickers)) {
+    tickers<-tickers[,.(parsekeyable)]
+  } else{
+    tickers<-data.table('parsekeyable'=tickers)
+  }
+  tickers$batchfactor<-sample(1:splitN,size=nrow(tickers),replace=T)
+  tickerslist<-split(as.character(tickers$parsekeyable),tickers$batchfactor)
+  opt <- c("periodicitySelection"=periodstr)
+  con <- Rblpapi::blpConnect()     # automatic if option("blpAutoConnect") is TRUE
+  prices<-list()
+  for (i in 1:splitN) {
+    print(i)
+    prices[[i]]<-bdh(tickerslist[[i]], fieldstr, start.date=startdt, options=opt)  
+    save(prices,file=str_c('temp_',filestr))
+  }
+  blpDisconnect(con)
+  save(prices,file=filestr)
+  #loadBBGdownload2df(filestr)
+}
 
-# #small sample test
-# testsamp<-tdg[5:9,.(value,ccy,upcusip)]
-# setkey(testsamp,upcusip,ccy)
-# lm(value~ccy+upcusip,testsamp)$coefficients['ccyusd']
-# lm(value~ccy+upcusip,testsamp)
-# #lm(value~ccy+upcusip+ccy*upcusip,testsamp)
-# testres<-testsamp[,upmean:=mean(value),by=upcusip][,demeaned:=value-upmean][,mean(demeaned),by='ccy']
-# -(testres[ccy=='eur',V1]-testres[ccy=='usd',V1])
+update.dt<-function(dtA,dtB,keyfield='auto',updatefield='auto',insertnewrow=TRUE,override=FALSE){
+  # this function allows easy addition and update of columns; adding new rows require insertnewrow=TRUE
+  # update will override existing values currently; ideally want update on NA, do nothing on records where update is the same as original, and split out differentiated records where original value!=update value
+  
+  dtA<-copy(dtA)
+  dtB<-copy(dtB)
+  keyoriginal<-key(dtA)
+  if (keyfield=='auto') keyfield<-keyoriginal
+  print(str_c('Keyfield: ',paste(keyfield,collapse=' ')))
+  setkeyv(dtA,keyfield)
+  setkeyv(dtB,keyfield)
+  if (updatefield=='auto') {
+    fieldA<-ds(dtA)[ds(dtA) %ni% keyfield]
+    fieldB<-ds(dtB)[ds(dtB) %ni% keyfield]
+    updatefield<-fieldB[fieldB %in% fieldA]
+    newfield<-fieldB[fieldB %ni% fieldA]
+    lhs<-c(updatefield,newfield)
+    rhs<-c(str_c('i.',updatefield),newfield)
+    rhs<-rhs[rhs %ni% 'i.']
+  }else{
+    lhs<-updatefield
+    rhs<-str_c('i.',updatefield)
+  }
+  if (length(lhs)!=length(rhs)){ print('len(lhs)!=len(rhs)');browser()}
+  for (j in 1:length(lhs)){
+    print(str_c('inserting/updating: lhs: ',lhs[j],' rhs: ',rhs[j]))
+    #show warning message first
+    problemdt<-dtA[dtB,nomatch=0][eval(exparse(lhs[j]))!=eval(exparse(rhs[j]))]
+    if (nrow(problemdt)!=0){
+      warning('matched but existing value conflicts with new value in field:',lhs[j])
+      if (override) warning('overriding:') else warning('skiping:')
+      warning('\n',print_and_capture(problemdt[,.(eval(exparse(keyfield)),eval(exparse(lhs[j])),eval(exparse(rhs[j])))]))
+    }
 
-# reg1<-lm(value~upcusip,testsamp)
-# testsamp$res<-reg1$residuals
-# lm(res~ccy,testsamp)
-
-# lm(demeaned~ccy,testsamp)
-# testsamp %>% write.csv(file=('temp.csv'))
+    if (override){
+      # override when there are existing value
+      #print(str_c('updated/inserted (inc. override) on ',dtA[dtB,.N,nomatch=0]))
+      dtA[dtB,(lhs[j]):=eval(exparse(rhs[j])),nomatch=0]
+    } else{
+      # update/insert if na /override 
+      #print(str_c('updated/inserted (no override) on ',dtA[dtB,nomatch=0][is.na(eval(exparse(lhs[j]))),.N]))
+      dtA[dtB,(lhs[j]):=ifelse(is.na(eval(exparse(lhs[j]))),eval(exparse(rhs[j])),eval(exparse(lhs[j]))),nomatch=0]
+    }
+    
+    
+  }
+  if (insertnewrow){
+    #insert row
+    rowinsert<-dtB[!dtA]
+    # dtA<-rbind(dtA,rowinsert,fill=TRUE)
+    dtA<-bind_rows(dtA,rowinsert) %>% as.data.table()
+    print(str_c('Rows inserted: ',rowinsert[,.N]))
+  }
+  setkeyv(dtA,keyoriginal)
+  dtA
+}
+exparse<-function(strin){parse(text=strin)}
+print_and_capture <- function(x)
+{
+  paste(capture.output(print(x)), collapse = "\n")
+}

@@ -18,23 +18,24 @@ setkey(bondref,parsekeyable)
 dtl2<-dtl[bondref[abs(matdiff)<.1,.(ccy,mat2,rating,nrating,upcusip,parsekeyable,isin,ytofm,sicfac,sic1)],nomatch=0]
 dtl2[,ytm:=as.numeric((mat2-date)/365)]
 dtl3<-dtl2[ytm>0.1][!is.na(nrating)] %>% bucketrating() %>% bucketytm()
+dtl3<-dtl3[field=='YLD_YTM_MID']
 
 #dtl3[date=='2015-11-30',.N,by=c('rating_bucket','ccy')][order(ccy,rating_bucket)]
 
-yldsprd2<-resyldsprdv2(dtl3,priceraw,regversion=5)[[1]]
-yldsprd3<-resyldsprdv2(dtl3,priceraw,regversion=3)[[1]]
-yldsprd4<-resyldsprdv2(dtl3,priceraw,regversion=4)
+# yldsprd2<-resyldsprdv2(dtl3,priceraw,regversion=5)[[1]]
+# yldsprd3<-resyldsprdv2(dtl3,priceraw,regversion=3)[[1]]
+# yldsprd4<-resyldsprdv2(dtl3,priceraw,regversion=4)
 regres<-resyldsprdv2(dtl3,priceraw,regversion=5)
 
 regdt<-regres[[2]]
 regdt[,.N,by=.(date,ccy)] %>% ggplot(aes(x=date,y=N,colour=ccy))+geom_line()
 dtl2[,.N,by=.(date,ccy)] %>% ggplot(aes(x=date,y=N,colour=ccy))+geom_line()
 
-regdt[,.N,by=.(date,ccy)][ccy=='1usd'] %>% View
-regres[[1]] %>% ggplotw()
 newadditions<-regdt[ccy=='1usd' & date=='2014-07-31'] %>% anti_join(regdt[ccy=='1usd' & date=='2014-06-30'],by='isin')
-bondref %>% semi_join(newadditions,by='isin') # why are prices here missing?
+(bondref %>% semi_join(newadditions,by='isin'))[,.(parsekeyable,i,descr)] # why are prices here missing?
 
+
+bondref %>% semi_join(dtl3[ccy=='usd' & date=='2014-07-31'] %>% anti_join(dtl3[ccy=='usd' & date=='2014-06-30'],by='isin'),by='isin') # why are prices here missing?
 
 yldsprd2 %>% ggplotw()
 priceraw[,.(date,eubs5,eubs10,bpbs5,bpbs10)][yldsprd2][,.(date,eubs5,ccyeur)] %>% ggplotw()

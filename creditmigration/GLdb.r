@@ -102,43 +102,96 @@ bondref2[!is.na(parsekeyable),.N]
 
 
 # Additional downloads
-
-# a function to access what to download
-
-tic<-priceraw %>% ds('eubs')
-prl<-melt(priceraw[!is.na(date)],id.vars='date',variable.name='ticker')[!is.na(value)]
-ticdt<-prl[,.(firstdt=min(date),lastdt=max(date)),by=ticker]
-
-
-ticdt[ticker %like% 'eubs']
-ticdt[ticker %like% 'bpbs']
-ticdt[ticker %like% 'jybs']
-ticdt[ticker %like% 'adbs']
-ticdt[ticker %like% 'eusa']
-ticdt[ticker %like% 'bpsw']
-ticdt[ticker %like% 'ussw']
-ticdt[ticker %like% 'jysw']
-ticdt[ticker %like% 'adsw']
-
-ticdt[,.N,lastdt]
-
-
-priceraw %>% ds('eubs')
-
-# todo --------------------------------------------------------------------
-
-
-## add these two at some point
 rm(list=ls(all=TRUE))
 source('util.r')
-load('gldb.RDATA')
-refadd<-fread('bondrefadd.csv')
-refadd2<-fread('bondrefadd2.csv')
+load('gldb.RData')
+# a function to access what to download
+prl<-melt(priceraw[!is.na(date)],id.vars='date',variable.name='ticker')[!is.na(value)]
+ticdt<-prl[,.(firstdt=min(date),lastdt=max(date)),by=ticker]
+tic2download<-rbind(ticdt[ticker %like% 'eubsv'], #3s6s basis
+ticdt[ticker %like% 'eubs'],
+ticdt[ticker %like% 'bpbs'],
+ticdt[ticker %like% 'jybs'],
+ticdt[ticker %like% 'adbs'],
+ticdt[ticker %like% 'eusa'],
+ticdt[ticker %like% 'bpsw'],
+ticdt[ticker %like% 'ussw'],
+ticdt[ticker %like% 'jysw'],
+ticdt[ticker %like% 'adsw'])
+tic2download<-tic2download[,startdt:=lastdt][,parsekeyable:=str_c(ticker, ' Curncy')][,.(parsekeyable,startdt)]
+#downloadbbg(tic2download,startdt = ymd('2016-02-25'))
+bbgadd<-loadBBGdownload2df('bbg_2016-06-13.RData')
+prl[,parsekeyable:=str_c(ticker, ' Curncy')]
+prl<-rbind(prl,bbgadd,fill=T)
+prl[,value:=as.numeric(value)]
+prl<-prl[!is.na(value)]
 
-refadd %>% anti_join(sdc,by='isin')
-refadd %>% semi_join(pifigi,by='isin')
-refadd2 %>% semi_join(pifigi,by='isin')
-refadd2 %>% anti_join(sdc,by='isin')
-refadd2 %>% semi_join(sdc,by='isin')
+#save(prl,bondref,dtl,pifigi,priceraw,sdc,file='gldb.RData')
+# add jpy bonds
+rm(list=ls(all=TRUE))
+source('util.r')
+load('gldb.RData')
+jpybond<-fread('temp_jpy_bond.csv')[isin!='#N/A Field Not Applicable']
+setkey(jpybond,isin)
+jpybondref<-bondref %>% semi_join(jpybond,by='isin')
+priceloadedupcusip<-bondref %>% semi_join(dtl,by='parsekeyable') %>% select(upcusip) %>% distinct(.)
+jpyref2<-jpybondref %>% semi_join(priceloadedupcusip,by='upcusip')
+jpytodownload<-jpybond %>% semi_join(jpyref2,by='isin')
+#downloadbbg(jpytodownload$parsekeyable,filestr='bbg_jpybonds_160613.RData',fieldstr = 'YLD_YTM_MID',startdt =ymd('2002-01-01'),splitN = 5)
+jpybondpricesadd<-loadBBGdownload2df('bbg_jpybonds_160613.RData')
+
+
+#aud bonds
+rm(list=ls(all=TRUE))
+setwd("E:/")
+source('util.r')
+load('gldb.RData')
+audbond<-fread('bbg_isin_aud_bonds.csv')
+setkey(audbond,isin)
+audbond2download<-(audbond %>% semi_join(bondref,by='isin'))[,.(parsekeyable,isin)]
+#downloadbbg(audbond2download$parsekeyable,filestr='bbg_audbonds_160613.RData',fieldstr = 'YLD_YTM_MID',startdt =ymd('2002-01-01'),splitN = 1)
+audbondpricesadd<-loadBBGdownload2df('bbg_audbonds_160613.RData')
+audbondpricesadd
+
+# actually add the bonds to database:
+rm(list=ls(all=TRUE))
+source('util.r')
+load('gldb.RData')
+#add bond ref
+jpybond<-fread('temp_jpy_bond.csv')[isin!='#N/A Field Not Applicable'][,ccy:='jpy']
+bondref<-update.dt(bondref,jpybond)
+audbond<-fread('bbg_isin_aud_bonds.csv')[isin!='#N/A Field Not Applicable'][,.(parsekeyable,isin,ccy='aud')]
+bondref<-update.dt(bondref,audbond)
+
+#add bond price
+jpybondpricesadd<-loadBBGdownload2df('bbg_jpybonds_160613.RData')
+jpybondpricesadd[,batch:=4]
+setkey(dtl,date,parsekeyable,field)
+dtl<-update.dt(dtl,jpybondpricesadd)
+audbondpricesadd<-loadBBGdownload2df('bbg_audbonds_160613.RData')
+audbondpricesadd[,batch:=4]
+dtl<-update.dt(dtl,audbondpricesadd)
+
+#save(bondref,dtl,pifigi,priceraw,prl,sdc,file='gldb.RData')
+
+## Add some more old referecing data 160614
+rm(list=ls(all=TRUE))
+source('util.r')
+load('gldb.RData')
+refadd<-fread('bondrefadd.csv')[isin!='#N/A Field Not Applicable']
+refadd2<-fread('bondrefadd2.csv')[isin!='#N/A Field Not Applicable']
+setnames(refadd,'issue_dt','d')
+refadd[,ccy:=tolower(ccy)][,d:=mdy(d)][,amt:=as.numeric(amt)]
+refadd2[,ccy:=tolower(ccy)]
+bondref<-update.dt(bondref,refadd,keyfield = 'isin')
+bondref<-update.dt(bondref,refadd2,keyfield = 'isin')
+bondref<-update.dt(bondref,pifigi,keyfield = 'isin')
+
+prl[is.na(field),field:='PX_LAST']
+prl[is.na(ticker), ticker:=str_extract(parsekeyable,regex('.*(?= Curncy)'))]
+prl[ticker %like% '_',parsekeyable:=NA]
+setkey(prl,date,ticker,parsekeyable,field)
+#save(bondref,dtl,prl,file='gldb.RData')
+
 
 
