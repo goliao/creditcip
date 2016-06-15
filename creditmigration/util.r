@@ -20,6 +20,23 @@ require(beepr)
 df2clip<-function(x)(write.table(x, "clipboard.csv", sep=","))
 # df2clip<-function(x)(write.table(x, "clipboard", sep="\t"))
 
+icollapse3<-function(dtin,ccyA="eur",natA="Eurozone"){
+  # newer version of collapsing 
+  # todo: construct and use modupccy
+  dtin<-copy(dtin)
+  dtin[,yrmo:=as.numeric(format(d,'%Y%m'))]
+  df_fUSD<-dtin[modnat==natA & ccy=='usd',.(I_fUSD=sum(amt)/1000),by=yrmo]
+  df_usF<-dtin[modnat=='United States' & ccy==ccyA,.(I_usF=sum(amt)/1000),by=yrmo]
+  df_both<-dtin[modnat %in% c(natA,'United States') & ccy %in% c(ccyA,'usd'),.(I_both=sum(amt)/1000),by=yrmo]
+  setkey(df_fUSD,yrmo)
+  setkey(df_usF,yrmo)
+  setkey(df_both,yrmo)
+  df_all<-df_both %>% merge(df_fUSD,by='yrmo',all=TRUE) %>% merge(df_usF,by='yrmo',all=TRUE)
+  df_all[is.na(I_fUSD),I_fUSD:=0][is.na(I_usF),I_usF:=0][,date:=as.Date(str_c(yrmo,"01"),format="%Y%m%d")]
+  df_all[,I_net_fus:=I_fUSD-I_usF][,i_net_fus:=I_net_fus/I_both]
+  df_all %>% expandfulldates(.) %>%  rename(I_net_euus=I_net_fus,i_net_euus=i_net_fus) %>% as.data.table()
+}
+
 icollapse2<-function(dfin,ccyA="EUR",natA="Eurozone"){
   # newer version of collapsing 
   dfin<-dfin %>% as.data.table()
@@ -399,14 +416,15 @@ openfigi.response2DT<-function(res){
 }
 
 
-intrwrap<-function(dfin,sp,bylist){
+intrwrap<-function(dfin,sp,bylist,interprule=1){
+#wrapper function for interpolation
   splocal<-sp[date==bylist$date & ccy==bylist$ccy]
   if (nrow(splocal)==0) {
     print(str_c('NAs on',bylist$date,bylist$ccy))
     #browser()
     rep(0,nrow(dfin))
   } else{
-    tryCatch(dfout<-approx(x=splocal$tenor,y=splocal$value,xout=dfin$ytm),
+    tryCatch(dfout<-approx(x=splocal$tenor,y=splocal$value,xout=dfin$ytm,rule=interprule),
              error=function(err){
                print(err)
                browser()
@@ -533,6 +551,51 @@ filterglobaluponly<-function(dtlin){
     setkey(tokeep,date,upcusip)
     setkey(dtl,date,upcusip)
     dtl[tokeep]
+}
+resyldsprdv3<-function(dtlin,pricein,regversion=2,globaluponly=1,returndt=0,approxrule=1,adjccybs=0){
+  # v3 improvement: using swap data
+  # Residualize yld sprd ----------------------------------------------------
+  #create yield spread for aggregate 
+  dtl<-copy(dtlin[field=='YLD_YTM_MID'])
+  dtl[,ytm:=as.numeric((mat2-date)/365)]
+  #winsorize by value a little
+  #[,pctl:=percent_rank(value),by=.(date,ccy)][pctl>=.01 & pctl<=.99]
+  # get rid of dates with only one ccy
+  setkey(dtl,date)
+  dtl<-dtl[dtl[,.N,by=c('date','ccy')][,.N,date][N!=1,.(date)]]
+
+  if (globaluponly){
+  # get rid of up where up doesn't have bonds in both ccys for each date
+    dtl<-filterglobaluponly(dtl)
+  }
+  
+  # next step, try to generate yield sprd at the individual bond level instead of taking avg 
+  # bring in the bbg prices
+  
+  if (adjccybs==1){
+    message('adj. for ccy basis')
+    swappricesl<-pricein[ticker %like% '^ussw' | ticker %like% '^eusz' | ticker %like% '^bpsz' | ticker %like% '^jysz' | ticker %like% '^adsz',.(date,ticker,value)] 
+  } else{ # just getting swap spread
+    swappricesl<-pricein[ticker %like% '^ussw' | ticker %like% '^eusw' | ticker %like% '^bpsw' | ticker %like% '^jysw' | ticker %like% '^adsw',.(date,ticker,value)]   
+  }
+  swappricesl<-swappricesl[ticker!='euswec' & ticker!='bpswsc'] # get rid of 3 month
+  setnames(swappricesl,'ticker','field')
+  swappricesl[,ccy:=stringr::str_sub(field,1,2)][ccy=='eu',ccy:='eur'][ccy=='us',ccy:='usd'][ccy=='bp',ccy:='gbp'][ccy=='jy',ccy:='jpy'][ccy=='ad',ccy:='aud'][,tenor:=as.numeric(str_extract(field,regex('\\d+')))]
+  #swappricesl[,.N,ticker][,.(field,tictenor=str_sub(ticker,5))] 
+  if (swappricesl[is.na(tenor),.N]!=0) warning('swappricesl has tenor not parsed')
+  setkey(swappricesl,date,ccy,tenor,field)
+  setkey(dtl,date,ccy)
+  
+  dtl[!is.na(ytm),swapyld:=intrwrap(.SD,swappricesl,.BY,interprule=approxrule),by=.(date,ccy)][swapyld==0,swapyld:=NA]
+  dtl[,value:=value*100-swapyld][,field:='yldsprd']
+  setkey(dtl,date,upcusip)
+
+  dtl<-dtl[value!='NA'] #get rid of ones that can't be interpolated for one reason or another
+  lsout<-getccyFE2(dtl,fieldstr='yldsprd',version=regversion)
+  if (returndt==1)
+    lsout
+  else
+    lsout[[1]]
 }
 resyldsprdv2<-function(dtlin,pricein,regversion=2,globaluponly=1,returndt=0){
   # Residualize yld sprd ----------------------------------------------------

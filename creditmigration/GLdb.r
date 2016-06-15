@@ -289,6 +289,35 @@ prl<-prl %>% distinct() %>% as.data.table()
 resave(prl,file='gldb.RData')
 
 
+ # download additional swap data
+# setwd('E:/')
+rm(list=ls(all=TRUE));source('util.r');load('gldb.RData')
+tickers2download<-data.table(parsekeyable=c('jysw1 Curncy','bpsw1 Curncy','adsw12 Curncy','adsw15 Curncy','adsw20 Curncy','adsw30 Curncy','eusw1 Curncy'))
+# downloadbbg(tickers2download$parsekeyable,filestr='bbg_swapadd_160615.RData',fieldstr = 'PX_LAST',startdt =ymd('1996-01-01'),splitN = 1)
+swapadd<-loadBBGdownload2df('bbg_swapadd_160615.RData')
+swapadd[,value:=value*100]
+prl<-update.dt(prl,swapadd,keyfield = c('date','parsekeyable','field'),override = T)
+resave(prl,file='gldb.RData')
+
+# setwd('E:/')
+rm(list=ls(all=TRUE));source('util.r');
+tickers2download<-data.table(parsekeyable=c('eusa1 Curncy','eusa50 Curncy','ussw50 Curncy','jysw50 Curncy','bpsw50 Curncy','adsw50 Curncy'))
+#downloadbbg(tickers2download$parsekeyable,filestr='bbg_swapadd_160615b.RData',fieldstr = 'PX_LAST',startdt =ymd('1996-01-01'),splitN = 1)
+swapadd<-loadBBGdownload2df('bbg_swapadd_160615b.RData')
+swapadd[,value:=value*100]
+load('gldb.RData')
+prl<-update.dt(prl,swapadd,keyfield = c('date','parsekeyable','field'),override = T)
+prl[is.na(ticker), ticker:=str_extract(parsekeyable,regex('.*(?= Curncy)'))]
+resave(prl,file='gldb.RData')
+
+# create adjusted swaps and spreads
+rm(list=ls(all=TRUE));source('util.r');load('gldb.RData')
+# # gen eusw=eusa-eubsv
+# # gen eusz=eusw
+# prl[ticker %like% '^eusa',.(ticker)] %>% distinct(ticker)
+# prl[ticker %like% '^eubsv',.(ticker)] %>% distinct(ticker)
+
+
 # bondref data maintainance -----------------------------------------------
 # run everytime there is new additions
 rm(list=ls(all=TRUE));source('util.r');load('gldb.RData')

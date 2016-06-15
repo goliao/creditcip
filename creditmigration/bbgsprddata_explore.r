@@ -1,30 +1,70 @@
-# New merge: price with sdc -----------------------------------------------
-rm(list=ls(all=TRUE));load('gldb.RDATA')
+# # New merge: price with sdc -----------------------------------------------
+# rm(list=ls(all=TRUE));load('gldb.RDATA')
+# source('util.r')
+# br<-bondref[!is.na(parsekeyable)] %>% issfilter(.)
+# br %<>% semi_join(dtl,by='parsekeyable')
+# 
+# # MERGE RATING AND ADD MATURITY BUCKETS -----------------------------------
+# setkey(dtl,parsekeyable);setkey(br,parsekeyable)
+# dtl2<-dtl[br[,.(ccy,mat2,rating,nrating,upcusip,parsekeyable,isin,ytofm,sicfac,sic1)],nomatch=0]
+# dtl2[,ytm:=as.numeric((mat2-date)/365)]
+# dtl3<-dtl2[ytm >.05]
+# dtl3[is.na(nrating),nrating:=0];dtl3[ccy=='sek',ccy:='eur']
+# dtl3<-dtl3[field=='YLD_YTM_MID']
+# dtl3<-dtl3 %>% bucketrating() %>% bucketytm()
+# prl<-prl[date>'2002-01-01']
+# prw<-prl %>% distinct() %>% data.table::dcast(.,date~ticker,value.var = 'value')
+# dtl3<-dtl3[date>'2004-01-01']
+# 
+# 
+# # gen eusw=eusa-eubsv
+# # gen eusz=eusw+eubs
+# prw[,`:=`(eusw1=eusa1-eubsv1,eusw10=eusa10-eubsv10,eusw12=eusa12-eubsv12,eusw15=eusa15-eubsv15,eusw2=eusa2-eubsv2,eusw20=eusa20-eubsv20,eusw30=eusa30-eubsv30,eusw5=eusa5-eubsv5,eusw7=eusa7-eubsv7)]
+# prw[,`:=`(eusz10=eusw10+eubs10,eusz12=eusw12+eubs12,eusz15=eusw15+eubs15,eusz2=eusw2+eubs2,eusz20=eusw20+eubs20,eusz30=eusw30+eubs30,eusz5=eusw5+eubs5,eusz7=eusw7+eubs7,eusz1=eusw1+eubs1)]
+# prw[,`:=`(jysz10=jysw10+jybs10,jysz12=jysw12+jybs12,jysz15=jysw15+jybs15,jysz2=jysw2+jybs2,jysz20=jysw20+jybs20,jysz30=jysw30+jybs30,jysz5=jysw5+jybs5,jysz7=jysw7+jybs7,jysz1=jysw1+jybs1)]
+# prw[,`:=`(bpsz10=bpsw10+bpbs10,bpsz12=bpsw12+bpbs12,bpsz15=bpsw15+bpbs15,bpsz2=bpsw2+bpbs2,bpsz20=bpsw20+bpbs20,bpsz30=bpsw30+bpbs30,bpsz5=bpsw5+bpbs5,bpsz7=bpsw7+bpbs7,bpsz1=bpsw1+bpbs1)]
+# prw[,`:=`(adsz1=adsw1+adbs1,adsz10=adsw10+adbs10,adsz2=adsw2+adbs2,adsz5=adsw5+adbs5,adsz7=adsw7+adbs7,adsz15=adsw15+adbs15,adsz20=adsw20+adbs20,adsz12=adsw12+adbs12,adsz30=adsw30+adbs30)]
+# # transform prw back to prl
+# prl<-data.table::melt(prw,id.vars='date',variable.name='ticker')[date!='2016-02-25']
+# prw<-prw[date!='2016-02-25']
+# save(br,dtl3,prl,prw,file='dtclean.RData')
+# save.image('dtclean.RData')
+
+rm(list=ls(all=TRUE));
+load('dtclean.RData')
 source('util.r')
-br<-bondref[!is.na(parsekeyable)] %>% issfilter(.)
-br %<>% semi_join(dtl,by='parsekeyable')
 
-# MERGE RATING AND ADD MATURITY BUCKETS -----------------------------------
-setkey(dtl,parsekeyable);setkey(br,parsekeyable)
-dtl2<-dtl[br[,.(ccy,mat2,rating,nrating,upcusip,parsekeyable,isin,ytofm,sicfac,sic1)],nomatch=0]
-dtl2[,ytm:=as.numeric((mat2-date)/365)]
-dtl3<-dtl2[ytm >.05]
-dtl3[is.na(nrating),nrating:=0];dtl3[ccy=='sek',ccy:='eur']
-dtl3<-dtl3[field=='YLD_YTM_MID']
-dtl3<-dtl3 %>% bucketrating() %>% bucketytm()
-prl<-prl[date>'2002-01-01']
-prw<-prl %>% distinct() %>% data.table::dcast(.,date~ticker,value.var = 'value')
-dtl3<-dtl3[date>'2004-01-01']
+ys0<-resyldsprdv2(dtl3,prl,regversion=6) # swap spread only w/o 3s6s adj.
+ys1<-resyldsprdv3(dtl3,prl,regversion=6)
+ys2<-resyldsprdv3(dtl3,prl,regversion=6,adjccybs = 1)
 
-yldsprd2<-resyldsprdv2(dtl3,prl,regversion=5,returndt = 1)
-yldsprd2[[1]] %>% ggplotw()
-yldsprd2[[2]][,.N,by=.(date,ccy)] %>% View
-yldsprd2[[1]][prw][,.(date,ccyeur,eubs5,eubsv5)] %>% ggplotw()
+ys1 %>% ggplotw()
+ys2 %>% ggplotw()
+
+ys1[ys2][,.(date,ccyeur,i.ccyeur)] %>% ggplotw()
+ys1[ys2][,.(date,ccyjpy,i.ccyjpy)] %>% ggplotw()
+ys1[ys2][,.(date,ccyjpy,i.ccyjpy)] %>% ggplotw()
+
+
+prl
+ys1[prw][,.(date,ccyeur,eubs5)] %>% ggplotw()
+
+# desc=c('ys: previous prl interpolate do not extend (rule1) ','ys1: previous prl interpolate extends (rule2)')
+# save(ys,ys1,desc,file='ystemp.RData')
+
+ys %>% ggplotw()
+ys[prw][,.(date,ccyeur,eubs5,eubsv5)] %>% ggplotw()
+
+# adjusted spread
+ysi1<-ys[prw][,.(date,ccyeur,ccyeur_eff=ccyeur-(eubs5-eubsv5))] 
+ysi1 %>% ggplotw()
+ysi2<-ysi1[!is.na(ccyeur_eff)]
+ysi2 %>% write.dta('temp_ys.dta')
 
 ### cool plot1
-yldsprd2[[1]][prw][,.(date,ccyeur,eubs5adj=eubs5-eubsv5)] %>% ggplotw()
+ys[prw][,.(date,ccyeur,eubs5adj=eubs5-eubsv5)] %>% ggplotw()
 #adding swap euus
-yldsprd2[[1]][prw][,.(date,ccyeur,eubs5adj=eubs5-eubsv5,swapeuus=eusa5-ussw5-eubsv5)] %>% ggplotw()
+ys[prw][,.(date,ccyeur,eubs5adj=eubs5-eubsv5,swapeuus=eusa5-ussw5-eubsv5)] %>% ggplotw()
 
 # non-financial
 ys_nf<-resyldsprdv2(dtl3[sic1!=6],prl,regversion=5)
@@ -38,6 +78,18 @@ yldsprd2[[1]][prw][,.(date,ccyaud,adbs5,zero=0)] %>% ggplotw()
 
 ys_f<-resyldsprdv2(dtl3[sic1==6],prl,regversion=4)
 ys_f[prw][,.(date,ccyaud,adbs5)] %>% ggplotw()
+
+
+# Relating to issuance data -----------------------------------------------
+#### Linking to isssuance data 
+source('util.r')
+dtissue<-bondref %>% issfilter(.)
+## retain sdc where isin/cusip matches credit spread
+dtissue2<-dtissue %>% semi_join(dtl3[ccy %in% c('eur','usd')],by='upcusip')
+dtiss<-icollapse3(dtissue2[ccy %in% c('eur','usd') & amt>100])
+dtreg<-mergebymonth(dtiss,ysi1)
+#dtreg[,.(date,ccyeur_eff,ccyeur)] %>% ggplotw()
+dtreg[,.(date,ccyeur_eff,isspct_euus=i_net_euus*100)] %>% ggplotw()
 
 
 
