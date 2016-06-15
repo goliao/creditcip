@@ -1,43 +1,50 @@
 # New merge: price with sdc -----------------------------------------------
-rm(list=ls(all=TRUE))
+rm(list=ls(all=TRUE));load('gldb.RDATA')
 source('util.r')
-load('gldb.RDATA')
-
-bondref<-bondref[!is.na(parsekeyable)] %>% issfilter(.)
-bondref %<>% semi_join(dtl,by='parsekeyable')
-
-# set induatry code
-# bondref[,.(upsic2=str_sub(upsicp,1,2),upsic1=str_sub(upsicp,1,1))][,.N,by=upsic1]
-bondref<-bondref %>% mutate(upsic1=as.numeric(str_sub(as.character(upsicp),1,1))) %>% as.data.table()
-bondref[is.na(sic1),sic1:=upsic1]
-bondref[,sicfac:=factor(sic1)]
+br<-bondref[!is.na(parsekeyable)] %>% issfilter(.)
+br %<>% semi_join(dtl,by='parsekeyable')
 
 # MERGE RATING AND ADD MATURITY BUCKETS -----------------------------------
-setkey(dtl,parsekeyable)
-setkey(bondref,parsekeyable)
-dtl2<-dtl[bondref[abs(matdiff)<.1,.(ccy,mat2,rating,nrating,upcusip,parsekeyable,isin,ytofm,sicfac,sic1)],nomatch=0]
+setkey(dtl,parsekeyable);setkey(br,parsekeyable)
+dtl2<-dtl[br[,.(ccy,mat2,rating,nrating,upcusip,parsekeyable,isin,ytofm,sicfac,sic1)],nomatch=0]
 dtl2[,ytm:=as.numeric((mat2-date)/365)]
-dtl3<-dtl2[ytm>0.1][!is.na(nrating)] %>% bucketrating() %>% bucketytm()
+dtl3<-dtl2[ytm >.05]
+dtl3[is.na(nrating),nrating:=0];dtl3[ccy=='sek',ccy:='eur']
 dtl3<-dtl3[field=='YLD_YTM_MID']
+dtl3<-dtl3 %>% bucketrating() %>% bucketytm()
+prl<-prl[date>'2002-01-01']
+prw<-prl %>% distinct() %>% data.table::dcast(.,date~ticker,value.var = 'value')
+dtl3<-dtl3[date>'2004-01-01']
 
-#dtl3[date=='2015-11-30',.N,by=c('rating_bucket','ccy')][order(ccy,rating_bucket)]
+yldsprd2<-resyldsprdv2(dtl3,prl,regversion=5,returndt = 1)
+yldsprd2[[1]] %>% ggplotw()
+yldsprd2[[2]][,.N,by=.(date,ccy)] %>% View
+yldsprd2[[1]][prw][,.(date,ccyeur,eubs5,eubsv5)] %>% ggplotw()
 
-# yldsprd2<-resyldsprdv2(dtl3,priceraw,regversion=5)[[1]]
-# yldsprd3<-resyldsprdv2(dtl3,priceraw,regversion=3)[[1]]
-# yldsprd4<-resyldsprdv2(dtl3,priceraw,regversion=4)
-regres<-resyldsprdv2(dtl3,priceraw,regversion=5)
+### cool plot1
+yldsprd2[[1]][prw][,.(date,ccyeur,eubs5adj=eubs5-eubsv5)] %>% ggplotw()
+#adding swap euus
+yldsprd2[[1]][prw][,.(date,ccyeur,eubs5adj=eubs5-eubsv5,swapeuus=eusa5-ussw5-eubsv5)] %>% ggplotw()
 
-regdt<-regres[[2]]
-regdt[,.N,by=.(date,ccy)] %>% ggplot(aes(x=date,y=N,colour=ccy))+geom_line()
-dtl2[,.N,by=.(date,ccy)] %>% ggplot(aes(x=date,y=N,colour=ccy))+geom_line()
+# non-financial
+ys_nf<-resyldsprdv2(dtl3[sic1!=6],prl,regversion=5)
+ys_nf %>% ggplotw()
+ys_nf[prw][,.(date,ccyeur,eubs5adj=eubs5-eubsv5)] %>% ggplotw()
+ys_nf[prw][,.(date,ccyjpy,jybs5)] %>% ggplotw()
+ys_nf[prw][,.(date,ccygbp,bpbs5)] %>% ggplotw()
 
-newadditions<-regdt[ccy=='1usd' & date=='2014-07-31'] %>% anti_join(regdt[ccy=='1usd' & date=='2014-06-30'],by='isin')
-(bondref %>% semi_join(newadditions,by='isin'))[,.(parsekeyable,i,descr)] # why are prices here missing?
+ys_nf[prw][,.(date,ccyaud,adbs5,zero=0)] %>% ggplotw()
+yldsprd2[[1]][prw][,.(date,ccyaud,adbs5,zero=0)] %>% ggplotw()
+
+ys_f<-resyldsprdv2(dtl3[sic1==6],prl,regversion=4)
+ys_f[prw][,.(date,ccyaud,adbs5)] %>% ggplotw()
 
 
-bondref %>% semi_join(dtl3[ccy=='usd' & date=='2014-07-31'] %>% anti_join(dtl3[ccy=='usd' & date=='2014-06-30'],by='isin'),by='isin') # why are prices here missing?
 
-yldsprd2 %>% ggplotw()
+yldsprd2[[1]][date<ymd('2016-03-01')] %>% ggplotw()
+prl[ticker %in% c('eubs5','bpbs5','jybs5','adbs5')] %>% ggplotl()
+
+prl[ticker %in% c('eubs5','bpbs5','jybs5','adbs5')]
 priceraw[,.(date,eubs5,eubs10,bpbs5,bpbs10)][yldsprd2][,.(date,eubs5,ccyeur)] %>% ggplotw()
 priceraw[,.(date,eubs5,bpbs5,bpbs10)][yldsprd2][,.(date,bpbs10,ccygbp)] %>% ggplotw()
 yldsprd4[yldsprd5] %>% ggplotw()
@@ -45,24 +52,55 @@ yldsprd5[yldsprd3][yldsprd4]  %>% ggplotw()
 
 
 # finance vs nonfiannce
-ys_nf<-dtl3[sic1!=6] %>% resyldsprdv2(.,priceraw,regversion=4)
-ys_f<-dtl3[sic1==6] %>% resyldsprdv2(.,priceraw,regversion=4) 
+ys_nf<-dtl3[sic1!=6] %>% resyldsprdv2(.,prl,regversion=1)
+ys_f<-dtl3[sic1==6] %>% resyldsprdv2(.,prl,regversion=1)
+ys_nf[ys_f][date<'2016-02-01',.(date,ccyjpy,i.ccyjpy)] %>% ggplotw()
+ys_nf[ys_f][date<'2016-02-01',.(date,ccyeur,i.ccyeur)] %>% ggplotw()
+ys_nf[ys_f][date<'2016-02-01',.(date,ccyaud,i.ccyaud)] %>% ggplotw()
+ys_nf[ys_f][date<'2016-02-01',.(date,ccygbp,i.ccygbp)] %>% ggplotw()
+
 # for gbp
 priceraw[,.(date,bpbs5)][ys_nf] %>% ggplotw()
 priceraw[,.(date,bpbs5)][ys_f] %>% ggplotw()
 
 #illiquid vs liquid split
 # define illiquid as bonds that passed its prime, ytm/(ytofm)<.5
-ys_liq<-(dtl3[liq>.5] %>% resyldsprdv2(.,priceraw,regversion=5))[[1]]
-ys_iliq<-(dtl3[liq<=.5] %>% resyldsprdv2(.,priceraw,regversion=5))[[1]]
+ys_liq<-(dtl3[liq>.5] %>% resyldsprdv2(.,priceraw,regversion=5))
+ys_iliq<-(dtl3[liq<=.5] %>% resyldsprdv2(.,priceraw,regversion=5))
 setnames(ys_iliq,'ccyeur','ccyeur_iliq')
 ys_liq[ys_iliq][,.(date,ccyeur,ccyeur_iliq)] %>% ggplotw()
 # including it as a factor doesn't chg much however
-ys<-resyldsprdv2(dtl3,priceraw,regversion=1)[[1]]
-ysliq<-resyldsprdv2(dtl3,priceraw,regversion=6)[[1]]
+ys<-resyldsprdv2(dtl3,priceraw,regversion=1)
+ysliq<-resyldsprdv2(dtl3,priceraw,regversion=6)
 ys[ysliq] %>% ggplotw()
 
 priceraw %>% ds('eubs')
+
+
+# exploratory by single date ----------------------------------------------
+
+regdata<-dtl3[date=='2016-05-31' & ccy %in% c('usd','eur')][,liq:=ytm/ytofm]
+aa<-resyldsprdv2(regdata,prl,regversion=4,returndt = 1)
+aa[[1]]
+aa[[2]][,median(value),ccy]
+regdata<-dtl3[date=='2016-01-29' & ccy %in% c('usd','eur')][,liq:=ytm/ytofm]
+aa<-resyldsprdv2(regdata,prl,regversion=4,returndt = 1)
+aa[[1]]
+aa[[2]][,median(value),ccy]
+
+prw[,.(date,eusa5,ussw5)] %>% View
+prw[,.(date,eusa)]
+prw[,.(date,ussw5)]
+
+regdt<-regres[[2]]
+regdt[,.N,by=.(date,ccy)] %>% ggplot(aes(x=date,y=N,colour=ccy))+geom_line()
+dtl2[,.N,by=.(date,ccy)] %>% ggplot(aes(x=date,y=N,colour=ccy))+geom_line()
+
+newadditions<-regdt[ccy=='1usd' & date=='2014-07-31'] %>% anti_join(regdt[ccy=='1usd' & date=='2014-06-30'],by='isin')
+(br %>% semi_join(newadditions,by='isin'))[,.(parsekeyable,i,descr)] # why are prices here missing?
+
+
+br %>% semi_join(dtl3[ccy=='usd' & date=='2014-07-31'] %>% anti_join(dtl3[ccy=='usd' & date=='2014-06-30'],by='isin'),by='isin') # why are prices here missing?
 
 # Old residualizing  ----------------------------------------------------------
 ccyfe<-getccyFE(dtl2,fieldstr='OAS_SPREAD_BID')

@@ -193,5 +193,131 @@ prl[ticker %like% '_',parsekeyable:=NA]
 setkey(prl,date,ticker,parsekeyable,field)
 #save(bondref,dtl,prl,file='gldb.RData')
 
+# download eur/gbp bonds till end of may:
+rm(list=ls(all=TRUE))
+source('util.r')
+load(file='us_eu_bonddownloadtickers.RData')
+#downloadbbg(bondtodownload$parsekeyable,filestr='bbg_eurusdbonds_160614.RData',fieldstr = 'YLD_YTM_MID',startdt =ymd('2016-04-01'),splitN = 20)
+rm(list=ls(all=TRUE))
+source('util.r')
+load('gldb.RData')
+bondaddeurusd<-loadBBGdownload2df('bbg_eurusdbonds_160614.RData')
+bondaddeurusd[,batch:=5]
+setkey(dtl,date,parsekeyable,field)
+dtl<-update.dt(dtl,bondaddeurusd)
+resave(dtl,file='gldb.RData')
+
+# try to squeeze more out of existing data from SDC and add to bond ref
+rm(list=ls(all=TRUE)); source('util.r'); load('gldb.RData')
+dt_sdc0<-read.dta13('sdc96_clean2.dta') %>% as.data.table()
+setkey(dt_sdc0,isin)
+dt_sdc1<-dt_sdc0[isin!='-',.(i,tic,isin,cu,upcusip,d,nat,amt,descr,ccy,rating, nrating,mat2,ytofm,deal_no,master_deal_type,issue_type_desc,mdealtype,secur,tf_mid_desc,sic1,sic2,upsicp,sicp,upnat,sp,mdy,settlement2,modnat,modupnat,rank_domicile_nation,upnames,tf_macro_desc,mkt,exch,pub,cusip9,num_packageid,main_tranche)][order(isin,-amt)]
+cn1<-dt_sdc1 %>% ds
+cn0<-dt_sdc0 %>% ds
+cn1[cn1 %ni% cn0]
+cn0[cn0 %ni% cn1]
+load(file='sdcnew.rdata')
+dt_sdc2<-df_sdcnew %>% filter(isin!='-') %>% rename(i=issname,rank_domicile_nation=domnat,tic=ticker_sdc,cu=cusip,mkt=mktplace,mdy=rating_mdy,sp=rating_sp,upnames=upco,upsicp=upsic,sicp=sic_main,deal_no=sdcdealnumber) %>% as.data.table()
+dt_sdc2[,id_package_sdc:=NULL]
+cn2<-dt_sdc2 %>% ds
+cn2[cn2 %ni% cn1]
+cn1[cn1 %ni% cn2]
+setkey(dt_sdc1,isin,deal_no)
+setkey(dt_sdc2,isin,deal_no)
+dt_sdc1<-dt_sdc1[order(-isin,-deal_no, num_packageid, -amt)] %>% distinct(isin,deal_no)
+dt_sdc2<-dt_sdc2[order(-isin,-deal_no, -amt)] %>% distinct(isin,deal_no)
+dt_sdc1[cusip9=='-',cusip9:=NA]
+dt_sdc2[cusip9=='-',cusip9:=NA]
+dt_sdc1[tic=='-',tic:=NA]
+dt_sdc2[tic=='-',tic:=NA]
+dt_sdc1[upsicp=='',upsicp:=NA]
+dt_sdc2[upsicp=='',upsicp:=NA]
+dt_sdc1[mdy=='' | mdy=='-',mdy:=NA]
+dt_sdc2[mdy=='' | mdy=='-',mdy:=NA]
+dt_sdc1[sp=='' | sp=='-',sp:=NA]
+dt_sdc2[sp=='' | sp=='-',sp:=NA]
+dt_sdc1[,ccy:=tolower(ccy)]
+dt_sdc2[,ccy:=tolower(ccy)]
+setkey(dt_sdc1,isin,deal_no)
+setkey(dt_sdc2,isin,deal_no)
+dt_sdcall2<-update.dt(dt_sdc1,dt_sdc2)
+dt_sdcall3<-dt_sdcall2[order(num_packageid,-main_tranche,-amt)] %>% distinct(isin)
+save(dt_sdcall3,file='sdcall_160614.RData')
+
+rm(list=ls(all=TRUE)); source('util.r'); load('gldb.RData')
+load(file='sdcall_160614.RData')
+bondref2<-update.dt(bondref,dt_sdcall3,keyfield = 'isin',override = T)
+
+# test how many NAs were eliminated/introdueced in the process
+brn<-bondref %>% ds()
+brn2<-bondref2 %>% ds()
+brnu<-brn2[brn2 %in% brn]
+print('na eliminated: (ngeatives only/introduced)')
+for (cn in brnu){
+  naelim<-bondref[is.na(eval(exparse(cn))),.N]-bondref2[is.na(eval(exparse(cn))),.N]
+  if (naelim<0)  print(str_c(cn,':  ',naelim))
+}
+
+# bondref<-copy(bondref2)
+# resave(bondref,file='gldb.RData')
+
+
+
+#### script to generate ticks used for updating bond data
+dtl3[,.N,date][order(date)]
+yldsprd2[[2]][date=='2016-02-29',.N,ccy][order(ccy)]
+yldsprd2[[2]][date=='2016-03-31',.N,ccy][order(ccy)]
+yldsprd2[[2]][date=='2016-04-29',.N,ccy][order(ccy)]
+
+temp<-dtl3[date=='2016-02-31']
+temp<-dtl3[date=='2016-03-31']
+tempf<-filterglobaluponly(temp)
+temp2<-dtl3[date=='2016-04-29']
+temp3<-tempf %>% anti_join(temp2,by='parsekeyable')
+
+bondtodownload<-temp3[,.(parsekeyable)]
+save(bondtodownload,file='us_eu_bonddownloadtickers.RData')
+
+# correction of prl scaling
+rm(list=ls(all=TRUE));load('gldb.RDATA');source('util.r')
+bbgadd<-loadBBGdownload2df('bbg_2016-06-13.RData')
+bbgadd[parsekeyable %like% '^..sw',value:=100*value]
+prl<-update.dt(prl,bbgadd,keyfield = c('date','parsekeyable','field'),override = T)
+# prl<-prl[date!='2016-02-25'] # need to add a column to indicate monthly price for picking out monthly price among daily price
+setkey(prl,date,ticker,parsekeyable,field)
+prl<-prl %>% distinct() %>% as.data.table()
+resave(prl,file='gldb.RData')
+
+
+# bondref data maintainance -----------------------------------------------
+# run everytime there is new additions
+rm(list=ls(all=TRUE));source('util.r');load('gldb.RData')
+bondref[,sic1:=as.numeric(str_sub(as.character(sicp),1,1))]
+bondref[,upsic1:=as.numeric(str_sub(as.character(upsicp),1,1))]
+bondref[is.na(sic1),sic1:=upsic1]
+bondref[,sicfac:=factor(sic1)]
+setkey(bondref,parsekeyable,isin)
+# get rid of non-matches between sdc and bloomberg based on coupon and mat date
+bondref[,`:=`(matbbg=mdy(str_extract(ticker,"\\d\\d\\/\\d\\d\\/\\d\\d")),couponbbg=as.numeric(str_extract(ticker,"(?<=\\s)\\d+\\.*(\\d+)?(?=\\s)")),couponsdc=as.numeric(str_extract(descr,"^\\d+.\\d*(?=\\%)")))]
+bondref[,matdiff:=as.numeric((matbbg-mat2)/365)]
+#bondref<-bondref[matdiff==0 | couponbbg==couponsdc] 
+bondref[,ccy:=tolower(ccy)]
+bondref[,bbgccy:=tolower(bbgccy)]
+warning(print_and_capture(bondref[ccy!=bbgccy,.(ccy,bbgccy)]))
+bondref[ccy!=bbgccy,ccy:=bbgccy]
+bondref[rating=='NR' | rating=='',rating:=NA]
+bondref[mdy=='NR' | mdy=='',mdy:=NA]
+bondref[sp=='NR' | sp=='',sp:=NA]
+bondref[is.na(rating),rating:=sp]
+bondref[is.na(rating),rating:=mdy]
+# insert rating for new bondref data
+ratinglu<-fread('rating.csv')
+# bondref[is.na(nrating),nrating:=nrating_sp]
+# bondref[nrating==0,nrating:=nrating_mdy]
+bondref<-update.dt(bondref,ratinglu,keyfield = 'rating',override = T)
+bondref[,nrating_sp:=NULL]
+bondref[,nrating_mdy:=NULL]
+setkey(bondref,isin,parsekeyable)
+resave(bondref,file='gldb.RData')
 
 

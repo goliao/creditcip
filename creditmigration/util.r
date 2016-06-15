@@ -146,7 +146,9 @@ ggplotw<-function(dfin, fields=ds(dfin)){
   ggplot(data=.,aes(x=date,y=value,colour=type))+geom_line()+geom_point()
 
 }
-
+ggplotl<-function(dfin){
+  dfin %>% ggplot(data=.,aes(x=date,y=value,colour=ticker))+geom_line()+geom_point()
+}
 
 ds<-function(dfin,matchpattern='.'){
   require(stringr)
@@ -516,40 +518,46 @@ print(str_c('FE on field: ',fieldstr))
   #load(file='temp_ccyferegcoef.rdata')
   regcoef
 }
-
-resyldsprdv2<-function(dtlin,pricein,regversion=2,globaluponly=1){
+extractpricefromdtl<-function(dtl,fieldstr){
+  
+  # colnames<-pricein %>% ds('ussw') %>% str_extract(regex('ussw.*')) %>% sort %>% unique
+  # eusa_colnames<-pricein %>% ds('eusa') %>% str_extract(regex('eusa.*')) %>% sort %>% unique
+  # bpsw_colnames<-pricein %>% ds('bpsw') %>% str_extract(regex('bpsw.*')) %>% sort %>% unique
+  # swapus<-pricein[date>='1996-06-28',c('date',ussw_colnames),with=FALSE]
+  # swapeu<-pricein[date>='1999-01-29',c('date',eusa_colnames),with=FALSE]
+  # swapgb<-pricein[date>='1996-06-28',c('date',bpsw_colnames),with=FALSE]
+}
+filterglobaluponly<-function(dtlin){
+    dtl<-copy(dtlin)
+    tokeep<-dtl[,.N,by=c('date','upcusip','ccy')][,.N,by=c('date','upcusip')][N!=1][,.(date,upcusip)]
+    setkey(tokeep,date,upcusip)
+    setkey(dtl,date,upcusip)
+    dtl[tokeep]
+}
+resyldsprdv2<-function(dtlin,pricein,regversion=2,globaluponly=1,returndt=0){
   # Residualize yld sprd ----------------------------------------------------
   #create yield spread for aggregate 
-
-  dtlin[,ytm:=as.numeric((mat2-date)/365)]
+  dtl<-copy(dtlin[field=='YLD_YTM_MID'])
+  dtl[,ytm:=as.numeric((mat2-date)/365)]
   #winsorize by value a little
-  dtl<-dtlin[field=='YLD_YTM_MID'][,pctl:=percent_rank(value),by=.(date,ccy)][pctl>=.01 & pctl<=.99]
+  #[,pctl:=percent_rank(value),by=.(date,ccy)][pctl>=.01 & pctl<=.99]
   # get rid of dates with only one ccy
   setkey(dtl,date)
   dtl<-dtl[dtl[,.N,by=c('date','ccy')][,.N,date][N!=1,.(date)]]
 
   if (globaluponly){
   # get rid of up where up doesn't have bonds in both ccys for each date
-    tokeep<-dtl[,.N,by=c('date','upcusip','ccy')][,.N,by=c('date','upcusip')][N!=1][,.(date,upcusip)]
-    setkey(tokeep,date,upcusip)
-    setkey(dtl,date,upcusip)
-    dtl<-dtl[tokeep]
+    dtl<-filterglobaluponly(dtl)
   }
   
   # next step, try to generate yield sprd at the individual bond level instead of taking avg 
   # bring in the bbg prices
-  setkey(pricein,date)
-  ussw_colnames<-pricein %>% ds('ussw') %>% str_extract(regex('ussw.*')) %>% sort %>% unique
-  eusa_colnames<-pricein %>% ds('eusa') %>% str_extract(regex('eusa.*')) %>% sort %>% unique
-  bpsw_colnames<-pricein %>% ds('bpsw') %>% str_extract(regex('bpsw.*')) %>% sort %>% unique
-  swapus<-pricein[date>='1996-06-28',c('date',ussw_colnames),with=FALSE]
-  swapeu<-pricein[date>='1999-01-29',c('date',eusa_colnames),with=FALSE]
-  swapgb<-pricein[date>='1996-06-28',c('date',bpsw_colnames),with=FALSE]
-  swapprices<-swapus %>% left_join(swapeu,by='date') %>% left_join(swapgb,by='date')
-  
-  swappricesl<-swapprices %>% melt(id.vars='date',variable.name='field')
-  swappricesl[,ccy:=stringr::str_sub(field,1,2)][ccy=='eu',ccy:='eur'][ccy=='us',ccy:='usd'][ccy=='bp',ccy:='gbp'][,tenor:=as.numeric(str_extract(field,regex('\\d+')))]
+  swappricesl<-pricein[ticker %like% '^ussw' | ticker %like% '^eusa' | ticker %like% '^bpsw' | ticker %like% '^jysw' | ticker %like% '^adsw',.(date,ticker,value)] 
+  setnames(swappricesl,'ticker','field')
+  swappricesl[,ccy:=stringr::str_sub(field,1,2)][ccy=='eu',ccy:='eur'][ccy=='us',ccy:='usd'][ccy=='bp',ccy:='gbp'][ccy=='jy',ccy:='jpy'][ccy=='ad',ccy:='aud'][,tenor:=as.numeric(str_extract(field,regex('\\d+')))]
+  #swappricesl[,.N,ticker][,.(field,tictenor=str_sub(ticker,5))] 
   swappricesl[field=='bpswsc',tenor:=.25]
+  if (swappricesl[is.na(tenor),.N]!=0) warning('swappricesl has tenor not parsed')
   setkey(swappricesl,date,ccy,tenor,field)
   setkey(dtl,date,ccy)
   
@@ -559,7 +567,10 @@ resyldsprdv2<-function(dtlin,pricein,regversion=2,globaluponly=1){
 
   dtl<-dtl[value!='NA'] #get rid of ones that can't be interpolated for one reason or another
   lsout<-getccyFE2(dtl,fieldstr='yldsprd',version=regversion)
-  lsout
+  if (returndt==1)
+    lsout
+  else
+    lsout[[1]]
 }
 getccyFE2<-function(dfin,fieldstr='OAS_SPREAD_BID',version=2,winsor=.01){
 #  dfin<-dtl2
@@ -601,7 +612,10 @@ print(str_c('FE on field: ',fieldstr))
        # regversion 6, add illiqudity index
         reg<-lm(value~ccy+upcusip+ytm_bucket+rating_bucket+sicfac+liq_bucket,data=dt)
       }
-      data.table(ccyeur=reg$coefficients['ccyeur'],ccygbp=reg$coefficients['ccygbp'])
+      data.table(ccyeur=reg$coefficients['ccyeur'],
+        ccygbp=reg$coefficients['ccygbp'],
+        ccyjpy=reg$coefficients['ccyjpy'],
+        ccyaud=reg$coefficients['ccyaud'])
   }
 
   regcoef<-df2[,regfun(.SD,version),by='date']
@@ -668,7 +682,7 @@ downloadbbg<-function(tickers,filestr=str_c('bbg_',today(),'.RData'),startdt=ymd
   for (i in 1:splitN) {
     print(i)
     prices[[i]]<-bdh(tickerslist[[i]], fieldstr, start.date=startdt, options=opt)  
-    save(prices,file=str_c('temp_',filestr))
+    save(prices,tickers,tickerslist,i,file=str_c('temp_',filestr))
   }
   blpDisconnect(con)
   save(prices,file=filestr)
@@ -700,22 +714,25 @@ update.dt<-function(dtA,dtB,keyfield='auto',updatefield='auto',insertnewrow=TRUE
   }
   if (length(lhs)!=length(rhs)){ print('len(lhs)!=len(rhs)');browser()}
   for (j in 1:length(lhs)){
-    print(str_c('inserting/updating: lhs: ',lhs[j],' rhs: ',rhs[j]))
+    message(str_c('inserting/updating: lhs: ',lhs[j],' rhs: ',rhs[j]))
     #show warning message first
     problemdt<-dtA[dtB,nomatch=0][eval(exparse(lhs[j]))!=eval(exparse(rhs[j]))]
     if (nrow(problemdt)!=0){
-      warning('matched but existing value conflicts with new value in field:',lhs[j])
-      if (override) warning('overriding:') else warning('skiping:')
-      warning('\n',print_and_capture(problemdt[,.(eval(exparse(keyfield)),eval(exparse(lhs[j])),eval(exparse(rhs[j])))]))
+      message('matched but existing value conflicts for field: ',lhs[j])
+      #if (override) warning('overriding:') else warning('skiping:')
+      #print(problemdt[,c(keyfield,lhs[j],rhs[j]),with=FALSE])
+      message('\n',print_and_capture(problemdt[,c(keyfield,lhs[j],rhs[j]),with=FALSE]))
     }
 
     if (override){
       # override when there are existing value
-      #print(str_c('updated/inserted (inc. override) on ',dtA[dtB,.N,nomatch=0]))
+      tempdt<-dtA[dtB,nomatch=0]
+      message(str_c('updated/inserted: ',tempdt[is.na(eval(exparse(lhs[j]))),.N]))
+      message(str_c('override: ',tempdt[!is.na(eval(exparse(lhs[j]))),.N]))
       dtA[dtB,(lhs[j]):=eval(exparse(rhs[j])),nomatch=0]
     } else{
       # update/insert if na /override 
-      #print(str_c('updated/inserted (no override) on ',dtA[dtB,nomatch=0][is.na(eval(exparse(lhs[j]))),.N]))
+      message(str_c('updated/inserted (no override) on ',dtA[dtB,nomatch=0][is.na(eval(exparse(lhs[j]))),.N]))
       dtA[dtB,(lhs[j]):=ifelse(is.na(eval(exparse(lhs[j]))),eval(exparse(rhs[j])),eval(exparse(lhs[j]))),nomatch=0]
     }
     
@@ -726,7 +743,7 @@ update.dt<-function(dtA,dtB,keyfield='auto',updatefield='auto',insertnewrow=TRUE
     rowinsert<-dtB[!dtA]
     # dtA<-rbind(dtA,rowinsert,fill=TRUE)
     dtA<-bind_rows(dtA,rowinsert) %>% as.data.table()
-    print(str_c('Rows inserted: ',rowinsert[,.N]))
+    message(str_c('Rows inserted: ',rowinsert[,.N]))
   }
   setkeyv(dtA,keyoriginal)
   dtA
@@ -735,4 +752,11 @@ exparse<-function(strin){parse(text=strin)}
 print_and_capture <- function(x)
 {
   paste(capture.output(print(x)), collapse = "\n")
+}
+
+resave <- function(..., list = character(), file) {
+   previous  <- load(file)
+   var.names <- c(list, as.character(substitute(list(...)))[-1L])
+   for (var in var.names) assign(var, get(var, envir = parent.frame()))
+   save(list = unique(c(previous, var.names)), file = file)
 }
