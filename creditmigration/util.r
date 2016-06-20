@@ -160,7 +160,7 @@ ggplotw<-function(dfin, fields=ds(dfin)){
   dfin %>% 
   tidyr::gather(.,'type','value',-date) %>% 
   filter(type %in% fields) %>% 
-  ggplot(data=.,aes(x=date,y=value,colour=type))+geom_line()+geom_point()
+  ggplot(data=.,aes(x=date,y=value,colour=type))+geom_line()
 
 }
 ggplotl<-function(dfin){
@@ -172,6 +172,16 @@ ds<-function(dfin,matchpattern='.'){
   cn<-colnames(dfin) 
   try(cn[str_locate(as.character(cn),regex(matchpattern))[,1]>0] %>% na.omit() %>% as.character())
 }
+dsl<-function(dtlin,matchpattern='.',field='ticker'){
+
+  #fn<-(dtlin[,ticker] %>% unique())[[1]]
+   dtlin<-copy(dtlin)
+   setkeyv(dtlin,field)
+   fn<-unique(dtlin)[,field,with=F][[1]]
+  
+  try(fn[str_locate(as.character(fn),regex(matchpattern))[,1]>0] %>% na.omit() %>% as.character())
+}
+
 
 wgplot <- function(dfwide,idvar='date'){
   dfwide %>% 
@@ -656,8 +666,8 @@ print(str_c('FE on field: ',fieldstr))
 # introduce liquidity measure based on bond age
     df2[,liq:=ytm/ytofm]
     df2<-df2[liq %between% c(0,1.1)]
-    df2[liq<.5,liq_bucket:=0]
-    df2[liq>=.5,liq_bucket:=1]
+    df2[liq<.5,liq_bucket:=0] # more illiq
+    df2[liq>=.5,liq_bucket:=1] # liq
   regfun<-function(dt,regversion=1){
       if (regversion==1){
         # regversion 1:: run regression directly on data set without taking out bonds that do not have matching pairs
@@ -674,11 +684,19 @@ print(str_c('FE on field: ',fieldstr))
       } else if (regversion==6){
        # regversion 6, add illiqudity index
         reg<-lm(value~ccy+upcusip+ytm_bucket+rating_bucket+sicfac+liq_bucket,data=dt)
+      } else if (regversion==7){
+       # regversion 7, like 6 but w/o sicfac
+        reg<-lm(value~ccy+upcusip+ytm_bucket+rating_bucket+liq_bucket,data=dt)
+      } else if (regversion==8){
+       # regversion 8, like 7 but only focus on liq
+        reg<-lm(value~ccy+upcusip+ytm_bucket+liq_bucket,data=dt)
       }
+
       data.table(ccyeur=reg$coefficients['ccyeur'],
         ccygbp=reg$coefficients['ccygbp'],
         ccyjpy=reg$coefficients['ccyjpy'],
-        ccyaud=reg$coefficients['ccyaud'])
+        ccyaud=reg$coefficients['ccyaud'],
+        liquid=reg$coefficients['liq_bucket'])
   }
 
   regcoef<-df2[,regfun(.SD,version),by='date']

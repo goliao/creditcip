@@ -32,21 +32,90 @@
 
 rm(list=ls(all=TRUE));
 load('dtclean.RData')
-source('util.r')
+source('util.r');require(ggthemes)
 
-ys0<-resyldsprdv2(dtl3,prl,regversion=6) # swap spread only w/o 3s6s adj.
+
+dtl3[,liq:=ytm/ytofm]
+dtl3<-dtl3[liq %between% c(0,1.1)]
+dtl3[liq<.5,liq_bucket:=0] # more illiq
+dtl3[liq>=.5,liq_bucket:=1] # liq
+
+ys1liq<-resyldsprdv3(dtl3[liq_bucket==1],prl,regversion=5)
+ys1iliq<-resyldsprdv3(dtl3[liq_bucket==0],prl,regversion=5)
+
+ys1liq[ys1iliq] %>% ggplotw()
+ys1liq[ys1iliq][,.(date,ccyeur,i.ccyeur)] %>% ggplotw()
+ys1liq[ys1iliq][,.(date,ccyjpy,i.ccyjpy)] %>% ggplotw()
+ys1liq[ys1iliq][,.(date,liquid,i.liquid)] %>% ggplotw()
+
+ys1<-resyldsprdv3(dtl3,prl,regversion=8)
+
+#ys0<-resyldsprdv2(dtl3,prl,regversion=6) # swap spread only w/o 3s6s adj.
 ys1<-resyldsprdv3(dtl3,prl,regversion=6)
+ys1nf<-resyldsprdv3(dtl3[sic1!=6],prl,regversion=6)
 ys2<-resyldsprdv3(dtl3,prl,regversion=6,adjccybs = 1)
+
+ys1 %>% ds()
+ys1[,.(date,liquid)] %>% ggplotw()
+dtl3 %>% ds
+# Figure 1 CIP deviations
+fig1<-prw[,.(date,eubs5,bpbs5,jybs5,adbs5)] %>% ggplotw()+xlab('')+ylab('CIP deviations 5-year horizon in bps (implied r - actual r)')+geom_hline(yintercept=0)+ scale_color_discrete('',labels = c("AUD", "GBP",'EUR','JPY'))+theme_stata(base_size = 15)+theme(axis.title.y = element_text(margin =margin(0, 10, 0, 0)))
+ggsave(file='../paper/figures/fig1_cip.pdf',fig1,width=9,height=6)
+
+# Figure 2 Credit mispring
+fig2<-ys1 %>% ggplotw()+xlab('')+ylab('bps')+geom_hline(yintercept=0)+ scale_color_discrete('',labels = c("AUD", "GBP",'EUR','JPY'))+theme_stata(base_size = 15)+theme(axis.title.y = element_text(margin =margin(0, 10, 0, 0)))
+fig2
+ggsave(file='../paper/figures/fig2_creditmisprice.pdf',fig2,width=9,height=6)
+
+
+# Figure 3 Credit mispring and CIP for EUR
+fig3<-ys1[prw][date>'2004-01-01',.(date,ccyeur,eubs5)] %>% ggplotw()+xlab('')+ylab('bps')+geom_hline(yintercept=0)+ scale_color_discrete('',labels = c('Res. credit spread diff (EU-US)','CIP deviations 5yr (implied - actual euro funding rate)'))+theme_stata(base_size = 15)+theme(axis.title.y = element_text(margin =margin(0, 10, 0, 0)))
+fig3
+ggsave(file='../paper/figures/fig3_creditCIPeur.pdf',fig3,width=9,height=6)
+
+# Figure 4 Credit mispring and CIP for JPY
+fig4<-ys1[prw][date>'2004-01-01',.(date,ccyjpy,jybs5)] %>% ggplotw()+xlab('')+ylab('bps')+geom_hline(yintercept=0)+ scale_color_discrete('',labels = c('Res. credit spread diff (JP-US)','CIP deviations 5yr (implied - actual yen funding rate)'))+theme_stata(base_size = 15)+theme(axis.title.y = element_text(margin =margin(0, 10, 0, 0)))
+fig4
+ggsave(file='../paper/figures/fig4_creditCIPjpy.pdf',fig4,width=9,height=6)
+
+# fig4b<-ys1nf[prw][date>'2004-01-01',.(date,ccyjpy,jybs5)] %>% ggplotw()+xlab('')+ylab('bps')+geom_hline(yintercept=0)+ scale_color_discrete('',labels = c('Residualized credit spread diff (JP-US)','CIP deviations 5yr (implied - actual yen funding rate)'))+theme_stata(base_size = 15)+theme(axis.title.y = element_text(margin =margin(0, 10, 0, 0)))
+# fig4b
+#ggsave(file='../paper/figures/fig3_creditCIPjpy.pdf',fig4,width=9,height=6)
+ys1[prw][date>'2004-01-01',.(date,ccygbp,bpbs5)] %>% ggplotw()
+ys1[prw][date>'2004-01-01',.(date,ccyaud,adbs5)] %>% ggplotw()
+
+# Figure 5: crd mispricing and issuance; save data for it first
+ys2[,.(date,ccyeur)] %>% ggplotw()
+ys2 %>% write.dta('temp_ys.dta')
+
+
+ys2[,.(date,ccyjpy)] %>% ggplotw()
+
+
+ys1 %>% ggplotw()
+ys1nf %>% ggplotw()
+# eur
+ys1[prw][,.(date,ccyeur,eubs5)] %>% ggplotw()
+ys1nf[prw][,.(date,ccyeur,eubs5)] %>% ggplotw()
+# # adj 3s6s manual; manual adj looks better but oh well
+# ys0[prw][,.(date,ccyeur,eubs5adj=eubs5-eubsv5)] %>% ggplotw()
+
 
 ys1 %>% ggplotw()
 ys2 %>% ggplotw()
 
 ys1[ys2][,.(date,ccyeur,i.ccyeur)] %>% ggplotw()
+ys1[ys2][,.(date,ccyeur,i.ccyeur)] %>% ggplotw()
 ys1[ys2][,.(date,ccyjpy,i.ccyjpy)] %>% ggplotw()
 ys1[ys2][,.(date,ccyjpy,i.ccyjpy)] %>% ggplotw()
 
 
-prl
+# using previous version, adjusted 3s6s spread and ccy basis manually
+ysi1<-ys0[prw][,.(date,ccyeur,ccyeur_eff=ccyeur-(eubs5-eubsv5))] 
+ysi1 %>% ggplotw()
+ysi2<-ysi1[!is.na(ccyeur_eff)]
+ysi2 %>% write.dta('temp_ys.dta')
+
 ys1[prw][,.(date,ccyeur,eubs5)] %>% ggplotw()
 
 # desc=c('ys: previous prl interpolate do not extend (rule1) ','ys1: previous prl interpolate extends (rule2)')
@@ -55,11 +124,6 @@ ys1[prw][,.(date,ccyeur,eubs5)] %>% ggplotw()
 ys %>% ggplotw()
 ys[prw][,.(date,ccyeur,eubs5,eubsv5)] %>% ggplotw()
 
-# adjusted spread
-ysi1<-ys[prw][,.(date,ccyeur,ccyeur_eff=ccyeur-(eubs5-eubsv5))] 
-ysi1 %>% ggplotw()
-ysi2<-ysi1[!is.na(ccyeur_eff)]
-ysi2 %>% write.dta('temp_ys.dta')
 
 ### cool plot1
 ys[prw][,.(date,ccyeur,eubs5adj=eubs5-eubsv5)] %>% ggplotw()

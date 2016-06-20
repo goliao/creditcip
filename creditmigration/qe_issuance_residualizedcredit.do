@@ -98,12 +98,16 @@ gen year=year(date)
 gen monthly = ym(year,month)
 format monthly %tm
 tsset monthly
-keep monthly ccyeur ccyeur_eff
-save residualizedys.dta,replace
+rename ccyeur ccyeur_eff
+rename ccyjpy ccyjpy_eff
+rename ccygbp ccygbp_eff
+rename ccyaud ccyaud_eff
+* keep monthly ccyeur_eff
+save residualizedys2.dta,replace
 
 use regdata_02.dta,clear
 drop _merge
-merge 1:1 monthly using residualizedys.dta
+merge 1:1 monthly using residualizedys2.dta
 egen i_net_USDEUR_mean_1=mean(i_net_USDEUR) if year>2005 & year<2009 
 egen i_net_USDEUR_mean_2=mean(i_net_USDEUR) if year>=2009 & year<2014 
 egen i_net_USDEUR_mean_3=mean(i_net_USDEUR) if year>=2014 & year<2016
@@ -111,20 +115,29 @@ drop if year>2016
 
 tsset monthly
 gen ccyeur_eff_6m=(ccyeur_eff+L.ccyeur_eff+L2.ccyeur_eff+L3.ccyeur_eff+L4.ccyeur_eff+L5.ccyeur_eff)/6
-
-tsline i_net_USDEUR if year>2005 & year<2009, recast(sc) mc(green) || tsline i_net_USDEUR if year>=2009 & year<2014, recast(sc) mc(red) msymbol(+)  || tsline i_net_USDEUR if year>=2014 & year<2016, recast(sc) mc(blue) msymbol(d)  || tsline i_net_USDEUR_mean_1 if year>2005,lc(green) || tsline i_net_USDEUR_mean_2 if year>2005,lc(red) || tsline i_net_USDEUR_mean_3 if year>2005,lc(blue) || tsline ccyeur_eff if year>2005, yaxis(2) yscale(range(-40,40) axis(2)) yscale(range(-20,15) axis(1))  plotregion(margin(small)) graphregion(margin(l+5 r+5)) ytitle("Pct Net Iss flow EU to US/Tot Iss") ytitle("basis points",axis(2)) legend(label(1 "Pre-2009") label(2 "2009-2013: FED QE") label(3 "Post-2014: ECB QE") label(7 "Residualized CrdSprdEff EU-US") order(1 2 3 7)) ttitle("")
-
-
-
-tsline i_net_USDEUR if year>2005 & year<2009, recast(sc) mc(green) || tsline i_net_USDEUR if year>=2009 & year<2014, recast(sc) mc(red) msymbol(+)  || tsline i_net_USDEUR if year>=2014 & year<2016, recast(sc) mc(blue) msymbol(d)  || tsline i_net_USDEUR_mean_1 if year>2005,lc(green) || tsline i_net_USDEUR_mean_2 if year>2005,lc(red) || tsline i_net_USDEUR_mean_3 if year>2005,lc(blue) || tsline ccyeur_eff_6m if year>2005, yaxis(2) yscale(range(-30,30) axis(2)) yscale(range(-20,15) axis(1))  plotregion(margin(small)) graphregion(margin(l+5 r+5)) ytitle("monthly issuance flow (EU to US)/total (%)") ytitle("residualized effective credit spread 6m avg (bps)",axis(2)) legend(label(1 "issflowPct pre '09") label(2 "issflowPct during FED QE") label(3 "issflowPct during ECB QE") label(7 "Residualized CrdSprdEff6m") order(1 2 3 7)) ttitle("")
+gen ccyjpy_eff_6m=(ccyjpy_eff+L.ccyjpy_eff+L2.ccyjpy_eff+L3.ccyjpy_eff+L4.ccyjpy_eff+L5.ccyjpy_eff)/6
+gen ccygbp_eff_6m=(ccygbp_eff+L.ccygbp_eff+L2.ccygbp_eff+L3.ccygbp_eff+L4.ccygbp_eff+L5.ccygbp_eff)/6
+gen ccyaud_eff_6m=(ccyaud_eff+L.ccyaud_eff+L2.ccyaud_eff+L3.ccyaud_eff+L4.ccyaud_eff+L5.ccyaud_eff)/6
 
 
+* new plot
+tsline i_net_USDEUR if year>2005 & year<2009, recast(sc) mc(green) || tsline i_net_USDEUR if year>=2009 & year<2014, recast(sc) mc(red) msymbol(+)  || tsline i_net_USDEUR if year>=2014 & year<2016, recast(sc) mc(blue) msymbol(d)  || tsline i_net_USDEUR_mean_1 if year>2005,lc(green) || tsline i_net_USDEUR_mean_2 if year>2005,lc(red) || tsline i_net_USDEUR_mean_3 if year>2005,lc(blue) || tsline ccyeur_eff_6m if year>2005, lc(black) yaxis(2) yscale(range(-30,30) axis(2)) yscale(range(-20,15) axis(1))  plotregion(margin(small)) graphregion(margin(l+5 r+5)) ytitle("monthly issuance flow (EU to US) as % of total") ytitle("residualized effective credit spread 6m avg (bps)",axis(2)) legend(label(1 "issflowPct pre '09") label(2 "issflowPct during FED QE") label(3 "issflowPct during ECB QE") label(7 "Resid. CrdSprdEff6m") order(1 2 3 7)) ttitle("")
+
+* graph export "../paper/figures/crd_is_qe_euus.eps",replace
+
+neweymod F.i_net_USDEUR ccyeur_eff, lag(6)
+neweymod F.i_net_USDJPY ccyjpy_eff, lag(6)
+neweymod F.i_net_USDGBP ccygbp_eff, lag(6)
+neweymod F.i_net_USDAUD ccyaud_eff, lag(6)
+save plotdata_qe_crd_iss.dta
+
+tsline i_net_USDJPY if year>2005 & year<2009, recast(sc) mc(green) || tsline i_net_USDJPY if year>=2009 & year<2014, recast(sc) mc(red) msymbol(+)  || tsline i_net_USDJPY if year>=2014 & year<2016, recast(sc) mc(blue) msymbol(d)  || tsline ccyjpy_eff_6m if year>2005, lc(black) yaxis(2) yscale(range(-30,30) axis(2)) yscale(range(-20,15) axis(1))  plotregion(margin(small)) graphregion(margin(l+5 r+5)) ytitle("monthly issuance flow (EU to US) as % of total") ytitle("residualized effective credit spread 6m avg (bps)",axis(2)) legend(label(1 "issflowPct pre '09") label(2 "issflowPct during FED QE") label(3 "issflowPct during ECB QE") label(7 "Resid. CrdSprdEff6m") order(1 2 3 7)) ttitle("")
 
 
+tsline i_net_USDGBP if year>2005 & year<2009, recast(sc) mc(green) || tsline i_net_USDGBP if year>=2009 & year<2014, recast(sc) mc(red) msymbol(+)  || tsline i_net_USDGBP if year>=2014 & year<2016, recast(sc) mc(blue) msymbol(d)  || tsline ccygbp_eff_6m if year>2005, lc(black) yaxis(2) yscale(range(-30,30) axis(2)) yscale(range(-20,15) axis(1))  plotregion(margin(small)) graphregion(margin(l+5 r+5)) ytitle("monthly issuance flow (EU to US) as % of total") ytitle("residualized effective credit spread 6m avg (bps)",axis(2)) legend(label(1 "issflowPct pre '09") label(2 "issflowPct during FED QE") label(3 "issflowPct during ECB QE") label(7 "Resid. CrdSprdEff6m") order(1 2 3 7)) ttitle("")
 
-
-
-
+tsline i_net_USDAUD if year>2005 & year<2009, recast(sc) mc(green) || tsline i_net_USDAUD if year>=2009 & year<2014, recast(sc) mc(red) msymbol(+)  || tsline i_net_USDAUD if year>=2014 & year<2016, recast(sc) mc(blue) msymbol(d)  || tsline ccyaud_eff_6m if year>2005, lc(black) yaxis(2) yscale(range(-30,30) axis(2)) yscale(range(-20,15) axis(1))  plotregion(margin(small)) graphregion(margin(l+5 r+5)) ytitle("monthly issuance flow (EU to US) as % of total") ytitle("residualized effective credit spread 6m avg (bps)",axis(2)) legend(label(1 "issflowPct pre '09") label(2 "issflowPct during FED QE") label(3 "issflowPct during ECB QE") label(7 "Resid. CrdSprdEff6m") order(1 2 3 7)) ttitle("")
+* save temp_ys0.dta
 
 
 
