@@ -1,25 +1,133 @@
 require(foreign)
 require(stringr)
-require(xts)
+# require(xts)
 require(tidyr)
 require(dplyr)
 require('readstata13')
-require('ggfortify')
-require('doBy')
+# require('ggfortify')
+# require('doBy')
 require(lubridate)
 require(ggplot2)
 require(sandwich)
 require(stargazer)
 require(reshape2)
-require(sqldf)
+# require(sqldf)
 require(magrittr)
 require(data.table)
 require(beepr)
 '%ni%' <- Negate('%in%')
+require(xda)
+require(ggthemes)
 #source('dbutil.r')
+
 df2clip<-function(x)(write.table(x, "clipboard.csv", sep=","))
 # df2clip<-function(x)(write.table(x, "clipboard", sep="\t"))
 
+resyldsprdv3<-function(dtlin,pricein,regversion=2,globaluponly=1,returndt=0,approxrule=1,adjccybs=0){
+  # v3 improvement: using swap data
+  # Residualize yld sprd ----------------------------------------------------
+  #create yield spread for aggregate 
+  dtl<-copy(dtlin[field=='YLD_YTM_MID'])
+  dtl[,ytm:=as.numeric((mat2-date)/365)]
+  #winsorize by value a little
+  #[,pctl:=percent_rank(value),by=.(date,ccy)][pctl>=.01 & pctl<=.99]
+  # get rid of dates with only one ccy
+  setkey(dtl,date)
+  dtl<-dtl[dtl[,.N,by=c('date','ccy')][,.N,date][N!=1,.(date)]]
+
+  if (globaluponly){
+  # get rid of up where up doesn't have bonds in both ccys for each date
+    dtl<-filterglobaluponly(dtl)
+  }
+  
+  # next step, try to generate yield sprd at the individual bond level instead of taking avg 
+  # bring in the bbg prices
+  
+  if (adjccybs==1){
+    message('adj. for ccy basis')
+    swappricesl<-pricein[ticker %like% '^ussw' | ticker %like% '^eusz' | ticker %like% '^bpsz' | ticker %like% '^jysz' | ticker %like% '^adsz',.(date,ticker,value)] 
+  } else{ # just getting swap spread
+    swappricesl<-pricein[ticker %like% '^ussw' | ticker %like% '^eusw' | ticker %like% '^bpsw' | ticker %like% '^jysw' | ticker %like% '^adsw',.(date,ticker,value)]   
+  }
+  swappricesl<-swappricesl[ticker!='euswec' & ticker!='bpswsc'] # get rid of 3 month
+  setnames(swappricesl,'ticker','field')
+  swappricesl[,ccy:=stringr::str_sub(field,1,2)][ccy=='eu',ccy:='eur'][ccy=='us',ccy:='usd'][ccy=='bp',ccy:='gbp'][ccy=='jy',ccy:='jpy'][ccy=='ad',ccy:='aud'][,tenor:=as.numeric(str_extract(field,regex('\\d+')))]
+  #swappricesl[,.N,ticker][,.(field,tictenor=str_sub(ticker,5))] 
+  if (swappricesl[is.na(tenor),.N]!=0) warning('swappricesl has tenor not parsed')
+  setkey(swappricesl,date,ccy,tenor,field)
+  setkey(dtl,date,ccy)
+  
+  dtl[!is.na(ytm),swapyld:=intrwrap(.SD,swappricesl,.BY,interprule=approxrule),by=.(date,ccy)][swapyld==0,swapyld:=NA]
+  dtl[,value:=value*100-swapyld][,field:='yldsprd']
+  setkey(dtl,date,upcusip)
+
+  dtl<-dtl[value!='NA'] #get rid of ones that can't be interpolated for one reason or another
+  lsout<-getccyFE2(dtl,fieldstr='yldsprd',version=regversion)
+  if (returndt==1)
+    lsout
+  else
+    lsout[[1]]
+}
+getccyFE2<-function(dfin,fieldstr='OAS_SPREAD_BID',version=2,winsor=.01){
+#  dfin<-dtl2
+print(str_c('FE on field: ',fieldstr))
+  # df2<-dfin[field==fieldstr,.(date,ccy,value,upcusip,ytm,rating_bucket)]
+  df2<-dfin[field==fieldstr]
+  setkey(df2,date,upcusip,ccy)
+
+#winsorize each date
+  if (winsor!=0){
+    df2[,pctl:=percent_rank(value),by=date]
+    df2<-df2[pctl>=winsor & pctl<=(1-winsor)]
+  }
+    #get rid of days with only single observation
+  df2<-df2[date %ni% df2[,.N,by=c('date','ccy')][N==1,date]]
+
+# set alphabetical order such that dummies are on foreign ccys
+  df2[ccy=='usd',ccy:='1usd']
+        
+# introduce liquidity measure based on bond age
+    df2[,liq:=ytm/ytofm]
+    df2<-df2[liq %between% c(0,1.1)]
+    df2[liq<.5,liq_bucket:=0] # more illiq
+    df2[liq>=.5,liq_bucket:=1] # liq
+  regfun<-function(dt,regversion=1){
+      if (regversion==1){
+        # regversion 1:: run regression directly on data set without taking out bonds that do not have matching pairs
+        reg<-lm(value~ccy+upcusip,data=dt)
+      } else if (regversion==3){
+        # regversion 3: like regversion 2 but also adds maturity considerations in regression
+        reg<-lm(value~ccy+upcusip+ytm_bucket,data=dt)
+      } else if (regversion==4){
+        # regversion 4: regversion 3+ 3 rating buckets as dummies
+        reg<-lm(value~ccy+upcusip+ytm_bucket+rating_bucket,data=dt)
+      } else if (regversion==5){
+       # regversion 5: regversion 3+ 3 rating buckets as dummies
+        reg<-lm(value~ccy+upcusip+ytm_bucket+rating_bucket+sicfac,data=dt)
+      } else if (regversion==6){
+       # regversion 6, add illiqudity index
+        reg<-lm(value~ccy+upcusip+ytm_bucket+rating_bucket+sicfac+liq_bucket,data=dt)
+      } else if (regversion==7){
+       # regversion 7, like 6 but w/o sicfac
+        reg<-lm(value~ccy+upcusip+ytm_bucket+rating_bucket+liq_bucket,data=dt)
+      } else if (regversion==8){
+       # regversion 8, like 7 but only focus on liq
+        reg<-lm(value~ccy+upcusip+ytm_bucket+liq_bucket,data=dt)
+      }
+
+      data.table(ccyeur=reg$coefficients['ccyeur'],
+        ccygbp=reg$coefficients['ccygbp'],
+        ccyjpy=reg$coefficients['ccyjpy'],
+        ccyaud=reg$coefficients['ccyaud'],
+        liquid=reg$coefficients['liq_bucket'])
+  }
+
+  regcoef<-df2[,regfun(.SD,version),by='date']
+  setkey(regcoef,date)
+  lsout<-list(regcoef,df2)
+  beep()
+  lsout
+}
 icollapse3<-function(dtin,ccyA="eur",natA="Eurozone"){
   # newer version of collapsing 
   # todo: construct and use modupccy
@@ -37,56 +145,6 @@ icollapse3<-function(dtin,ccyA="eur",natA="Eurozone"){
   df_all %>% expandfulldates(.) %>%  rename(I_net_euus=I_net_fus,i_net_euus=i_net_fus) %>% as.data.table()
 }
 
-icollapse2<-function(dfin,ccyA="EUR",natA="Eurozone"){
-  # newer version of collapsing 
-  dfin<-dfin %>% as.data.table()
-  dfin[,yrmo:=as.numeric(format(d,'%Y%m'))]
-  df_fUSD<-dfin[modnat==natA & ccy=='USD',.(I_fUSD=sum(amt)/1000),by=yrmo]
-  df_usF<-dfin[modnat=='United States' & ccy==ccyA,.(I_usF=sum(amt)/1000),by=yrmo]
-  df_both<-dfin[modnat %in% c(natA,'United States') & ccy %in% c(ccyA,'USD'),.(I_both=sum(amt)/1000),by=yrmo]
-  setkey(df_fUSD,yrmo)
-  setkey(df_usF,yrmo)
-  setkey(df_both,yrmo)
-  df_all<-df_both %>% merge(df_fUSD,by='yrmo',all=TRUE) %>% merge(df_usF,by='yrmo',all=TRUE)
-  df_all[is.na(I_fUSD),I_fUSD:=0][is.na(I_usF),I_usF:=0][,date:=as.Date(str_c(yrmo,"01"),format="%Y%m%d")]
-  df_all[,I_net_fus:=I_fUSD-I_usF][,i_net_fus:=I_net_fus/I_both]
-  df_all %>% expandfulldates(.) %>%  rename(I_net_euus=I_net_fus,i_net_euus=i_net_fus) %>% as.data.table()
-}
-
-icollapse <- function(dfin,ccyA="EUR",natA="Eurozone"){
-  # dfin=df2
-  # ccyA="EUR"
-  # natA="Eurozone"
-  # 
-  # collapse into monthly aggregate flows
-  df_fUSD<-dfin %>% dplyr::tbl_df() %>% 
-    filter(modnat==natA, ccy=='USD') %>% 
-    mutate(yrmo=as.numeric(format(d,'%Y%m')),ct=1) %>% 
-    group_by(yrmo) %>% 
-    mutate(sumamt=sum(amt),weight=amt/sum(amt)) %>% 
-    summarise(amt=sum(amt)/1000, IN_fUSD=sum(ct), nrating=sum(nrating*weight),ytofm=sum(ytofm*weight)) %>% 
-    rename(I_fUSD=amt,nrating_fUSD=nrating,ytofm_fUSD=ytofm)
-  
-  df_usF<-dfin %>% dplyr::tbl_df() %>% 
-    filter(modnat=='United States', ccy==ccyA) %>% 
-    mutate(yrmo=as.numeric(format(d,'%Y%m')),ct=1) %>% 
-    group_by(yrmo) %>% 
-    mutate(sumamt=sum(amt),weight=amt/sum(amt)) %>% 
-    summarise(amt=sum(amt)/1000, IN_usF=sum(ct),nrating=sum(nrating*weight),ytofm=sum(ytofm*weight)) %>% 
-    rename(I_usF=amt,nrating_usF=nrating,ytofm_usF=ytofm)
-  
-  dfjoint<-df_fUSD %>% full_join(.,df_usF,by='yrmo') 
-  dfjoint[,c('I_usF','I_fUSD','IN_fUSD','IN_usF')]<-apply(dfjoint[,c('I_usF','I_fUSD','IN_fUSD','IN_usF')],2, function(x){replace(x,is.na(x),0)})
-  dfout<-dfjoint %>% 
-    mutate(I_net_fus=I_fUSD-I_usF,IN_fus=IN_fUSD-IN_usF) %>% 
-    mutate(date=as.Date(str_c(yrmo,"01"),format="%Y%m%d"))
-    # tidyr::gather(.,'type','value',-year) %>% 
-    # filter(type %in% c('nrating_fUSD','nrating_usF')) %>%
-    # filter(type %in% c('ytofm_fUSD','ytofm_usF')) %>%
-    # filter(type %in% c('I_fUSD','I_usEUR','I_net_fus')) %>%   
-   if (ccyA=="EUR") dfout<-filter(dfout,yrmo>200112)
-   dfout
-}
 icollapsedaily <- function(dfin,ccyA="EUR",natA="Eurozone"){
   # collapse into daily aggregate flows
   df_fUSD<-dfin %>% dplyr::tbl_df() %>% 
@@ -286,12 +344,16 @@ print(str_c('min est:',nrow(df_isins)/10000))
       })
     })
     
+   if (colnames(responsejson)==c('error')){
+      next
+    }
     diag_response[j]<-responsejson
     # extract 100x100 results at a time
     temp_isin2figi<-as.data.frame(list()) %>% tbl_df()
     if (nrow(responsejson)!=nrow(tempreq)) stop('response not mathcing request row numbers') 
     for  (i in 1:nrow(responsejson)){
       if (ncol(responsejson)==1) { # only data column
+        
         temp_isin2figi %<>% bind_rows(.,responsejson$data[i][[1]] %>% mutate(isin=tempreq$isin[i][[1]]))
       } else{ # data column and error column #####something is not right
         if (is.na(responsejson$error[i][[1]]))
@@ -457,253 +519,12 @@ winsorize<-function(dfin){
   # tempdf[pctl>=.01 & pctl<=.99]
 }
 
-
-
-resyldsprd<-function(dtlin,pricein,regversion=2){
-  # Residualize yld sprd ----------------------------------------------------
-  #create yield spread for aggregate 
-
-  dtlin[,ytm:=as.numeric((mat2-date)/365)]
-  #winsorize by value a little
-  dtl<-dtlin[field=='YLD_YTM_MID',pctl:=percent_rank(value),by=.(date,ccy)][pctl>=.01 & pctl<=.99 & field=='YLD_YTM_MID']
-  # get rid of up where up doesn't have bonds in both ccys for each date
-  tokeep<-dtl[,.N,by=c('date','upcusip','ccy')][,.N,by=c('date','upcusip')][N==2][,.(date,upcusip)]
-  setkey(tokeep,date,upcusip)
-  setkey(dtl,date,upcusip)
-  dtl<-dtl[tokeep]
-  
-  # next step, try to generate yield sprd at the individual bond level instead of taking avg 
-  # bring in the bbg prices
-  setkey(pricein,date)
-  ussw_colnames<-pricein %>% ds('ussw') %>% str_extract(regex('ussw.*')) %>% sort %>% unique
-  eusa_colnames<-pricein %>% ds('eusa') %>% str_extract(regex('eusa.*')) %>% sort %>% unique
-  swapus<-pricein[date>='1996-06-28',c('date',ussw_colnames),with=FALSE]
-  swapeu<-pricein[date>='1999-01-29',c('date',eusa_colnames),with=FALSE]
-  swapprices<-swapus %>% left_join(swapeu,by='date')
-  
-  swappricesl<-swapprices %>% melt(id.vars='date',variable.name='field')
-  swappricesl[,ccy:=stringr::str_sub(field,1,2)][ccy=='eu',ccy:='eur'][ccy=='us',ccy:='usd'][,tenor:=as.numeric(str_extract(field,regex('\\d+')))]
-  setkey(swappricesl,date,ccy,tenor,field)
-  setkey(dtl,date,ccy)
-  
-  dtl[!is.na(ytm),swapyld:=intrwrap(.SD,swappricesl,.BY),by=.(date,ccy)][swapyld==0,swapyld:=NA]
-  dtl[,value:=value*100-swapyld][,field:='yldsprd']
-  setkey(dtl,date,upcusip)
-  #dfreg<-dtl[yldsprd!='NA',.(date,ccy,upcusip,value=yldsprd,field='yldsprd',ytm,rating_bucket)]  #old 
-  dtl<-dtl[value!='NA']
-  ccyfe_yieldsprd<-getccyFE(dtl,fieldstr='yldsprd',version=regversion)
-  setnames(ccyfe_yieldsprd,'euus','euus_yldsprd')
-  ccyfe_yieldsprd
-}
-getccyFE<-function(dfin,fieldstr='OAS_SPREAD_BID',version=2,winsor=.01){
-#  dfin<-dtl2
-print(str_c('FE on field: ',fieldstr))
-  # df2<-dfin[field==fieldstr,.(date,ccy,value,upcusip,ytm,rating_bucket)]
-  df2<-dfin[field==fieldstr]
-  setkey(df2,date,upcusip,ccy)
-
-#winsorize each date
-  if (winsor!=0){
-    df2[,pctl:=percent_rank(value),by=date]
-    df2<-df2[pctl>=winsor & pctl<=(1-winsor)]
-  }
-    #get rid of days with only single observation
-  df2<-df2[date %ni% df2[,.N,by=c('date','ccy')][N==1,date]]
-
-  # version 1:: run regression directly on data set without taking out bonds that do not have matching pairs
-  if (version==1){
-    regcoef<-df2[,lm(value~ccy+upcusip,data=.SD)$coefficients['ccyusd'],by='date']
-  } else if (version==2){
-  # version 2:: FAST: get rid of price obs with only single ccy per date per upcusip; that is, obs is counted only when upcusip has both ccys
-    tokeep<-df2[,.N,by=c('date','upcusip','ccy')][,.N,by=c('date','upcusip')][N==2][,.(date,upcusip)]
-    setkey(tokeep,date,upcusip)
-    regcoef<-df2[tokeep][,lm(value~ccy+upcusip,data=.SD)$coefficients['ccyusd'],by='date']
-  } else if (version==3){
-  # version 3: like version 2 but also adds maturity considerations in regression
-    tokeep<-df2[,.N,by=c('date','upcusip','ccy')][,.N,by=c('date','upcusip')][N==2][,.(date,upcusip)]
-    setkey(tokeep,date,upcusip)
-    regcoef<-df2[tokeep][,lm(value~ccy+upcusip+ytm,data=.SD)$coefficients['ccyusd'],by='date']
-  } else if (version==3.1){
-  # version 3: like version 2 but also adds maturity considerations in regression
-    tokeep<-df2[,.N,by=c('date','upcusip','ccy')][,.N,by=c('date','upcusip')][N==2][,.(date,upcusip)]
-    setkey(tokeep,date,upcusip)
-    regcoef<-df2[tokeep][,lm(value~ccy+upcusip+ytm_bucket,data=.SD)$coefficients['ccyusd'],by='date']
-  } else if (version==4){
-  # version 4: version 3+ 3 rating buckets as dummies
-    tokeep<-df2[,.N,by=c('date','upcusip','ccy')][,.N,by=c('date','upcusip')][N==2][,.(date,upcusip)]
-    setkey(tokeep,date,upcusip)
-    regcoef<-df2[tokeep][,lm(value~ccy+upcusip+ytm_bucket+rating_bucket,data=.SD)$coefficients['ccyusd'],by='date']
-  } else if (version==5){
-  # version 4: version 3+ 3 rating buckets as dummies
-    tokeep<-df2[,.N,by=c('date','upcusip','ccy')][,.N,by=c('date','upcusip')][N==2][,.(date,upcusip)]
-    setkey(tokeep,date,upcusip)
-    regcoef<-df2[tokeep][,lm(value~ccy+upcusip+ytm_bucket+rating_bucket+sicfac,data=.SD)$coefficients['ccyusd'],by='date']
-  }
-  require(beepr)
-  beep()
-  regcoef[,`:=`(euus=-V1,V1=NULL)]
-  #save(regcoef,regcoef2,file='temp_ccyferegcoef.rdata')
-  #load(file='temp_ccyferegcoef.rdata')
-  regcoef
-}
-extractpricefromdtl<-function(dtl,fieldstr){
-  
-  # colnames<-pricein %>% ds('ussw') %>% str_extract(regex('ussw.*')) %>% sort %>% unique
-  # eusa_colnames<-pricein %>% ds('eusa') %>% str_extract(regex('eusa.*')) %>% sort %>% unique
-  # bpsw_colnames<-pricein %>% ds('bpsw') %>% str_extract(regex('bpsw.*')) %>% sort %>% unique
-  # swapus<-pricein[date>='1996-06-28',c('date',ussw_colnames),with=FALSE]
-  # swapeu<-pricein[date>='1999-01-29',c('date',eusa_colnames),with=FALSE]
-  # swapgb<-pricein[date>='1996-06-28',c('date',bpsw_colnames),with=FALSE]
-}
 filterglobaluponly<-function(dtlin){
     dtl<-copy(dtlin)
     tokeep<-dtl[,.N,by=c('date','upcusip','ccy')][,.N,by=c('date','upcusip')][N!=1][,.(date,upcusip)]
     setkey(tokeep,date,upcusip)
     setkey(dtl,date,upcusip)
     dtl[tokeep]
-}
-resyldsprdv3<-function(dtlin,pricein,regversion=2,globaluponly=1,returndt=0,approxrule=1,adjccybs=0){
-  # v3 improvement: using swap data
-  # Residualize yld sprd ----------------------------------------------------
-  #create yield spread for aggregate 
-  dtl<-copy(dtlin[field=='YLD_YTM_MID'])
-  dtl[,ytm:=as.numeric((mat2-date)/365)]
-  #winsorize by value a little
-  #[,pctl:=percent_rank(value),by=.(date,ccy)][pctl>=.01 & pctl<=.99]
-  # get rid of dates with only one ccy
-  setkey(dtl,date)
-  dtl<-dtl[dtl[,.N,by=c('date','ccy')][,.N,date][N!=1,.(date)]]
-
-  if (globaluponly){
-  # get rid of up where up doesn't have bonds in both ccys for each date
-    dtl<-filterglobaluponly(dtl)
-  }
-  
-  # next step, try to generate yield sprd at the individual bond level instead of taking avg 
-  # bring in the bbg prices
-  
-  if (adjccybs==1){
-    message('adj. for ccy basis')
-    swappricesl<-pricein[ticker %like% '^ussw' | ticker %like% '^eusz' | ticker %like% '^bpsz' | ticker %like% '^jysz' | ticker %like% '^adsz',.(date,ticker,value)] 
-  } else{ # just getting swap spread
-    swappricesl<-pricein[ticker %like% '^ussw' | ticker %like% '^eusw' | ticker %like% '^bpsw' | ticker %like% '^jysw' | ticker %like% '^adsw',.(date,ticker,value)]   
-  }
-  swappricesl<-swappricesl[ticker!='euswec' & ticker!='bpswsc'] # get rid of 3 month
-  setnames(swappricesl,'ticker','field')
-  swappricesl[,ccy:=stringr::str_sub(field,1,2)][ccy=='eu',ccy:='eur'][ccy=='us',ccy:='usd'][ccy=='bp',ccy:='gbp'][ccy=='jy',ccy:='jpy'][ccy=='ad',ccy:='aud'][,tenor:=as.numeric(str_extract(field,regex('\\d+')))]
-  #swappricesl[,.N,ticker][,.(field,tictenor=str_sub(ticker,5))] 
-  if (swappricesl[is.na(tenor),.N]!=0) warning('swappricesl has tenor not parsed')
-  setkey(swappricesl,date,ccy,tenor,field)
-  setkey(dtl,date,ccy)
-  
-  dtl[!is.na(ytm),swapyld:=intrwrap(.SD,swappricesl,.BY,interprule=approxrule),by=.(date,ccy)][swapyld==0,swapyld:=NA]
-  dtl[,value:=value*100-swapyld][,field:='yldsprd']
-  setkey(dtl,date,upcusip)
-
-  dtl<-dtl[value!='NA'] #get rid of ones that can't be interpolated for one reason or another
-  lsout<-getccyFE2(dtl,fieldstr='yldsprd',version=regversion)
-  if (returndt==1)
-    lsout
-  else
-    lsout[[1]]
-}
-resyldsprdv2<-function(dtlin,pricein,regversion=2,globaluponly=1,returndt=0){
-  # Residualize yld sprd ----------------------------------------------------
-  #create yield spread for aggregate 
-  dtl<-copy(dtlin[field=='YLD_YTM_MID'])
-  dtl[,ytm:=as.numeric((mat2-date)/365)]
-  #winsorize by value a little
-  #[,pctl:=percent_rank(value),by=.(date,ccy)][pctl>=.01 & pctl<=.99]
-  # get rid of dates with only one ccy
-  setkey(dtl,date)
-  dtl<-dtl[dtl[,.N,by=c('date','ccy')][,.N,date][N!=1,.(date)]]
-
-  if (globaluponly){
-  # get rid of up where up doesn't have bonds in both ccys for each date
-    dtl<-filterglobaluponly(dtl)
-  }
-  
-  # next step, try to generate yield sprd at the individual bond level instead of taking avg 
-  # bring in the bbg prices
-  swappricesl<-pricein[ticker %like% '^ussw' | ticker %like% '^eusa' | ticker %like% '^bpsw' | ticker %like% '^jysw' | ticker %like% '^adsw',.(date,ticker,value)] 
-  setnames(swappricesl,'ticker','field')
-  swappricesl[,ccy:=stringr::str_sub(field,1,2)][ccy=='eu',ccy:='eur'][ccy=='us',ccy:='usd'][ccy=='bp',ccy:='gbp'][ccy=='jy',ccy:='jpy'][ccy=='ad',ccy:='aud'][,tenor:=as.numeric(str_extract(field,regex('\\d+')))]
-  #swappricesl[,.N,ticker][,.(field,tictenor=str_sub(ticker,5))] 
-  swappricesl[field=='bpswsc',tenor:=.25]
-  if (swappricesl[is.na(tenor),.N]!=0) warning('swappricesl has tenor not parsed')
-  setkey(swappricesl,date,ccy,tenor,field)
-  setkey(dtl,date,ccy)
-  
-  dtl[!is.na(ytm),swapyld:=intrwrap(.SD,swappricesl,.BY),by=.(date,ccy)][swapyld==0,swapyld:=NA]
-  dtl[,value:=value*100-swapyld][,field:='yldsprd']
-  setkey(dtl,date,upcusip)
-
-  dtl<-dtl[value!='NA'] #get rid of ones that can't be interpolated for one reason or another
-  lsout<-getccyFE2(dtl,fieldstr='yldsprd',version=regversion)
-  if (returndt==1)
-    lsout
-  else
-    lsout[[1]]
-}
-getccyFE2<-function(dfin,fieldstr='OAS_SPREAD_BID',version=2,winsor=.01){
-#  dfin<-dtl2
-print(str_c('FE on field: ',fieldstr))
-  # df2<-dfin[field==fieldstr,.(date,ccy,value,upcusip,ytm,rating_bucket)]
-  df2<-dfin[field==fieldstr]
-  setkey(df2,date,upcusip,ccy)
-
-#winsorize each date
-  if (winsor!=0){
-    df2[,pctl:=percent_rank(value),by=date]
-    df2<-df2[pctl>=winsor & pctl<=(1-winsor)]
-  }
-    #get rid of days with only single observation
-  df2<-df2[date %ni% df2[,.N,by=c('date','ccy')][N==1,date]]
-
-# set alphabetical order such that dummies are on foreign ccys
-  df2[ccy=='usd',ccy:='1usd']
-        
-# introduce liquidity measure based on bond age
-    df2[,liq:=ytm/ytofm]
-    df2<-df2[liq %between% c(0,1.1)]
-    df2[liq<.5,liq_bucket:=0] # more illiq
-    df2[liq>=.5,liq_bucket:=1] # liq
-  regfun<-function(dt,regversion=1){
-      if (regversion==1){
-        # regversion 1:: run regression directly on data set without taking out bonds that do not have matching pairs
-        reg<-lm(value~ccy+upcusip,data=dt)
-      } else if (regversion==3){
-        # regversion 3: like regversion 2 but also adds maturity considerations in regression
-        reg<-lm(value~ccy+upcusip+ytm_bucket,data=dt)
-      } else if (regversion==4){
-        # regversion 4: regversion 3+ 3 rating buckets as dummies
-        reg<-lm(value~ccy+upcusip+ytm_bucket+rating_bucket,data=dt)
-      } else if (regversion==5){
-       # regversion 5: regversion 3+ 3 rating buckets as dummies
-        reg<-lm(value~ccy+upcusip+ytm_bucket+rating_bucket+sicfac,data=dt)
-      } else if (regversion==6){
-       # regversion 6, add illiqudity index
-        reg<-lm(value~ccy+upcusip+ytm_bucket+rating_bucket+sicfac+liq_bucket,data=dt)
-      } else if (regversion==7){
-       # regversion 7, like 6 but w/o sicfac
-        reg<-lm(value~ccy+upcusip+ytm_bucket+rating_bucket+liq_bucket,data=dt)
-      } else if (regversion==8){
-       # regversion 8, like 7 but only focus on liq
-        reg<-lm(value~ccy+upcusip+ytm_bucket+liq_bucket,data=dt)
-      }
-
-      data.table(ccyeur=reg$coefficients['ccyeur'],
-        ccygbp=reg$coefficients['ccygbp'],
-        ccyjpy=reg$coefficients['ccyjpy'],
-        ccyaud=reg$coefficients['ccyaud'],
-        liquid=reg$coefficients['liq_bucket'])
-  }
-
-  regcoef<-df2[,regfun(.SD,version),by='date']
-  setkey(regcoef,date)
-  lsout<-list(regcoef,df2)
-  beep()
-  lsout
 }
 
 bucketrating<-function(dtlin){
@@ -747,6 +568,13 @@ dtout %<>% filter(
 dtout %>% as.data.table()
 }
 
+prlbbgenhance<-function(dtin){
+  dtout<-dtin
+  dtout[,ticker:=str_extract(parsekeyable,regex('.*(?= Curncy)'))]
+  dtout[ticker %like% '??sw' | ticker %like% 'eusa',value:=value*100]
+  dtout
+}
+
 
 downloadbbg<-function(tickers,filestr=str_c('bbg_',today(),'.RData'),startdt=ymd('1996-01-01'),periodstr='MONTHLY',fieldstr='PX_LAST',splitN=1){
   require(Rblpapi)
@@ -755,28 +583,47 @@ downloadbbg<-function(tickers,filestr=str_c('bbg_',today(),'.RData'),startdt=ymd
   } else{
     tickers<-data.table('parsekeyable'=tickers)
   }
-  tickers$batchfactor<-sample(1:splitN,size=nrow(tickers),replace=T)
-  tickerslist<-split(as.character(tickers$parsekeyable),tickers$batchfactor)
-  opt <- c("periodicitySelection"=periodstr)
+
+  if (ticker[1]=='restart'){ # if ticker=='restart', then restart using temp_bbgdownload_restart.RData file
+    load('temp_bbgdownload_restart.RData')
+    istart<-i
+    message('restarting from batch ',i, ' out of total ',splitN)
+  } else{ # regular new download
+    tickers$batchfactor<-sample(1:splitN,size=nrow(tickers),replace=T)
+    tickerslist<-split(as.character(tickers$parsekeyable),tickers$batchfactor)
+    opt <- c("periodicitySelection"=periodstr)
+    istart<-1
+  }
+
   con <- Rblpapi::blpConnect()     # automatic if option("blpAutoConnect") is TRUE
   prices<-list()
-  for (i in 1:splitN) {
+  for (i in istart:splitN) {
     print(i)
-    prices[[i]]<-bdh(tickerslist[[i]], fieldstr, start.date=startdt, options=opt)  
-    save(prices,tickers,tickerslist,i,file=str_c('temp_',filestr))
+    tryCatch(
+      prices[[i]]<-bdh(tickerslist[[i]], fieldstr, start.date=startdt, options=opt),
+      finally={
+        message('Limit Hit on ', i, ' consider restarting download on another machine or another day')
+        save(prices,tickers,tickerslist,i,fieldstr,startdt,opt,splitN,file='temp_bbgdownload_restart.RData')
+        blpDisconnect(con)      
+        return(NA)
+      }
+    )
+    # will remove this following line later
+    save(prices,tickers,tickerslist,i,fieldstr,startdt,opt,splitN,file=str_c('temp_',filestr))
   }
   blpDisconnect(con)
   save(prices,file=filestr)
-  #loadBBGdownload2df(filestr)
+  loadBBGdownload2df(filestr)
 }
 
-update.dt<-function(dtA,dtB,keyfield='auto',updatefield='auto',insertnewrow=TRUE,override=FALSE){
+update.dt<-function(dtA,dtB,keyfield='auto',updatefield='auto',insertnewrow=TRUE,override=FALSE,diagnostic_rt=FALSE){
   # this function allows easy addition and update of columns; adding new rows require insertnewrow=TRUE
   # update will override existing values currently; ideally want update on NA, do nothing on records where update is the same as original, and split out differentiated records where original value!=update value
   
   dtA<-copy(dtA)
   dtB<-copy(dtB)
   keyoriginal<-key(dtA)
+  conflist<-list()
   if (keyfield=='auto') keyfield<-keyoriginal
   print(str_c('Keyfield: ',paste(keyfield,collapse=' ')))
   setkeyv(dtA,keyfield)
@@ -803,6 +650,7 @@ update.dt<-function(dtA,dtB,keyfield='auto',updatefield='auto',insertnewrow=TRUE
       #if (override) warning('overriding:') else warning('skiping:')
       #print(problemdt[,c(keyfield,lhs[j],rhs[j]),with=FALSE])
       message('\n',print_and_capture(problemdt[,c(keyfield,lhs[j],rhs[j]),with=FALSE]))
+      conflist[[length(conflist)+1]]<-problemdt[,c(keyfield,lhs[j],rhs[j]),with=FALSE]
     }
 
     if (override){
@@ -827,7 +675,12 @@ update.dt<-function(dtA,dtB,keyfield='auto',updatefield='auto',insertnewrow=TRUE
     message(str_c('Rows inserted: ',rowinsert[,.N]))
   }
   setkeyv(dtA,keyoriginal)
-  dtA
+  if (diagnostic_rt){
+    list(dtA,conflist)
+  } else {
+    dtA  
+  }
+  
 }
 exparse<-function(strin){parse(text=strin)}
 print_and_capture <- function(x)
@@ -841,3 +694,190 @@ resave <- function(..., list = character(), file) {
    for (var in var.names) assign(var, get(var, envir = parent.frame()))
    save(list = unique(c(previous, var.names)), file = file)
 }
+
+checkcnexist<-function(dtold,dtadd){
+# check whick colnames in dtadd do not exists in dtold
+  cnexist<-dtold %>% ds()
+  cnadd<-dtadd %>% ds()
+  cnadd[cnadd %ni% cnexist]
+}
+
+# old/defunct
+
+# icollapse2<-function(dfin,ccyA="EUR",natA="Eurozone"){
+#   # newer version of collapsing 
+#   dfin<-dfin %>% as.data.table()
+#   dfin[,yrmo:=as.numeric(format(d,'%Y%m'))]
+#   df_fUSD<-dfin[modnat==natA & ccy=='USD',.(I_fUSD=sum(amt)/1000),by=yrmo]
+#   df_usF<-dfin[modnat=='United States' & ccy==ccyA,.(I_usF=sum(amt)/1000),by=yrmo]
+#   df_both<-dfin[modnat %in% c(natA,'United States') & ccy %in% c(ccyA,'USD'),.(I_both=sum(amt)/1000),by=yrmo]
+#   setkey(df_fUSD,yrmo)
+#   setkey(df_usF,yrmo)
+#   setkey(df_both,yrmo)
+#   df_all<-df_both %>% merge(df_fUSD,by='yrmo',all=TRUE) %>% merge(df_usF,by='yrmo',all=TRUE)
+#   df_all[is.na(I_fUSD),I_fUSD:=0][is.na(I_usF),I_usF:=0][,date:=as.Date(str_c(yrmo,"01"),format="%Y%m%d")]
+#   df_all[,I_net_fus:=I_fUSD-I_usF][,i_net_fus:=I_net_fus/I_both]
+#   df_all %>% expandfulldates(.) %>%  rename(I_net_euus=I_net_fus,i_net_euus=i_net_fus) %>% as.data.table()
+# }
+
+# icollapse <- function(dfin,ccyA="EUR",natA="Eurozone"){
+#   # dfin=df2
+#   # ccyA="EUR"
+#   # natA="Eurozone"
+#   # 
+#   # collapse into monthly aggregate flows
+#   df_fUSD<-dfin %>% dplyr::tbl_df() %>% 
+#     filter(modnat==natA, ccy=='USD') %>% 
+#     mutate(yrmo=as.numeric(format(d,'%Y%m')),ct=1) %>% 
+#     group_by(yrmo) %>% 
+#     mutate(sumamt=sum(amt),weight=amt/sum(amt)) %>% 
+#     summarise(amt=sum(amt)/1000, IN_fUSD=sum(ct), nrating=sum(nrating*weight),ytofm=sum(ytofm*weight)) %>% 
+#     rename(I_fUSD=amt,nrating_fUSD=nrating,ytofm_fUSD=ytofm)
+  
+#   df_usF<-dfin %>% dplyr::tbl_df() %>% 
+#     filter(modnat=='United States', ccy==ccyA) %>% 
+#     mutate(yrmo=as.numeric(format(d,'%Y%m')),ct=1) %>% 
+#     group_by(yrmo) %>% 
+#     mutate(sumamt=sum(amt),weight=amt/sum(amt)) %>% 
+#     summarise(amt=sum(amt)/1000, IN_usF=sum(ct),nrating=sum(nrating*weight),ytofm=sum(ytofm*weight)) %>% 
+#     rename(I_usF=amt,nrating_usF=nrating,ytofm_usF=ytofm)
+  
+#   dfjoint<-df_fUSD %>% full_join(.,df_usF,by='yrmo') 
+#   dfjoint[,c('I_usF','I_fUSD','IN_fUSD','IN_usF')]<-apply(dfjoint[,c('I_usF','I_fUSD','IN_fUSD','IN_usF')],2, function(x){replace(x,is.na(x),0)})
+#   dfout<-dfjoint %>% 
+#     mutate(I_net_fus=I_fUSD-I_usF,IN_fus=IN_fUSD-IN_usF) %>% 
+#     mutate(date=as.Date(str_c(yrmo,"01"),format="%Y%m%d"))
+#     # tidyr::gather(.,'type','value',-year) %>% 
+#     # filter(type %in% c('nrating_fUSD','nrating_usF')) %>%
+#     # filter(type %in% c('ytofm_fUSD','ytofm_usF')) %>%
+#     # filter(type %in% c('I_fUSD','I_usEUR','I_net_fus')) %>%   
+#    if (ccyA=="EUR") dfout<-filter(dfout,yrmo>200112)
+#    dfout
+# }
+
+# resyldsprdv2<-function(dtlin,pricein,regversion=2,globaluponly=1,returndt=0){
+#   # Residualize yld sprd ----------------------------------------------------
+#   #create yield spread for aggregate 
+#   dtl<-copy(dtlin[field=='YLD_YTM_MID'])
+#   dtl[,ytm:=as.numeric((mat2-date)/365)]
+#   #winsorize by value a little
+#   #[,pctl:=percent_rank(value),by=.(date,ccy)][pctl>=.01 & pctl<=.99]
+#   # get rid of dates with only one ccy
+#   setkey(dtl,date)
+#   dtl<-dtl[dtl[,.N,by=c('date','ccy')][,.N,date][N!=1,.(date)]]
+
+#   if (globaluponly){
+#   # get rid of up where up doesn't have bonds in both ccys for each date
+#     dtl<-filterglobaluponly(dtl)
+#   }
+  
+#   # next step, try to generate yield sprd at the individual bond level instead of taking avg 
+#   # bring in the bbg prices
+#   swappricesl<-pricein[ticker %like% '^ussw' | ticker %like% '^eusa' | ticker %like% '^bpsw' | ticker %like% '^jysw' | ticker %like% '^adsw',.(date,ticker,value)] 
+#   setnames(swappricesl,'ticker','field')
+#   swappricesl[,ccy:=stringr::str_sub(field,1,2)][ccy=='eu',ccy:='eur'][ccy=='us',ccy:='usd'][ccy=='bp',ccy:='gbp'][ccy=='jy',ccy:='jpy'][ccy=='ad',ccy:='aud'][,tenor:=as.numeric(str_extract(field,regex('\\d+')))]
+#   #swappricesl[,.N,ticker][,.(field,tictenor=str_sub(ticker,5))] 
+#   swappricesl[field=='bpswsc',tenor:=.25]
+#   if (swappricesl[is.na(tenor),.N]!=0) warning('swappricesl has tenor not parsed')
+#   setkey(swappricesl,date,ccy,tenor,field)
+#   setkey(dtl,date,ccy)
+  
+#   dtl[!is.na(ytm),swapyld:=intrwrap(.SD,swappricesl,.BY),by=.(date,ccy)][swapyld==0,swapyld:=NA]
+#   dtl[,value:=value*100-swapyld][,field:='yldsprd']
+#   setkey(dtl,date,upcusip)
+
+#   dtl<-dtl[value!='NA'] #get rid of ones that can't be interpolated for one reason or another
+#   lsout<-getccyFE2(dtl,fieldstr='yldsprd',version=regversion)
+#   if (returndt==1)
+#     lsout
+#   else
+#     lsout[[1]]
+# }
+
+# resyldsprd<-function(dtlin,pricein,regversion=2){
+#   # Residualize yld sprd ----------------------------------------------------
+#   #create yield spread for aggregate 
+
+#   dtlin[,ytm:=as.numeric((mat2-date)/365)]
+#   #winsorize by value a little
+#   dtl<-dtlin[field=='YLD_YTM_MID',pctl:=percent_rank(value),by=.(date,ccy)][pctl>=.01 & pctl<=.99 & field=='YLD_YTM_MID']
+#   # get rid of up where up doesn't have bonds in both ccys for each date
+#   tokeep<-dtl[,.N,by=c('date','upcusip','ccy')][,.N,by=c('date','upcusip')][N==2][,.(date,upcusip)]
+#   setkey(tokeep,date,upcusip)
+#   setkey(dtl,date,upcusip)
+#   dtl<-dtl[tokeep]
+  
+#   # next step, try to generate yield sprd at the individual bond level instead of taking avg 
+#   # bring in the bbg prices
+#   setkey(pricein,date)
+#   ussw_colnames<-pricein %>% ds('ussw') %>% str_extract(regex('ussw.*')) %>% sort %>% unique
+#   eusa_colnames<-pricein %>% ds('eusa') %>% str_extract(regex('eusa.*')) %>% sort %>% unique
+#   swapus<-pricein[date>='1996-06-28',c('date',ussw_colnames),with=FALSE]
+#   swapeu<-pricein[date>='1999-01-29',c('date',eusa_colnames),with=FALSE]
+#   swapprices<-swapus %>% left_join(swapeu,by='date')
+  
+#   swappricesl<-swapprices %>% melt(id.vars='date',variable.name='field')
+#   swappricesl[,ccy:=stringr::str_sub(field,1,2)][ccy=='eu',ccy:='eur'][ccy=='us',ccy:='usd'][,tenor:=as.numeric(str_extract(field,regex('\\d+')))]
+#   setkey(swappricesl,date,ccy,tenor,field)
+#   setkey(dtl,date,ccy)
+  
+#   dtl[!is.na(ytm),swapyld:=intrwrap(.SD,swappricesl,.BY),by=.(date,ccy)][swapyld==0,swapyld:=NA]
+#   dtl[,value:=value*100-swapyld][,field:='yldsprd']
+#   setkey(dtl,date,upcusip)
+#   #dfreg<-dtl[yldsprd!='NA',.(date,ccy,upcusip,value=yldsprd,field='yldsprd',ytm,rating_bucket)]  #old 
+#   dtl<-dtl[value!='NA']
+#   ccyfe_yieldsprd<-getccyFE(dtl,fieldstr='yldsprd',version=regversion)
+#   setnames(ccyfe_yieldsprd,'euus','euus_yldsprd')
+#   ccyfe_yieldsprd
+# }
+# getccyFE<-function(dfin,fieldstr='OAS_SPREAD_BID',version=2,winsor=.01){
+# #  dfin<-dtl2
+# print(str_c('FE on field: ',fieldstr))
+#   # df2<-dfin[field==fieldstr,.(date,ccy,value,upcusip,ytm,rating_bucket)]
+#   df2<-dfin[field==fieldstr]
+#   setkey(df2,date,upcusip,ccy)
+
+# #winsorize each date
+#   if (winsor!=0){
+#     df2[,pctl:=percent_rank(value),by=date]
+#     df2<-df2[pctl>=winsor & pctl<=(1-winsor)]
+#   }
+#     #get rid of days with only single observation
+#   df2<-df2[date %ni% df2[,.N,by=c('date','ccy')][N==1,date]]
+
+#   # version 1:: run regression directly on data set without taking out bonds that do not have matching pairs
+#   if (version==1){
+#     regcoef<-df2[,lm(value~ccy+upcusip,data=.SD)$coefficients['ccyusd'],by='date']
+#   } else if (version==2){
+#   # version 2:: FAST: get rid of price obs with only single ccy per date per upcusip; that is, obs is counted only when upcusip has both ccys
+#     tokeep<-df2[,.N,by=c('date','upcusip','ccy')][,.N,by=c('date','upcusip')][N==2][,.(date,upcusip)]
+#     setkey(tokeep,date,upcusip)
+#     regcoef<-df2[tokeep][,lm(value~ccy+upcusip,data=.SD)$coefficients['ccyusd'],by='date']
+#   } else if (version==3){
+#   # version 3: like version 2 but also adds maturity considerations in regression
+#     tokeep<-df2[,.N,by=c('date','upcusip','ccy')][,.N,by=c('date','upcusip')][N==2][,.(date,upcusip)]
+#     setkey(tokeep,date,upcusip)
+#     regcoef<-df2[tokeep][,lm(value~ccy+upcusip+ytm,data=.SD)$coefficients['ccyusd'],by='date']
+#   } else if (version==3.1){
+#   # version 3: like version 2 but also adds maturity considerations in regression
+#     tokeep<-df2[,.N,by=c('date','upcusip','ccy')][,.N,by=c('date','upcusip')][N==2][,.(date,upcusip)]
+#     setkey(tokeep,date,upcusip)
+#     regcoef<-df2[tokeep][,lm(value~ccy+upcusip+ytm_bucket,data=.SD)$coefficients['ccyusd'],by='date']
+#   } else if (version==4){
+#   # version 4: version 3+ 3 rating buckets as dummies
+#     tokeep<-df2[,.N,by=c('date','upcusip','ccy')][,.N,by=c('date','upcusip')][N==2][,.(date,upcusip)]
+#     setkey(tokeep,date,upcusip)
+#     regcoef<-df2[tokeep][,lm(value~ccy+upcusip+ytm_bucket+rating_bucket,data=.SD)$coefficients['ccyusd'],by='date']
+#   } else if (version==5){
+#   # version 4: version 3+ 3 rating buckets as dummies
+#     tokeep<-df2[,.N,by=c('date','upcusip','ccy')][,.N,by=c('date','upcusip')][N==2][,.(date,upcusip)]
+#     setkey(tokeep,date,upcusip)
+#     regcoef<-df2[tokeep][,lm(value~ccy+upcusip+ytm_bucket+rating_bucket+sicfac,data=.SD)$coefficients['ccyusd'],by='date']
+#   }
+#   require(beepr)
+#   beep()
+#   regcoef[,`:=`(euus=-V1,V1=NULL)]
+#   #save(regcoef,regcoef2,file='temp_ccyferegcoef.rdata')
+#   #load(file='temp_ccyferegcoef.rdata')
+#   regcoef
+# }

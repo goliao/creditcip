@@ -178,12 +178,13 @@ dtl<-update.dt(dtl,audbondpricesadd)
 rm(list=ls(all=TRUE))
 source('util.r')
 load('gldb.RData')
-refadd<-fread('bondrefadd.csv')[isin!='#N/A Field Not Applicable']
-refadd2<-fread('bondrefadd2.csv')[isin!='#N/A Field Not Applicable']
+refadd<-fread('bondrefadd.csv',integer64='numeric')[isin!='#N/A Field Not Applicable']
+refadd2<-fread('bondrefadd2.csv',integer64 = 'numeric')[isin!='#N/A Field Not Applicable']
 setnames(refadd,'issue_dt','d')
-refadd[,ccy:=tolower(ccy)][,d:=mdy(d)][,amt:=as.numeric(amt)]
+refadd[,amt:=amt/10^6]
+refadd[,ccy:=tolower(ccy)][,d:=mdy(d)]
 refadd2[,ccy:=tolower(ccy)]
-bondref<-update.dt(bondref,refadd,keyfield = 'isin')
+bondref<-update.dt(bondref,refadd,keyfield = 'isin',override = TRUE)
 bondref<-update.dt(bondref,refadd2,keyfield = 'isin')
 bondref<-update.dt(bondref,pifigi,keyfield = 'isin')
 
@@ -316,6 +317,20 @@ rm(list=ls(all=TRUE));source('util.r');load('gldb.RData')
 # # gen eusz=eusw
 # prl[ticker %like% '^eusa',.(ticker)] %>% distinct(ticker)
 # prl[ticker %like% '^eubsv',.(ticker)] %>% distinct(ticker)
+bradd1<-fread('bondrefadd.csv',integer64='numeric')
+checkcnexist(bondref,bradd1)
+setnames(bradd1,'issue_dt','d')
+bondref<-update.dt(bondref,bradd1,keyfield='parsekeyable')
+
+# get figi data
+source('util.r')
+charSummary(bondref)
+figis2request<-bondref[is.na(figi) & !is.na(isin),.(isin)]
+figiaddinfo<-figis2request %>% sample_frac(1) %>% requestfigibyisin(.)
+#load(file='temp_dfisinfigi.rdata')
+dtadd<-figiaddinfo[[1]] %>% as.data.table()
+bondref<-update.dt(bondref,dtadd, keyfield = 'isin')
+#resave(bondref,file='gldb.RData')
 
 
 # bondref data maintainance -----------------------------------------------
@@ -350,3 +365,49 @@ setkey(bondref,isin,parsekeyable)
 resave(bondref,file='gldb.RData')
 
 
+# way too messy to try to get upcusip information based on name identifier, due to mergers, etc
+# charSummary(bondref)
+# br2_upmiss<-br2[is.na(upcusip)]
+# br2_upmiss[!is.na(name)]
+# brupadd<-br2_upmiss[,.(name)] %>% distinct()
+# uplookup<-bondref[,.(name,upcusip)] %>% distinct()
+# m2<-update.dt(brupadd,uplookup,keyfield = c('name')) 
+# nameupcusip<-m2[!is.na(name) & !is.na(upcusip)]
+# aa<-update.dt(br2,nameupcusip,keyfield = 'name',insertnewrow = FALSE,diagnostic_rt = TRUE)
+# 
+# aa[[2]]
+# 
+# bb<-bondref[,.(cu,name)] %>% distinct(cu)
+# cc<-merge(aa[[2]],bb,by.x='upcusip',by.y='cu')
+# cc %>% View
+
+#setwd('E:/')
+rm(list=ls(all=TRUE));source('util.r');load('gldb.RData')
+# br<-issfilter(bondref %>% as.data.frame())
+# [!is.na(amt),.(amtT=sum(amt)/1000000),by=ccy][order(-amtT)]
+#cadchfparkey<-fread('cadchfbonds2download160623.csv',header=T,sep=',')
+#some download script
+#save(cadchfbonds,file='bbg_cadchfbonds_160623_final.RData')
+load('bbg_cadchfbonds_160623_final.RData')
+cadchfbonds[,batch:=6]
+dtl<-update.dt(dtl,cadchfbonds,keyfield = c('date','parsekeyable','field'))
+#resave(dtl,file='gldb.RData')
+pfigiadd<-fread('parsekeyablemap2figi_160624.csv')
+setnames(pfigiadd,'FIGI','figi')
+bondref[!is.na(deal_no),sdcloaded:=1]
+bondref[!is.na(figi),figiloaded:=1]
+bondref<-update.dt(bondref,pfigiadd,keyfield = c('figi'))
+pisinadd<-fread('tempisinmap.csv')[isin!='#N/A Field Not Applicable']
+bondref<-update.dt(bondref,pisinadd,keyfield = 'parsekeyable')
+#resave(bondref,file='gldb.RData')
+
+#setwd('E:')
+rm(list=ls(all=TRUE));source('util.r');load('gldb.RData')
+
+#downloadbbg(ticker$parsekeyable,filestr='bbg_swapadd_160624_2.RData',fieldstr = 'PX_LAST',startdt =ymd('1996-01-01'),splitN = 1)
+prladd<-loadBBGdownload2df('bbg_swapadd_160624.RData')
+prladd2<-loadBBGdownload2df('bbg_swapadd_160624_2.RData')
+prladd
+
+load('todownloaddaily.RData')
+#downloadbbg(todownloaddaily$parsekeyable,filestr='bbg_dailybondsadd_160624.RData',periodstr='DAILY',fieldstr = 'YLD_YTM_MID',startdt =ymd('2002-01-01'),splitN = 25)

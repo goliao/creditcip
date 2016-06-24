@@ -1,3 +1,5 @@
+setwd("/Users/gliao/Dropbox/Research/ccy basis/creditmigration")
+
 # # New merge: price with sdc -----------------------------------------------
 # rm(list=ls(all=TRUE));load('gldb.RDATA')
 # source('util.r')
@@ -29,10 +31,10 @@
 # prw<-prw[date!='2016-02-25']
 # save(br,dtl3,prl,prw,file='dtclean.RData')
 # save.image('dtclean.RData')
-
 rm(list=ls(all=TRUE));
 load('dtclean.RData')
-source('util.r');require(ggthemes)
+source('util.r');
+
 
 
 dtl3[,liq:=ytm/ytofm]
@@ -51,7 +53,7 @@ ys1liq[ys1iliq][,.(date,liquid,i.liquid)] %>% ggplotw()
 ys1<-resyldsprdv3(dtl3,prl,regversion=8)
 
 #ys0<-resyldsprdv2(dtl3,prl,regversion=6) # swap spread only w/o 3s6s adj.
-ys1<-resyldsprdv3(dtl3,prl,regversion=6)
+ys1<-resyldsprdv3(dtl3,prl,regversion=6,returndt=1)
 ys1nf<-resyldsprdv3(dtl3[sic1!=6],prl,regversion=6)
 ys2<-resyldsprdv3(dtl3,prl,regversion=6,adjccybs = 1)
 
@@ -88,6 +90,13 @@ ys1[prw][date>'2004-01-01',.(date,ccyaud,adbs5)] %>% ggplotw()
 ys2[,.(date,ccyeur)] %>% ggplotw()
 ys2 %>% write.dta('temp_ys.dta')
 
+
+yshg<-resyldsprdv3(dtl3[nrating %between% c(1,6)],prl,regversion=3)
+yshy<-resyldsprdv3(dtl3[nrating>6],prl,regversion=3)
+yshg[yshy][,.(date,ccyeur,i.ccyeur)] %>% ggplotw()
+yshg[yshy][,.(date,ccyjpy,i.ccyjpy)] %>% ggplotw()
+yshg[yshy][,.(date,ccygbp,i.ccygbp)] %>% ggplotw()
+yshg[yshy][,.(date,ccyaud,i.ccyaud)] %>% ggplotw()
 
 ys2[,.(date,ccyjpy)] %>% ggplotw()
 
