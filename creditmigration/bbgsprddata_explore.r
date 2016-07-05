@@ -1,46 +1,54 @@
 setwd("/Users/gliao/Dropbox/Research/ccy basis/creditmigration")
 
 # # New merge: price with sdc -----------------------------------------------
-# rm(list=ls(all=TRUE));load('gldb.RDATA')
-# source('util.r')
-# br<-bondref[!is.na(parsekeyable)] %>% issfilter(.)
-# br %<>% semi_join(dtl,by='parsekeyable')
-# 
-# # MERGE RATING AND ADD MATURITY BUCKETS -----------------------------------
-# setkey(dtl,parsekeyable);setkey(br,parsekeyable)
-# dtl2<-dtl[br[,.(ccy,mat2,rating,nrating,upcusip,parsekeyable,isin,ytofm,sicfac,sic1)],nomatch=0]
-# dtl2[,ytm:=as.numeric((mat2-date)/365)]
-# dtl3<-dtl2[ytm >.05]
-# dtl3[is.na(nrating),nrating:=0];dtl3[ccy=='sek',ccy:='eur']
-# dtl3<-dtl3[field=='YLD_YTM_MID']
-# dtl3<-dtl3 %>% bucketrating() %>% bucketytm()
-# prl<-prl[date>'2002-01-01']
-# prw<-prl %>% distinct() %>% data.table::dcast(.,date~ticker,value.var = 'value')
-# dtl3<-dtl3[date>'2004-01-01']
-# 
-# 
-# # gen eusw=eusa-eubsv
-# # gen eusz=eusw+eubs
-# prw[,`:=`(eusw1=eusa1-eubsv1,eusw10=eusa10-eubsv10,eusw12=eusa12-eubsv12,eusw15=eusa15-eubsv15,eusw2=eusa2-eubsv2,eusw20=eusa20-eubsv20,eusw30=eusa30-eubsv30,eusw5=eusa5-eubsv5,eusw7=eusa7-eubsv7)]
-# prw[,`:=`(eusz10=eusw10+eubs10,eusz12=eusw12+eubs12,eusz15=eusw15+eubs15,eusz2=eusw2+eubs2,eusz20=eusw20+eubs20,eusz30=eusw30+eubs30,eusz5=eusw5+eubs5,eusz7=eusw7+eubs7,eusz1=eusw1+eubs1)]
-# prw[,`:=`(jysz10=jysw10+jybs10,jysz12=jysw12+jybs12,jysz15=jysw15+jybs15,jysz2=jysw2+jybs2,jysz20=jysw20+jybs20,jysz30=jysw30+jybs30,jysz5=jysw5+jybs5,jysz7=jysw7+jybs7,jysz1=jysw1+jybs1)]
-# prw[,`:=`(bpsz10=bpsw10+bpbs10,bpsz12=bpsw12+bpbs12,bpsz15=bpsw15+bpbs15,bpsz2=bpsw2+bpbs2,bpsz20=bpsw20+bpbs20,bpsz30=bpsw30+bpbs30,bpsz5=bpsw5+bpbs5,bpsz7=bpsw7+bpbs7,bpsz1=bpsw1+bpbs1)]
-# prw[,`:=`(adsz1=adsw1+adbs1,adsz10=adsw10+adbs10,adsz2=adsw2+adbs2,adsz5=adsw5+adbs5,adsz7=adsw7+adbs7,adsz15=adsw15+adbs15,adsz20=adsw20+adbs20,adsz12=adsw12+adbs12,adsz30=adsw30+adbs30)]
-# # transform prw back to prl
-# prl<-data.table::melt(prw,id.vars='date',variable.name='ticker')[date!='2016-02-25']
-# prw<-prw[date!='2016-02-25']
-# save(br,dtl3,prl,prw,file='dtclean.RData')
-# save.image('dtclean.RData')
-rm(list=ls(all=TRUE));
-load('dtclean.RData')
-source('util.r');
+rm(list=ls(all=TRUE));load('gldb.RData')
+source('util.r')
+dtm<-preprocess(bondref,dtl,prl)
+# dtm2<-preprocess2(bondref,dtl,prl)
+# dtm2$ys1<-resyldsprdv3(dtm2$dtl3,dtm2$prl,regversion=6)
+
+dtm$ys1<-resyldsprdv3(dtm$dtl3,dtm$prl,regversion=6)
+dtm$ys1 %>% ggplotw()
+dtm$ys1_adj<-resyldsprdv3(dtm$dtl3,dtm$prl,regversion=6,adjccybs = T)
+dtm$ys1_adj %>% ggplotw()
+
+#daily
+dtm<-preprocess(bondref,dtl,prl,monthlyonly = FALSE)
+dtm$ys1<-resyldsprdv3(dtm$dtl3[ccy %in% c('eur','usd')],dtm$prl,regversion=1)
+dtm$ys1 %>% ggplotw()
+
+#monthly
+dtmo<-preprocess(bondref,dtl,prl,monthlyonly = TRUE)
+dtmo$ys1<-resyldsprdv3(dtm$dtl3[ccy %in% c('eur','usd')],dtm$prl,regversion=1)
+dtmo$ys1 %>% ggplotw()
+
+dtmo$ys1[dtm$ys1] %>% ggplotw()
+
+
+prw<-dtm$prw
+
+prw[,approx_eubs10:=((eur/(eur+eur10y/10000))^(1/10)*(1+ussw10/10000)-(1+eusw10/10000))*10000]
+prw[,approx_eubso1:=(eur/(eur+eur12m/10000)*(1+usso1/100)-(1+euswe1/100))*10000]
+prw[,approx_eubso5:=((eur/(eur+eur5y/10000))^(1/5)*(1+usso5/100)-(1+euswe5/100))*10000]
+prw[,approx_eubso10:=((eur/(eur+eur10y/10000))^(1/10)*(1+usso10/100)-(1+euswe10/100))*10000]
+
+prw[,.(date,eubs1,approx_eubs1,approx_eubso1)] %>% ggplotw()
+prw[,.(date,eubs10,approx_eubs10,approx_eubso10)] %>% ggplotw()
+
+
+dtm$ys1[prw][date>'2004-01-01',.(date,ccyeur,eubs5,approx_eubs5,approx_eubso5)] %>% ggplotw()
+ys1[prw][date>'2004-01-01',.(date,ccychf,sfbs5)] %>% ggplotw()
+ys1[prw][date>'2004-01-01',.(date,ccycad,cdbs5)] %>% ggplotw()
+
+
+dtm$prw[,.(date,eubs5,approx_eubs5)] %>% ggplotw()
+
+
+dtm$prw[,.(date,eubs5,eur,eur5y,ussw5,eusa5,eubsv5,approx_eubs5)] %>% View
 
 
 
-dtl3[,liq:=ytm/ytofm]
-dtl3<-dtl3[liq %between% c(0,1.1)]
-dtl3[liq<.5,liq_bucket:=0] # more illiq
-dtl3[liq>=.5,liq_bucket:=1] # liq
+
 
 ys1liq<-resyldsprdv3(dtl3[liq_bucket==1],prl,regversion=5)
 ys1iliq<-resyldsprdv3(dtl3[liq_bucket==0],prl,regversion=5)
@@ -60,33 +68,45 @@ ys2<-resyldsprdv3(dtl3,prl,regversion=6,adjccybs = 1)
 ys1 %>% ds()
 ys1[,.(date,liquid)] %>% ggplotw()
 dtl3 %>% ds
+aa<-tsdiff(dtm$ys1[dtm2$ys1])
+aa %>% select(date,starts_with('diff_')) %>% ggplotw()
+aa %>% select(date,contains('ccyeur')) %>% ggplotw()
+aa %>% select(date,contains('ccyjpy')) %>% ggplotw()
+
+br<-dtm$br
+br %>% select(d,mat2,matbbg) %>% missSummary()
+br[,ytofm2:=as.numeric(mat2-d)/365][,ytofmbbg:=as.numeric(matbbg-d)/365]
+br %>% select(d,mat2,matbbg,contains('ytofm')) %>% missSummary()
+bb<-br[,.(difytofm2=ytofm2-ytofm,difytofmbbg=ytofmbbg-ytofm)]
+
+
 # Figure 1 CIP deviations
 fig1<-prw[,.(date,eubs5,bpbs5,jybs5,adbs5)] %>% ggplotw()+xlab('')+ylab('CIP deviations 5-year horizon in bps (implied r - actual r)')+geom_hline(yintercept=0)+ scale_color_discrete('',labels = c("AUD", "GBP",'EUR','JPY'))+theme_stata(base_size = 15)+theme(axis.title.y = element_text(margin =margin(0, 10, 0, 0)))
-ggsave(file='../paper/figures/fig1_cip.pdf',fig1,width=9,height=6)
+#ggsave(file='../paper/figures/fig1_cip.pdf',fig1,width=9,height=6)
 
 # Figure 2 Credit mispring
 fig2<-ys1 %>% ggplotw()+xlab('')+ylab('bps')+geom_hline(yintercept=0)+ scale_color_discrete('',labels = c("AUD", "GBP",'EUR','JPY'))+theme_stata(base_size = 15)+theme(axis.title.y = element_text(margin =margin(0, 10, 0, 0)))
 fig2
-ggsave(file='../paper/figures/fig2_creditmisprice.pdf',fig2,width=9,height=6)
+#ggsave(file='../paper/figures/fig2_creditmisprice.pdf',fig2,width=9,height=6)
 
 
 # Figure 3 Credit mispring and CIP for EUR
 fig3<-ys1[prw][date>'2004-01-01',.(date,ccyeur,eubs5)] %>% ggplotw()+xlab('')+ylab('bps')+geom_hline(yintercept=0)+ scale_color_discrete('',labels = c('Res. credit spread diff (EU-US)','CIP deviations 5yr (implied - actual euro funding rate)'))+theme_stata(base_size = 15)+theme(axis.title.y = element_text(margin =margin(0, 10, 0, 0)))
 fig3
-ggsave(file='../paper/figures/fig3_creditCIPeur.pdf',fig3,width=9,height=6)
+#ggsave(file='../paper/figures/fig3_creditCIPeur.pdf',fig3,width=9,height=6)
 
 # Figure 4 Credit mispring and CIP for JPY
 fig4<-ys1[prw][date>'2004-01-01',.(date,ccyjpy,jybs5)] %>% ggplotw()+xlab('')+ylab('bps')+geom_hline(yintercept=0)+ scale_color_discrete('',labels = c('Res. credit spread diff (JP-US)','CIP deviations 5yr (implied - actual yen funding rate)'))+theme_stata(base_size = 15)+theme(axis.title.y = element_text(margin =margin(0, 10, 0, 0)))
 fig4
-ggsave(file='../paper/figures/fig4_creditCIPjpy.pdf',fig4,width=9,height=6)
+#ggsave(file='../paper/figures/fig4_creditCIPjpy.pdf',fig4,width=9,height=6)
 
 # fig4b<-ys1nf[prw][date>'2004-01-01',.(date,ccyjpy,jybs5)] %>% ggplotw()+xlab('')+ylab('bps')+geom_hline(yintercept=0)+ scale_color_discrete('',labels = c('Residualized credit spread diff (JP-US)','CIP deviations 5yr (implied - actual yen funding rate)'))+theme_stata(base_size = 15)+theme(axis.title.y = element_text(margin =margin(0, 10, 0, 0)))
 # fig4b
-#ggsave(file='../paper/figures/fig3_creditCIPjpy.pdf',fig4,width=9,height=6)
+##ggsave(file='../paper/figures/fig3_creditCIPjpy.pdf',fig4,width=9,height=6)
 ys1[prw][date>'2004-01-01',.(date,ccygbp,bpbs5)] %>% ggplotw()
 ys1[prw][date>'2004-01-01',.(date,ccyaud,adbs5)] %>% ggplotw()
 
-# Figure 5: crd mispricing and issuance; save data for it first
+## Figure 5: crd mispricing and issuance; save data for it first
 ys2[,.(date,ccyeur)] %>% ggplotw()
 ys2 %>% write.dta('temp_ys.dta')
 
@@ -128,7 +148,7 @@ ysi2 %>% write.dta('temp_ys.dta')
 ys1[prw][,.(date,ccyeur,eubs5)] %>% ggplotw()
 
 # desc=c('ys: previous prl interpolate do not extend (rule1) ','ys1: previous prl interpolate extends (rule2)')
-# save(ys,ys1,desc,file='ystemp.RData')
+## save(ys,ys1,desc,file='ystemp.RData')
 
 ys %>% ggplotw()
 ys[prw][,.(date,ccyeur,eubs5,eubsv5)] %>% ggplotw()
@@ -222,7 +242,7 @@ regdt[,.N,by=.(date,ccy)] %>% ggplot(aes(x=date,y=N,colour=ccy))+geom_line()
 dtl2[,.N,by=.(date,ccy)] %>% ggplot(aes(x=date,y=N,colour=ccy))+geom_line()
 
 newadditions<-regdt[ccy=='1usd' & date=='2014-07-31'] %>% anti_join(regdt[ccy=='1usd' & date=='2014-06-30'],by='isin')
-(br %>% semi_join(newadditions,by='isin'))[,.(parsekeyable,i,descr)] # why are prices here missing?
+(br %>% semi_join(newadditions,by='isin'))[,.(pk,i,descr)] # why are prices here missing?
 
 
 br %>% semi_join(dtl3[ccy=='usd' & date=='2014-07-31'] %>% anti_join(dtl3[ccy=='usd' & date=='2014-06-30'],by='isin'),by='isin') # why are prices here missing?
@@ -306,7 +326,7 @@ feg2[,euus_yld:=NULL]
 feg2 %>% ggplotw()
 feg<-feg2
 
-#save.image('temp.rdata')
+##save.image('temp.rdata')
 load(file='temp.rdata')
 source('util.r')
 
@@ -504,7 +524,7 @@ rating_mdy<-read.csv('rating.csv',stringsAsFactors = FALSE) %>% tbl_df() %>% ren
 df_sdcnew<-sdc_raw %>% mutate(d=mdy(d),mat2=mdy(mat2),amt=as.numeric(amt),ytofm=as.numeric(ytofm)) %>% tbl_df() %>% 
   left_join(.,rating_sp, by='rating_sp') %>% left_join(.,rating_mdy,by='rating_mdy') %>% 
   select(issname,ticker_sdc,isin,cusip,d,nat,amt,descr,ccy,mat2,ytofm,everything()) %>% arrange(d)
-save(df_sdcnew,file='sdcnew.rdata')
+#save(df_sdcnew,file='sdcnew.rdata')
 df_sdcn2<-df_sdcnew[!duplicated(df_sdcnew$isin),] %>% filter(isin!='-')  %>% arrange(isin)
 
 df_bond3<-sqldf('select A.*, B.ccy, B.descr, B.ytofm, B.d, B.mat2 from df_yld2 as A, df_sdcn2 as B where A.isin=B.isin')
@@ -558,7 +578,7 @@ df_bond %>% mutate(datestr=as.character(date),matstr=as.character(mat2)) %>% sel
 # explore daily data ------------------------------------------------------
 
 # df_p_daily<-loadBBGdownload2df('../data/bloomberg/bbg_gbonds_160426_temp_daily.RData')
-# save(df_p_daily,file='dailyprices.rdata')
+## save(df_p_daily,file='dailyprices.rdata')
 load('dailyprices.rdata')
 df_p_daily %<>% mutate(dofm=lubridate::mday(date)) 
 aa<-df_p_daily %>% group_by((dofm)) %>% summarise(ct=length(na.omit(YLD_YTM_MID))) %>% ggplot(aa,aes(x=`(dofm)`,y=ct))+geom_line()
@@ -572,7 +592,7 @@ oas %>% ggplot(aes(x=dofm,y=oas_dom))+geom_line()
 df_pasw_mo<-loadBBGdownload2df('../data/bloomberg/bbg_gbonds_160426_mo_batch2_asw.RData')
 load(file='sdc_all.rdata')
 df_sdc_all %<>% distinct(isin)
-countdups(df_sdc_all %>% filter(!is.na(parsekeyable)),'parsekeyable')
+countdups(df_sdc_all %>% filter(!is.na(pk)),'pk')
 
 ac<-assessDataCoverage(bondinfo = df_sdc_all,bondprices = df_pasw_mo,field='ASSET_SWAP_SPD_MID')
 
@@ -581,7 +601,7 @@ df_p %>% View
 ac<-assessDataCoverage(bondinfo = df_sdc_all,bondprices = df_p)
 df_p
 ac<-assessDataCoverage(bondinfo = df_sdc_all,bondprices = df_p,field='OAS_SPREAD_BID')
-ac %>% filter(parsekeyable=='EF600203 Corp') %>% View
+ac %>% filter(pk=='EF600203 Corp') %>% View
 
 df_p<-loadBBGdownload2df('../data/bloomberg/bbg_gbonds_160426_mo_batch3_HY.RData')
 df_p
@@ -622,7 +642,7 @@ ab %>% anti_join(ac,by='isin') %>% View
 # concluded that oas and yld are the ones to use, other flds do not start till 2010
 df_pt<-loadBBGdownload2df('../data/bloomberg/sample_flds_test.rdata')
 load('sdc_all.rdata')
-# df_sampleticker<-df_pt %>% group_by(ticker) %>% rename(parsekeyable=ticker) %>% summarise(ct=length(date)) %>% left_join(df_sdc_all %>% distinct(parsekeyable))
+# df_sampleticker<-df_pt %>% group_by(ticker) %>% rename(pk=ticker) %>% summarise(ct=length(date)) %>% left_join(df_sdc_all %>% distinct(pk))
 # df_sampleticker %>% filter(ccy=='EUR') %>% select(isin) %>% write.csv(file='sample_eur_isin.csv')
 df_pt %<>% filter(date>='2005-01-01',date<='2016-04-01')
 
@@ -636,19 +656,19 @@ ac %>% mutate(allflddiff=expmonthlyobs-obs_allflds) %>% filter(allflddiff %ni% c
   write.csv(file='temp.csv')
 
 # df_obs %>% arrange(desc(obscoverage)) %>% View
-# bondprices %>% filter(parsekeyable=='EH728416 Corp') %>% View
-# df_sdc_all %>% filter(parsekeyable=='EH728416 Corp') %>% write.csv(file='temp.csv')
+# bondprices %>% filter(pk=='EH728416 Corp') %>% View
+# df_sdc_all %>% filter(pk=='EH728416 Corp') %>% write.csv(file='temp.csv')
 # df_sdc_bbg %>% filter(isin=='FR0010359810') %>% select(figi,name,ticker,i,d,mat2,everything()) %>% View
 
 
-df_yld_long<-df_p %>%  melt(.,id.vars=c('date','parsekeyable'),
-                            measure.vars=((df_pt %>% ds)[(df_pt %>% ds) %ni% c('date','parsekeyable','batch')]),
-                            variable.name='field') %>% dplyr::tbl_df() %>% filter(!is.na(value)) %>% distinct(date,parsekeyable,field) 
+df_yld_long<-df_p %>%  melt(.,id.vars=c('date','pk'),
+                            measure.vars=((df_pt %>% ds)[(df_pt %>% ds) %ni% c('date','pk','batch')]),
+                            variable.name='field') %>% dplyr::tbl_df() %>% filter(!is.na(value)) %>% distinct(date,pk,field) 
 df_yld_long %>% group_by(date, field) %>% summarise(Ndp=length(na.omit(value))) %>%  ggplot(.,aes(x=date,y=Ndp,colour=field))+geom_line()
 df_yld_long %>% group_by(date, field) %>% summarise(Ndp=length(na.omit(value))) %>% dcast(date~field) %>% View
 
-df_yld_long %>% showdups(c('date','parsekeyable','field'))
-df_yld_long %>% distinct(parsekeyable) %>% nrow
+df_yld_long %>% showdups(c('date','pk','field'))
+df_yld_long %>% distinct(pk) %>% nrow
 
 
 # load bbg bond sprd, unpack ----------------------------------------------
