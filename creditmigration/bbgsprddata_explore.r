@@ -1,9 +1,21 @@
+source('util.r')
 setwd("/Users/gliao/Dropbox/Research/ccy basis/creditmigration")
 
 # # New merge: price with sdc -----------------------------------------------
 rm(list=ls(all=TRUE));load('gldb.RData')
 source('util.r')
-dtm<-preprocess(bondref,dtl,prl)
+dtm<-preprocess(bondref,dtl,prl,issfiltertype = 1)
+
+dtm2<-preprocess(bondref,dtl,prl,issfiltertype = 2)
+
+dtm$br[,.N,ccy]
+dtm2$br[,.N,ccy]
+dtm$ys1<-resyldsprdv3(dtm$dtl3,dtm$prl,regversion=6)
+dtm2$ys1<-resyldsprdv3(dtm2$dtl3,dtm2$prl,regversion=6)
+dtm$ys1[dtm2$ys1] %>% ggplotw.comp()
+
+
+
 # dtm2<-preprocess2(bondref,dtl,prl)
 # dtm2$ys1<-resyldsprdv3(dtm2$dtl3,dtm2$prl,regversion=6)
 

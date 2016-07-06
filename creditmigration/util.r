@@ -48,10 +48,16 @@ get.prl.status<-function(prl){
   print(prl.status[,.N,MonthlyMax][order(-N)])
   prl.status
 }
-preprocess<-function(bondref,dtl,prl,monthlyonly=TRUE){
-  br<-bondref[!is.na(pk)] %>% issfilter(.)
+preprocess<-function(bondref,dtl,prl,monthlyonly=TRUE,issfiltertype=2){
+  br<-bondref[!is.na(pk)] %>% issfilter(.,type=issfiltertype)
   br %<>% semi_join(dtl,by='pk')
-  if (nrow(showdups(br,'pk'))!=0) message('error: duplicate pks')
+  if (nrow(showdups(br,'pk'))!=0){
+    message('error: duplicate pks; dedupe based on amt')
+    br<-br[order(pk,-amt)]
+    setkey(br,pk)
+    br<-unique(br)
+  }
+
   # MERGE RATING AND ADD MATURITY BUCKETS -----------------------------------
   setkey(dtl,pk);setkey(br,pk)
   if (monthlyonly) {
@@ -318,7 +324,8 @@ plotgl <- function(dfin,fields=c('I_net_euus'),afteryr=2002){
   ggplot(data=.,aes(x=date,y=value,colour=type))+geom_line()+geom_point()
 
 }
-ggplotw<-function(dfin, fields=ds(dfin)){
+ggplotw<-function(dfin, fields=ds(dfin),x11.=FALSE){
+  if (x11.) X11(width=15,height=9)
   dfin %>% 
   tidyr::gather(.,'type','value',-date) %>% 
   filter(type %in% fields) %>% 
@@ -353,15 +360,40 @@ wgplot <- function(dfwide,idvar='date'){
 }
 
 
-issfilter <- function(df_issraw){
-
-  df_issraw  %>% 
-  filter(amt>=50,ytofm>=2, ytofm<=99999,nrating<=16, (pub=="Public" | pub=="Sub."), 
-         mdealtype %ni% c("P","ANPX","M","EP","CEP","TM","PP","R144P"), 
-         secur %ni% c("Cum Red Pfd Shs", "Non-Cum Pref Sh" , "Preferred Shs" ,"Pfd Stk,Com Stk"),
-         tf_mid_desc!='Government Sponsored Enterprises',
-         nrating>1)
+# issfilter <- function(df_issraw,type=1){
+#   if (type==1){
+#   df_issraw  %>% 
+#   filter(amt>=50,ytofm>=2, ytofm<=99999,nrating<=16, (pub=="Public" | pub=="Sub."), 
+#          mdealtype %ni% c("P","ANPX","M","EP","CEP","TM","PP","R144P"), 
+#          secur %ni% c("Cum Red Pfd Shs", "Non-Cum Pref Sh" , "Preferred Shs" ,"Pfd Stk,Com Stk"),
+#          tf_mid_desc!='Government Sponsored Enterprises',
+#          nrating>1)
+#   } else if (type==2){
+#   df_issraw  %>% 
+#   filter(amt>=100,ytofm>=2, ytofm<=99999, 
+#          mdealtype %ni% c("P","ANPX","M","EP","CEP","TM","PP","R144P"), 
+#          secur %ni% c("Cum Red Pfd Shs", "Non-Cum Pref Sh" , "Preferred Shs" ,"Pfd Stk,Com Stk"),
+#          tf_mid_desc!='Government Sponsored Enterprises')
+#   }
+# }
+issfilter<-function(dtin,type=1){
+dtout<-dtin
+dtout %<>% filter(
+   amt >= 50,
+   ytofm >= 1,
+   ytofm <= 99999,
+   mdealtype %ni% c("P", "ANPX", "M", "EP", "CEP", "TM", "PP"),
+   secur %ni% c("Cum Red Pfd Shs","Non-Cum Pref Sh" ,"Preferred Shs" ,"Pfd Stk,Com Stk"),
+   !grepl('Government Sponsored Enterprises',tf_mid_desc),!grepl('Flt', secur),!grepl('Zero Cpn', secur),!grepl('Float', secur),!grepl('Fl', descr),
+   !grepl('Zero Cpn', descr),!grepl('Mortgage-backed', issue_type_desc),!grepl('Asset-backed', issue_type_desc),!grepl('Federal Credit Agency', issue_type_desc),!grepl('Loan', descr)
+ ) 
+if (type==2){
+  dtout %<>% filter(amt>=100)
 }
+
+dtout %>% as.data.table()
+}
+
 
 
 tabulate <- function(dfin,byvar='variable'){
@@ -725,24 +757,6 @@ bucketytm<-function(dtlin){
 }
 
 
-issfilter<-function(dtin){
-dtout<-dtin
-dtout %<>% filter(
-   amt >= 50,
-   ytofm >= 1,
-   ytofm <= 99999,
-   mdealtype %ni% c("P", "ANPX", "M", "EP", "CEP", "TM", "PP"),
-   secur %ni% c(
-     "Cum Red Pfd Shs",
-     "Non-Cum Pref Sh" ,
-     "Preferred Shs" ,
-     "Pfd Stk,Com Stk"
-   ),
-   !grepl('Government Sponsored Enterprises',tf_mid_desc),!grepl('Flt', secur),!grepl('Zero Cpn', secur),!grepl('Float', secur),!grepl('Fl', descr),
-   !grepl('Zero Cpn', descr),!grepl('Mortgage-backed', issue_type_desc),!grepl('Asset-backed', issue_type_desc),!grepl('Federal Credit Agency', issue_type_desc),!grepl('Loan', descr)
- ) 
-dtout %>% as.data.table()
-}
 
 
 downloadbbg<-function(tickers,filestr=str_c('bbg_',today(),'.RData'),startdt=ymd('1996-01-01'),periodstr='MONTHLY',fieldstr='PX_LAST',splitN=1){
@@ -969,8 +983,48 @@ tsdiff<-function(dtin){
   }
   dtin
 }
+readkey <- function()
+{
+    cat ("Press [enter] to continue")
+    line <- readline()
+}
+  readkeygraph <- function(prompt)
+  {
+    getGraphicsEvent(prompt = prompt, 
+                     onMouseDown = NULL, onMouseMove = NULL,
+                     onMouseUp = NULL, onKeybd = onKeybd,
+                     consolePrompt = "[click on graph then follow top prompt to continue]")
+    Sys.sleep(0.01)
+    return(keyPressed)
+  }
+  
+  onKeybd <- function(key)
+  {
+    keyPressed <<- key
+  }
 
+ggplotw.comp<-function(dtin){
+  #X11()
+  X11(width=15,height = 9)
+  print(dtin[,.(date,ccyeur,i.ccyeur)] %>% ggplotw())
+  dev.flush();flush.console();Sys.sleep(1)
+  keyPressed = readkeygraph("[press any key to continue]")
+  print(dtin[,.(date,ccygbp,i.ccygbp)] %>% ggplotw())
+  dev.flush();flush.console();Sys.sleep(1)
+  keyPressed = readkeygraph("[press any key to continue]")
+  print(dtin[,.(date,ccyjpy,i.ccyjpy)] %>% ggplotw())
+  dev.flush();flush.console();Sys.sleep(1)
+  keyPressed = readkeygraph("[press any key to continue]")
+  print(dtin[,.(date,ccyaud,i.ccyaud)] %>% ggplotw())
+  dev.flush();flush.console();Sys.sleep(1)
+  keyPressed = readkeygraph("[press any key to continue]")
+  print(dtin[,.(date,ccychf,i.ccychf)] %>% ggplotw())
+  dev.flush();flush.console();Sys.sleep(1)
+  keyPressed = readkeygraph("[press any key to continue]")
+  print(dtin[,.(date,ccycad,i.ccycad)] %>% ggplotw())
+  dev.flush();flush.console();Sys.sleep(1)
 
+}
 # old/defunct
 
 # icollapse2<-function(dfin,ccyA="EUR",natA="Eurozone"){

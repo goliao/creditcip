@@ -509,3 +509,15 @@ bb<-merge(bondref[,.(pk,i,descr,d,settlement2,mat2,matbbg,ccy)],dtl[,.N,pk],by='
 bb %>% ds
 bb[is.na(ccy)]
 bb[,.(pk,i,descr,d,settlement2,mat2,matbbg,diff=as.numeric(matbbg-mat2))][abs(diff)>10]
+
+
+#7/5/16
+rm(list=ls(all=TRUE));load('gldb.RData')
+source('util.r');
+load('../data/bloomberg/smallIssuance.RData')
+load('../data/bloomberg/dtchfdaily.RData')
+dtl<-update.dtl(dtl,dtsmalliss,override=TRUE)
+dtl<-update.dtl(dtl,dtchfdaily,override=TRUE)
+dtl<-dtl %>% distinct(date,pk,field)
+#resave(dtl,file='gldb.RData')
+

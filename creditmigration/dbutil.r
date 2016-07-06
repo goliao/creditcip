@@ -38,7 +38,7 @@ dtout
 }
 
 gdbwrite<-function(name='',dfin,bool_overwrite=FALSE){
-con <- dbConnect(SQLite(), dbname="gldb")
+con <- dbConnect(SQLite(), dbname="gldb.sqlite3")
 # dtout<-dbGetQuery(con,'select * from sdc') %>% as.data.table()
 dtout<-dbWriteTable(con,name,dfin,overwrite=bool_overwrite) %>% as.data.table()
 dbDisconnect(con)
