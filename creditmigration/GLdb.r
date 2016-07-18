@@ -521,3 +521,21 @@ dtl<-update.dtl(dtl,dtchfdaily,override=TRUE)
 dtl<-dtl %>% distinct(date,pk,field)
 #resave(dtl,file='gldb.RData')
 
+rm(list=ls(all=TRUE));load('gldb.RData')
+dtl<-dtl[field=='YLD_YTM_MID'][,field:=NULL]
+prl[,field:=NULL]
+#save(dtl,prl,bondref,monthenddates,file='gldbsmall.RData')
+# 
+# 
+# #7/6/16 does not make sense to use sqlite given the large size
+# rm(list=ls(all=TRUE));load('gldb.RData')
+# source('util.r');
+# dtl[,fieldfac:=factor(field)]
+# dtl[,pkfac:=factor(pk)]
+# dtl %>% ds
+# dtl2<-dtl[,.(date,as.integer(pkfac),as.integer(fieldfac),as.double(value))]
+# source('dbutil.r')
+# gdbwrite('glsecval',dtl2,dbname='temp.sqlite',bool_overwrite = TRUE)
+
+
+

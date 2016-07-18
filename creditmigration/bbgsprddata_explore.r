@@ -1,20 +1,36 @@
-source('util.r')
 setwd("/Users/gliao/Dropbox/Research/ccy basis/creditmigration")
-
 # # New merge: price with sdc -----------------------------------------------
-rm(list=ls(all=TRUE));load('gldb.RData')
+rm(list=ls(all=TRUE));load('gldbsmall.RData')
 source('util.r')
-dtm<-preprocess(bondref,dtl,prl,issfiltertype = 1)
+dtm<-preprocess(bondref,dtl,prl,issfiltertype = 2)
+require(profvis)
 
-dtm2<-preprocess(bondref,dtl,prl,issfiltertype = 2)
 
-dtm$br[,.N,ccy]
-dtm2$br[,.N,ccy]
+dtm$ys1<-resyldsprdv4(dtm$dtl4,dtm$prl,regversion = 6)
+
+dtm$ys2<-resyldsprdv4(dtm$dtl4[ccy %in% c('usd','jpy')],dtm$prl,regversion = 6)
+
+dtm$ys1[dtm$ys2][,.(date,ccyjpy,i.ccyjpy)] %>% ggplotw()
+
+dtm$ys1 %>% ggplotw(x11.=TRUE)
+
+
+
 dtm$ys1<-resyldsprdv3(dtm$dtl3,dtm$prl,regversion=6)
 dtm2$ys1<-resyldsprdv3(dtm2$dtl3,dtm2$prl,regversion=6)
 dtm$ys1[dtm2$ys1] %>% ggplotw.comp()
-
-
+### Ratings
+dtm$br[,mean(na.omit(nrating)),ccy]
+ys_hg<-resyldsprdv3(dtm$dtl3[ccy %in% c('usd','eur') & nrating %between% c(1,2)],dtm$prl,regversion=3)
+ys_mg<-resyldsprdv3(dtm$dtl3[ccy %in% c('usd','eur') & nrating %between% c(4,7)],dtm$prl,regversion=3)
+ys_hy<-resyldsprdv3(dtm$dtl3[ccy %in% c('usd','eur') & nrating>7],dtm$prl,regversion=3)
+ys_hg[ys_mg][ys_hy][,.(date,ccyeur,i.ccyeur,i.ccyeur.1)] %>% ggplotw(x11.=TRUE)
+ys_hg[ys_hg2][,.(date,ccyeur,i.ccyeur,i.ccyeur.1)] %>% ggplotw()
+ys_hy[ys_hy2][,.(date,ccyeur,i.ccyeur,i.ccyeur.1)] %>% ggplotw()
+dtm$dtl3[nrating %between% c(1,3),.N,ccy]
+dtm$dtl3[nrating %between% c(4,7),.N,ccy]
+dtm$dtl3[nrating>7,.N,ccy]
+fread('rating.csv')
 
 # dtm2<-preprocess2(bondref,dtl,prl)
 # dtm2$ys1<-resyldsprdv3(dtm2$dtl3,dtm2$prl,regversion=6)
