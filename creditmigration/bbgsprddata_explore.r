@@ -3,7 +3,7 @@ setwd("/Users/gliao/Dropbox/Research/ccy basis/creditmigration")
 rm(list=ls(all=TRUE));load('gldbsmall.RData')
 source('util.r')
 dtm<-preprocess(bondref,dtl,prl,issfiltertype = 2)
-require(profvis)
+
 
 
 dtm$ys1<-resyldsprdv4(dtm$dtl4,dtm$prl,regversion = 6)

@@ -1,8 +1,11 @@
 * explore ecb excess liqudiity etc
 
 
-twoway (tsline ecblxliq) (tsline eubs10,yaxis(2)) if year>2008
+twoway (tsline ecblxliq) (tsline eubs5,yaxis(2) legend(label(1 "ECB excess liqudiity") lab(2 "CIP deviation")) ttitle(none) ytitle("excess liquidity") ytitle("basis points",axis(2)) ttitle("")) if year>2008 
+ ttitle(none) ytitle("Pct Net Iss flow EU to US/Tot Iss") ytitle("basis points",axis(2)) ttitle("")
 
+
+twoway (tsline eur) (tsline eubs5,yaxis(2) legend(label(1 "EUR") lab(2 "CIP deviation")) ytitle("EUR") ytitle("basis points",axis(2)) ttitle("")) if year>2007
 reg eubsc ecblxliq
 reg eubs5 ecblxliq
 reg eubs10 ecblxliq

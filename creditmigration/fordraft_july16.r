@@ -1,10 +1,14 @@
 setwd("/Users/gliao/Dropbox/Research/ccy basis/creditmigration")
 rm(list=ls(all=TRUE));load('gldbsmall.RData')
 source('util.r')
+dtl<-dtl[monthend==1]
 dtm<-preprocess(bondref,dtl,prl,issfiltertype =2)
 prw<-dtm$prw
 ys1<-resyldsprdv4(dtm$dtl4,dtm$prl,regversion=6)
+#ys1b<-resyldsprdv4(dtm$dtl4[ccy %in% c('usd','eur')],dtm$prl,regversion=6)
+#ys1[ys1b][,.(date,ccyeur,i.ccyeur)] %>% ggplotw()
 ys2<-resyldsprdv4(dtm$dtl4,dtm$prl,regversion=6,adjccybs=TRUE)
+
 
 # Figure 1 CIP deviations
 dfg<-prw[,.(date,eubs5,bpbs5,jybs5,adbs5)] 
@@ -14,10 +18,13 @@ fig1
 #ggsave(file='../paper/figures/fig1_cip.pdf',fig1,width=9,height=6)
 
 # Figure 2 Credit mispring
-fig2<-ys1[,.(date,ccyeur,ccygbp,ccyjpy,ccyaud)] %>% ggplotw()+xlab('')+ylab('bps')+geom_hline(yintercept=0)+ scale_color_discrete('',labels = c("AUD", "EUR",'GBP','JPY'))+theme_stata(base_size = 15)+theme(axis.title.y = element_text(margin =margin(0, 10, 0, 0)))
+fig2<-ys1[,.(date,ccyeur,ccygbp,ccyjpy,ccyaud)] %>% ggplotw(x11.=T)+xlab('')+ylab('bps')+geom_hline(yintercept=0)+ scale_color_discrete('',labels = c("AUD", "EUR",'GBP','JPY'))+theme_stata(base_size = 15)+theme(axis.title.y = element_text(margin =margin(0, 10, 0, 0)))
 fig2
-#ggsave(file='../paper/figures/fig2_creditmisprice.pdf',fig2,width=9,height=6)
+fig2b<-ys1b[,.(date,ccyeur,ccygbp,ccyjpy,ccyaud)] %>% ggplotw(x11.=T)+xlab('')+ylab('bps')+geom_hline(yintercept=0)+ scale_color_discrete('',labels = c("AUD", "EUR",'GBP','JPY'))+theme_stata(base_size = 15)+theme(axis.title.y = element_text(margin =margin(0, 10, 0, 0)))
+fig2b
 
+
+#ggsave(file='../paper/figures/fig2_creditmisprice.pdf',fig2,width=9,height=6)
 
 # Figure 3 Credit mispring and CIP for EUR
 fig3<-ys1[prw][date>'2004-01-01',.(date,ccyeur,eubs5)] %>% ggplotw()+xlab('')+ylab('bps')+geom_hline(yintercept=0)+ scale_color_discrete('',labels = c('Res. credit spread diff (EU-US)','CIP deviations 5yr (implied - actual euro funding rate)'))+theme_stata(base_size = 15)+theme(axis.title.y = element_text(margin =margin(0, 10, 0, 0)))
@@ -35,6 +42,23 @@ ys_hg<-resyldsprdv4(dtm$dtl4[ccy %in% c('usd','eur') & nrating %between% c(1,6)]
 ys_hy<-resyldsprdv4(dtm$dtl4[ccy %in% c('usd','eur') & nrating>6],dtm$prl,regversion=3)
 fig5<-ys_hg[ys_hy][,.(date,ccyeur,i.ccyeur)] %>% ggplotw()+xlab('')+ylab('bps')+geom_hline(yintercept=0)+ scale_color_discrete('',labels = c('HG','HY'))+theme_stata(base_size = 12)+theme(axis.title.y = element_text(margin =margin(0, 0, 0, 0)))
 fig5
+
+require('gridExtra')
+# matching mispricing graphs
+fig6<-list()
+X11(width=7,height=9)
+fig6[[1]]<-ys1[prw][date>'2004-01-01',.(date,ccyeur,eubs5)] %>% ggplotw()+xlab('')+ylab('bps')+geom_hline(yintercept=0)+ scale_color_discrete('',labels = c('Credit mispricing','CIP deviations'))+ggtitle('EUR')+theme_stata()
+legendcommon<-get_legend(fig6[[1]])
+fig6[[1]]<-fig6[[1]]+theme(legend.position='none')
+fig6[[2]]<-ys1[prw][date>'2004-01-01',.(date,ccygbp,bpbs5)] %>% ggplotw()+xlab('')+ylab('bps')+geom_hline(yintercept=0)+theme_stata()+theme(legend.position='none')+ggtitle('GBP')
+fig6[[3]]<-ys1[prw][date>'2004-01-01',.(date,ccyjpy,jybs5)] %>% ggplotw()+xlab('')+ylab('bps')+geom_hline(yintercept=0)+theme_stata()+theme(legend.position='none')+ggtitle('JPY')
+fig6[[4]]<-ys1[prw][date>'2004-01-01',.(date,aud=ccyaud,basis_aud=adbs5)] %>% ggplotw()+xlab('')+ylab('bps')+geom_hline(yintercept=0)+theme_stata()+theme(legend.position='none')+ggtitle('AUD')
+fig6[[5]]<-ys1[prw][date>'2004-01-01',.(date,ccychf,sfbs5)] %>% ggplotw()+xlab('')+ylab('bps')+geom_hline(yintercept=0)+theme_stata()+theme(legend.position='none')+ggtitle('CHF')
+fig6[[6]]<-ys1[prw][date>'2004-01-01',.(date,ccycad,cdbs5)] %>% ggplotw()+xlab('')+ylab('bps')+geom_hline(yintercept=0)+theme_stata()+theme(legend.position='none')+ggtitle('CAD')
+fig6all<-grid.arrange(fig6[[1]],fig6[[2]],fig6[[3]],fig6[[4]],fig6[[5]],fig6[[6]],legendcommon,ncol=2,nrow=4,layout_matrix=rbind(c(1,2),c(3,4),c(5,6),c(7,7)),heights=c(2,2,2,.25))
+#ggsave(file='../paper/figures/fig6_creditmispricings.pdf',fig6all,width=7,height=9)
+
+
 
 
 # daily time series -------------------------------------------------------
@@ -55,16 +79,29 @@ obs[,yr:=year(date)][,mo:=month(date)][,euryrmo:=as.double(median(eur)),.(yr,mo)
 obsdiscard<-obs[eur<0.8*euryrmo | `1usd`<.8*usdyrmo,.(date)]
 #obs[!obsdiscard][!monthenddates][,.(date,`1usd`,eur)] %>% ggplotw()
 
-obsdiscard %>% View
+cdrus<-RQuantLib::getHolidayList('UnitedStates',from=ymd('2004-01-01'),to=ymd('2016-07-01'))
+cdreu<-RQuantLib::getHolidayList('Germany',from=ymd('2004-01-01'),to=ymd('2016-07-01'))
 
+holidays<-data.table('date'=unique(c(cdrus,cdreu)))
+setkey(holidays,date)
+
+
+holidays[!obsdiscard] %>% View
 #obs %>% write.csv('dailyeurobs.csv')
-dt.merged<-dtmd$prw[,.(date,eubs5)][ys1$regcoef][!obsdiscard]
+dt.merged<-dtmd$prw[,.(date,eubs5)][ys1$regcoef][!obsdiscard][!holidays]
+
+
+# ECB QE announcements
+ecbqe<-c(mdy('7/26/2012'),mdy('5/2/2013'),mdy('11/7/2013'),mdy('6/5/2014'),mdy('9/4/2014'),mdy('1/22/2015'),mdy('12/3/2015'),mdy('3/10/2016'),mdy('4/21/2016'),mdy('6/8/2016'),mdy('6/2/2016'))
+
 dt.merged %>% ggplotw(x11. = T)
-dt.merged[date %between% c('2014-12-01','2015-03-01')] %>% ggplotw(x11. = T)
+dt.merged[date %between% c('2012-03-01','2016-07-01')] %>% ggplotw(x11. = T)+geom_vline(xintercept = as.numeric(ecbqe))
+dt.merged[date %between% c('2012-03-01','2012-09-01')] %>% ggplotw(x11. = T)+geom_vline(xintercept = as.numeric(ecbqe))
 
 
 dt.merged[,diff(ccyeur)] %>% sd()
-dt.merged[!obsdiscard][,diff(ccyeur)] %>% sd()
+dt.merged[,diff(ccyeur)] %>% sd()
+dtmd$prw[,.(date,eubs5)][ys1$regcoef][!obsdiscard][!holidays][date>'2008-01-01',diff(ccyeur)] %>% sd()
 dt.merged[,diff(eubs5)] %>% sd(na.rm = T)
 beep(sound=2)
 
