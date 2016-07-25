@@ -31,10 +31,10 @@ prw<-prw[date!='2016-02-25']
 # save(br,dtl3,prl,prw,file='dtclean.RData')
 # save.image('dtclean.RData')
 
-rm(list=ls(all=TRUE));
-#load('dtclean160624.RData')
-load('dtclean.RData')
-source('util_20160620.r')
+# rm(list=ls(all=TRUE));
+# #load('dtclean160624.RData')
+# load('dtclean.RData')
+# source('util_20160620.r')
 
 
 dtl3[,liq:=ytm/ytofm]
@@ -53,7 +53,7 @@ dtl3[liq>=.5,liq_bucket:=1] # liq
 # ys1<-resyldsprdv3(dtl3,prl,regversion=8)
 
 #ys0<-resyldsprdv2(dtl3,prl,regversion=6) # swap spread only w/o 3s6s adj.
-ys1<-resyldsprdv3(dtl3[ccy %in% c('usd','eur')],prl,regversion=6)
+ys1<-resyldsprdv3(dtl3,prl,regversion=6)
 # ys1nf<-resyldsprdv3(dtl3[sic1!=6],prl,regversion=6)
 # ys2<-resyldsprdv3(dtl3,prl,regversion=6,adjccybs = 1)
 # 
@@ -63,12 +63,21 @@ ys1<-resyldsprdv3(dtl3[ccy %in% c('usd','eur')],prl,regversion=6)
 # Figure 1 CIP deviations
 # fig1<-prw[,.(date,eubs5,bpbs5,jybs5,adbs5)] %>% ggplotw()+xlab('')+ylab('CIP deviations 5-year horizon in bps (implied r - actual r)')+geom_hline(yintercept=0)+ scale_color_discrete('',labels = c("AUD", "GBP",'EUR','JPY'))+theme_stata(base_size = 15)+theme(axis.title.y = element_text(margin =margin(0, 10, 0, 0)))
 #ggsave(file='../paper/figures/fig1_cip.pdf',fig1,width=9,height=6)
+rm(list=ls())
+load('dtclean20160725.RData')
+source('util_20160620.r')
+ys1<-resyldsprdv3(dtl3,prl,regversion=6)
+ys1new<-resyldsprdv3new(dtl3,prl,regversion=6)
+ys1b<-resyldsprdv3new(dtl3,dtm$prl,regversion=6)
 
+ys1[,.(date,ccyeur,ccygbp,ccyaud,ccyjpy)] %>% ggplotw()
+ys1new[,.(date,ccyeur,ccygbp,ccyaud,ccyjpy)] %>% ggplotw()
 # Figure 2 Credit mispring
-fig2<-ys1[,.(date,ccyeur,ccygbp,ccyaud,ccyjpy)] %>% ggplotw()+xlab('')+ylab('bps')+geom_hline(yintercept=0)+ scale_color_discrete('',labels = c("AUD", "GBP",'EUR','JPY'))+theme_stata(base_size = 15)+theme(axis.title.y = element_text(margin =margin(0, 10, 0, 0)))
+fig2<-ys1[,.(date,ccyeur,ccygbp,ccyaud,ccyjpy)] %>% ggplotw()+xlab('')+ylab('bps')+geom_hline(yintercept=0)#+ scale_color_discrete('',labels = c("AUD", "GBP",'EUR','JPY'))+theme_stata(base_size = 15)+theme(axis.title.y = element_text(margin =margin(0, 10, 0, 0)))
 fig2
 #ggsave(file='../paper/figures/fig2_creditmisprice.pdf',fig2,width=9,height=6)
 ys1[,.(date,ccyeur)] %>% ggplotw()
+ys1[,.(date,ccyaud)] %>% ggplotw()
 
 # Figure 3 Credit mispring and CIP for EUR
 fig3<-ys1[prw][date>'2004-01-01',.(date,ccyeur,eubs5)] %>% ggplotw()+xlab('')+ylab('bps')+geom_hline(yintercept=0)+ scale_color_discrete('',labels = c('Res. credit spread diff (EU-US)','CIP deviations 5yr (implied - actual euro funding rate)'))+theme_stata(base_size = 15)+theme(axis.title.y = element_text(margin =margin(0, 10, 0, 0)))

@@ -3,7 +3,7 @@ require(stringr)
 # require(xts)
 require(tidyr)
 require(dplyr)
-#require('readstata13')
+require('readstata13')
 # require('ggfortify')
 # require('doBy')
 require(lubridate)
@@ -24,6 +24,8 @@ require(ggthemes)
 
 df2clip<-function(x)(write.table(x, "clipboard.csv", sep=","))
 # df2clip<-function(x)(write.table(x, "clipboard", sep="\t"))
+
+
 tic <- function(gcFirst = TRUE, type=c("elapsed", "user.self", "sys.self"))
 {
   type <- match.arg(type)
@@ -33,6 +35,7 @@ tic <- function(gcFirst = TRUE, type=c("elapsed", "user.self", "sys.self"))
   assign(".tic", tic, envir=baseenv())
   invisible(tic)
 }
+
 toc <- function()
 {
   type <- get(".type", envir=baseenv())
@@ -41,185 +44,6 @@ toc <- function()
   print(toc - tic)
   beep()
   invisible(toc)
-}
-preprocess<-function(bondref,dtl,prl,monthlyonly=TRUE,issfiltertype=2){
-  tic()
-  dtl<-copy(dtl)
-  prl<-copy(prl)
-  prl<-backfillNAs.prl(prl) # fill eubsv 3s6s basis backwarks a bit
-  br<-bondref[!is.na(pk)] %>% issfilter(.,type=issfiltertype)
-  br <- br %>% semi_join(dtl,by='pk') %>% as.data.table()
-  setkey(br,pk)
-  if (nrow(showdups(br,'pk'))!=0){
-    message('error: duplicate pks; dedupe based on amt')
-    br<-br[order(pk,-amt)]
-    setkey(br,pk)
-    br<-unique(br)
-  }
-  # MERGE RATING AND ADD MATURITY BUCKETS -----------------------------------
-  setkey(dtl,pk);setkey(br,pk)
-  if (monthlyonly) {
-    dtl<-dtl[monthend==1]
-    prl<-prl[monthend==1]
-  } else{
-    print('daily data')
-    
-    pk_daily0<-unique(dtl[monthend==0,.(pk)])
-    # alternatively, count pk as daily obs if there are more than three times as many daily obs as monthly obs
-    pkcount<-dtl[,.N,.(pk,monthend)] %>% dcast(pk~monthend)
-    pk_daily<-pkcount[`0`>3*`1`,.(pk)]
-    setkey(pk_daily,pk)
-    dtl<-dtl[pk_daily]
-  }
-  dtl2<-dtl[br[,.(ccy,mat2,nrating,upcusip,pk,ytofm,sicfac,sic1)],nomatch=0]
-  dtl2[,ytm:=as.numeric((mat2-date)/365)]
-  dtl3<-dtl2[ytm >.05]
-  dtl3[is.na(nrating),nrating:=0]
-  dtl3<-dtl3[ccy %ni% c('sek','nok')] # don't know how these appeared, but let's get rid of them.
-  if ('field' %in% ds(dtl)) dtl3<-dtl3[field=='YLD_YTM_MID']
-  dtl3<-dtl3 %>% bucketrating() %>% bucketytm()
-  prl<-prl[date>'2002-01-01']
-  prl[ticker %like% '^\\w\\wsw\\d+' | ticker %like% '^eusa\\d+',value:=value*100]
-  prw<-prl %>% distinct() %>% data.table::dcast(.,date~ticker,value.var = 'value')
-  dtl3<-dtl3[date>'2004-01-01']
-  dtl3[,liq:=ytm/ytofm]
-  dtl3<-dtl3[liq %between% c(0.05,1.0)]
-  dtl3[liq<.5,liq_bucket:=0] # more illiq
-  dtl3[liq>=.5,liq_bucket:=1] # liq
-  # gen eusw=eusa-eubsv
-  # gen eusz=eusw+eubs
-  prw[,`:=`(eusw1=eusa1-eubsv1,eusw10=eusa10-eubsv10,eusw12=eusa12-eubsv12,eusw15=eusa15-eubsv15,eusw2=eusa2-eubsv2,eusw20=eusa20-eubsv20,eusw30=eusa30-eubsv30,eusw5=eusa5-eubsv5,eusw7=eusa7-eubsv7)]
-  prw[,`:=`(eusz10=eusw10+eubs10,eusz12=eusw12+eubs12,eusz15=eusw15+eubs15,eusz2=eusw2+eubs2,eusz20=eusw20+eubs20,eusz30=eusw30+eubs30,eusz5=eusw5+eubs5,eusz7=eusw7+eubs7,eusz1=eusw1+eubs1)]
-  prw[,`:=`(jysz10=jysw10+jybs10,jysz12=jysw12+jybs12,jysz15=jysw15+jybs15,jysz2=jysw2+jybs2,jysz20=jysw20+jybs20,jysz30=jysw30+jybs30,jysz5=jysw5+jybs5,jysz7=jysw7+jybs7,jysz1=jysw1+jybs1)]
-  prw[,`:=`(bpsz10=bpsw10+bpbs10,bpsz12=bpsw12+bpbs12,bpsz15=bpsw15+bpbs15,bpsz2=bpsw2+bpbs2,bpsz20=bpsw20+bpbs20,bpsz30=bpsw30+bpbs30,bpsz5=bpsw5+bpbs5,bpsz7=bpsw7+bpbs7,bpsz1=bpsw1+bpbs1)]
-  prw[,`:=`(adsz1=adsw1+adbs1,adsz10=adsw10+adbs10,adsz2=adsw2+adbs2,adsz5=adsw5+adbs5,adsz7=adsw7+adbs7,adsz15=adsw15+adbs15,adsz20=adsw20+adbs20,adsz12=adsw12+adbs12,adsz30=adsw30+adbs30)]
-  prw[,`:=`(cdsz1=cdsw1+cdbs1,cdsz2=cdsw2+cdbs2,cdsz3=cdsw3+cdbs3,cdsz4=cdsw4+cdbs4,cdsz5=cdsw5+cdbs5,cdsz6=cdsw6+cdbs6,cdsz7=cdsw7+cdbs7,cdsz8=cdsw8+cdbs8,cdsz9=cdsw9+cdbs9,cdsz10=cdsw10+cdbs10,cdsz12=cdsw12+cdbs12,cdsz15=cdsw15+cdbs15,cdsz20=cdsw20+cdbs20,cdsz25=cdsw25+cdbs25,cdsz30=cdsw30+cdbs30)]
-  prw[,`:=`(sfsz1=sfsw1+sfbs1,sfsz2=sfsw2+sfbs2,sfsz3=sfsw3+sfbs3,sfsz4=sfsw4+sfbs4,sfsz5=sfsw5+sfbs5,sfsz6=sfsw6+sfbs6,sfsz7=sfsw7+sfbs7,sfsz8=sfsw8+sfbs8,sfsz9=sfsw9+sfbs9,sfsz10=sfsw10+sfbs10,sfsz12=sfsw12+sfbs12,sfsz15=sfsw15+sfbs15,sfsz20=sfsw20+sfbs20,sfsz25=sfsw25+sfbs25,sfsz30=sfsw30+sfbs30)]
-  prw[,approx_eubs1:=(eur/(eur+eur12m/10000)*(1+ussw1/10000)-(1+eusw1/10000))*10000]
-  prw[,approx_eubs5:=((eur/(eur+eur5y/10000))^(1/5)*(1+ussw5/10000)-(1+eusw5/10000))*10000]
-  # transform prw back to prl
-  prl<-data.table::melt(prw,id.vars='date',variable.name='ticker')
-  prl<-prl[!is.na(value)]
-  #browser()
-  dtl4<-dtl.addswapsprd(dtl3,prl)
-  toc()
-  list('prw'=prw,'prl'=prl,'dtl4'=dtl4,'br'=br)
-}
-resyldsprdv4<-function(dtlin,pricein,regversion=2,globaluponly=1,returndt=0,adjccybs=0,winsor.=.01){
-  # a wrapper for FE regression
-  tic()
-  dtl<-copy(dtlin)
-  # get rid of dates with only one ccy
-  setkey(dtl,date)
-  dtl<-dtl[dtl[,.N,by=c('date','ccy')][,.N,date][N!=1,.(date)]]
-
-  if (globaluponly){ # get rid of up where up doesn't have bonds in both ccys for each date
-    dtl<-filterglobaluponly(dtl)
-  }
-  if (adjccybs==1)
-    lsout<-getccyFE2(dtl,fieldstr='swapsprdadj',version=regversion,winsor=winsor.)
-  else
-    lsout<-getccyFE2(dtl,fieldstr='swapsprd',version=regversion,winsor=winsor.)
-  
-  toc()
-  if (returndt==1)
-    lsout
-  else
-    lsout[[1]]
-}
-
-getccyFE2<-function(dfin,fieldstr='OAS_SPREAD_BID',version=2,winsor=.01){
-  #  Generalized function for calculating FE 
-  print(str_c('FE on field: ',fieldstr))
-    if ('field' %in% ds(dfin)) { # if dfin is in the long format with a field called 'field'
-      df2<-dfin[field==fieldstr]
-      lhs<-'value'
-    } else { # if dfin is in the semi-wide format with a column called fieldstr
-      df2<-copy(dfin)
-      lhs<-fieldstr
-    }
-    setkey(df2,date,upcusip,ccy)
-
-  #winsorize each date
-    if (winsor!=0){
-      df2[,pctl:=percent_rank(eval(exparse(lhs))),by=.(date,ccy)]
-      df2<-df2[pctl>=winsor & pctl<=(1-winsor)]
-    }
-      #get rid of days with only single observation and ones with only one ccy
-      #df2<-df2[date %ni% df2[,.N,by=c('date','ccy')][N==1,date]]
-      #df2<-df2[date %ni% df2[,.N,.(date,ccy)][,.N,date][N==1,date]]
-
-  # set alphabetical order such that dummies are on foreign ccys
-    df2[ccy=='usd',ccy:='1usd']
-          
-  # introduce liquidity measure based on bond age
-      df2[,liq:=ytm/ytofm]
-      df2<-df2[liq %between% c(0,1.1)]
-      df2[liq<.5,liq_bucket:=0] # more illiq
-      df2[liq>=.5,liq_bucket:=1] # liq
-    regfun<-function(dt,ccylist,regversion=1,bylist){
-      tryCatch({
-          if (regversion==1){
-            # regversion 1:: run regression directly on data set without taking out bonds that do not have matching pairs
-            reg<-lm(eval(exparse(lhs))~ccy+upcusip,data=dt)
-          } else if (regversion==3){
-            # regversion 3: like regversion 2 but also adds maturity considerations in regression
-            reg<-lm(eval(exparse(lhs))~ccy+upcusip+ytm_bucket,data=dt)
-          } else if (regversion==4){
-            # regversion 4: regversion 3+ 3 rating buckets as dummies
-            reg<-lm(eval(exparse(lhs))~ccy+upcusip+ytm_bucket+rating_bucket,data=dt)
-          } else if (regversion==5){
-           # regversion 5: regversion 3+ 3 rating buckets as dummies
-            reg<-lm(eval(exparse(lhs))~ccy+upcusip+ytm_bucket+rating_bucket+sicfac,data=dt)
-          } else if (regversion==6){
-           # regversion 6, add illiqudity index
-            reg<-lm(eval(exparse(lhs))~ccy+upcusip+ytm_bucket+rating_bucket+sicfac+liq_bucket,data=dt)
-          } else if (regversion==7){
-           # regversion 7, like 6 but w/o sicfac
-            reg<-lm(eval(exparse(lhs))~ccy+upcusip+ytm_bucket+rating_bucket+liq_bucket,data=dt)
-          } else if (regversion==8){
-           # regversion 8, like 7 but only focus on liq
-            reg<-lm(eval(exparse(lhs))~ccy+upcusip+ytm_bucket+liq_bucket,data=dt)
-          }
-      }, error=function(err){
-        print(err)
-        print(bylist)
-        reg<-data.table(coefficients=as.numeric(NA))
-        browser()
-      })
-        dtcoef<-data.frame(as.list(reg$coefficients)) %>% select(starts_with('ccy')) %>%  as.data.table()
-        missccy<-ccylist[str_c('ccy',ccylist) %ni% c('ccy1usd',ds(dtcoef,'ccy'))]
-        if (length(missccy)>0){ # if missing ccy on a particular date
-          for (iccy in missccy){
-            dtcoef[,str_c('ccy',iccy):=as.numeric(NA)]
-          }
-        }
-        dtcoef
-    }
-
-    ccylist<-(df2 %>% distinct(ccy) %>% select(ccy))[[1]]
-    regcoef<-df2[,regfun(.SD,ccylist,version,.BY),by='date']
-    setkey(regcoef,date)
-    lsout<-list('regcoef'=regcoef,'dtreg'=df2)
-    lsout
-}
-intrwrap<-function(dfin,sp,bylist,interprule=1){
-#wrapper function for interpolation
-  splocal<-sp[date==bylist$date & ccy==bylist$ccy]
-  if (nrow(splocal)<3) {
-    if (bylist$date %between% c(2,6)) 
-      print(str_c('No swap data; NAs on ',bylist$date,bylist$ccy))
-    #browser()
-    rep(0,nrow(dfin))
-  } else{
-    tryCatch(dfout<-approx(x=splocal$tenor,y=splocal$value,xout=dfin$ytm,rule=interprule),
-             error=function(err){
-               print(err)
-               print(bylist)
-               browser()
-             })
-    dfout$y
-  }
 }
 
 backfillNAs.prl<-function(prl,tickerpattern='^eubsv\\d',dates2fill.='eu', roll.=10){
@@ -271,6 +95,136 @@ get.prl.status<-function(prl){
   print(prl.status[,.N,MonthlyMax][order(-N)])
   prl.status
 }
+preprocess2<-function(bondref,dtl,prl,monthlyonly=TRUE,issfiltertype=2){
+  tic()
+  dtl<-copy(dtl)
+  prl<-copy(prl)
+  prl<-backfillNAs.prl(prl) # fill eubsv 3s6s basis backwarks a bit
+  br<-bondref[!is.na(pk)] %>% issfilter(.,type=issfiltertype)
+  br <- br %>% semi_join(dtl,by='pk') %>% as.data.table()
+  setkey(br,pk)
+  if (nrow(showdups(br,'pk'))!=0){
+    message('error: duplicate pks; dedupe based on amt')
+    br<-br[order(pk,-amt)]
+    setkey(br,pk)
+    br<-unique(br)
+  }
+
+  # MERGE RATING AND ADD MATURITY BUCKETS -----------------------------------
+  setkey(dtl,pk);setkey(br,pk)
+  if (monthlyonly) {
+    dtl<-dtl[monthend==1]
+    prl<-prl[monthend==1]
+  } else{
+    print('daily data')
+    
+    pk_daily0<-unique(dtl[monthend==0,.(pk)])
+    # alternatively, count pk as daily obs if there are more than three times as many daily obs as monthly obs
+    pkcount<-dtl[,.N,.(pk,monthend)] %>% dcast(pk~monthend)
+    pk_daily<-pkcount[`0`>3*`1`,.(pk)]
+    setkey(pk_daily,pk)
+    dtl<-dtl[pk_daily]
+  }
+  dtl2<-dtl[br[,.(ccy,mat2,nrating,upcusip,pk,ytofm,sicfac,sic1)],nomatch=0]
+  dtl2[,ytm:=as.numeric((mat2-date)/365)]
+  dtl3<-dtl2[ytm >.05]
+  dtl3[is.na(nrating),nrating:=0]
+  dtl3<-dtl3[ccy %ni% c('sek','nok')] # don't know how these appeared, but let's get rid of them.
+  if ('field' %in% ds(dtl)) dtl3<-dtl3[field=='YLD_YTM_MID']
+  dtl3<-dtl3 %>% bucketrating() %>% bucketytm()
+  prl<-prl[date>'2002-01-01']
+  prl[ticker %like% '^\\w\\wsw\\d+' | ticker %like% '^eusa\\d+',value:=value*100]
+  prw<-prl %>% distinct() %>% data.table::dcast(.,date~ticker,value.var = 'value')
+  dtl3<-dtl3[date>'2004-01-01']
+  dtl3[,liq:=ytm/ytofm]
+  dtl3<-dtl3[liq %between% c(0.05,1.0)]
+  dtl3[liq<.5,liq_bucket:=0] # more illiq
+  dtl3[liq>=.5,liq_bucket:=1] # liq
+  # gen eusw=eusa-eubsv
+  # gen eusz=eusw+eubs
+  prw[,`:=`(eusw1=eusa1-eubsv1,eusw10=eusa10-eubsv10,eusw12=eusa12-eubsv12,eusw15=eusa15-eubsv15,eusw2=eusa2-eubsv2,eusw20=eusa20-eubsv20,eusw30=eusa30-eubsv30,eusw5=eusa5-eubsv5,eusw7=eusa7-eubsv7)]
+  prw[,`:=`(eusz10=eusw10+eubs10,eusz12=eusw12+eubs12,eusz15=eusw15+eubs15,eusz2=eusw2+eubs2,eusz20=eusw20+eubs20,eusz30=eusw30+eubs30,eusz5=eusw5+eubs5,eusz7=eusw7+eubs7,eusz1=eusw1+eubs1)]
+  prw[,`:=`(jysz10=jysw10+jybs10,jysz12=jysw12+jybs12,jysz15=jysw15+jybs15,jysz2=jysw2+jybs2,jysz20=jysw20+jybs20,jysz30=jysw30+jybs30,jysz5=jysw5+jybs5,jysz7=jysw7+jybs7,jysz1=jysw1+jybs1)]
+  prw[,`:=`(bpsz10=bpsw10+bpbs10,bpsz12=bpsw12+bpbs12,bpsz15=bpsw15+bpbs15,bpsz2=bpsw2+bpbs2,bpsz20=bpsw20+bpbs20,bpsz30=bpsw30+bpbs30,bpsz5=bpsw5+bpbs5,bpsz7=bpsw7+bpbs7,bpsz1=bpsw1+bpbs1)]
+  prw[,`:=`(adsz1=adsw1+adbs1,adsz10=adsw10+adbs10,adsz2=adsw2+adbs2,adsz5=adsw5+adbs5,adsz7=adsw7+adbs7,adsz15=adsw15+adbs15,adsz20=adsw20+adbs20,adsz12=adsw12+adbs12,adsz30=adsw30+adbs30)]
+  prw[,`:=`(cdsz1=cdsw1+cdbs1,cdsz2=cdsw2+cdbs2,cdsz3=cdsw3+cdbs3,cdsz4=cdsw4+cdbs4,cdsz5=cdsw5+cdbs5,cdsz6=cdsw6+cdbs6,cdsz7=cdsw7+cdbs7,cdsz8=cdsw8+cdbs8,cdsz9=cdsw9+cdbs9,cdsz10=cdsw10+cdbs10,cdsz12=cdsw12+cdbs12,cdsz15=cdsw15+cdbs15,cdsz20=cdsw20+cdbs20,cdsz25=cdsw25+cdbs25,cdsz30=cdsw30+cdbs30)]
+  prw[,`:=`(sfsz1=sfsw1+sfbs1,sfsz2=sfsw2+sfbs2,sfsz3=sfsw3+sfbs3,sfsz4=sfsw4+sfbs4,sfsz5=sfsw5+sfbs5,sfsz6=sfsw6+sfbs6,sfsz7=sfsw7+sfbs7,sfsz8=sfsw8+sfbs8,sfsz9=sfsw9+sfbs9,sfsz10=sfsw10+sfbs10,sfsz12=sfsw12+sfbs12,sfsz15=sfsw15+sfbs15,sfsz20=sfsw20+sfbs20,sfsz25=sfsw25+sfbs25,sfsz30=sfsw30+sfbs30)]
+  prw[,approx_eubs1:=(eur/(eur+eur12m/10000)*(1+ussw1/10000)-(1+eusw1/10000))*10000]
+  prw[,approx_eubs5:=((eur/(eur+eur5y/10000))^(1/5)*(1+ussw5/10000)-(1+eusw5/10000))*10000]
+  # transform prw back to prl
+  prl<-data.table::melt(prw,id.vars='date',variable.name='ticker')
+  prl<-prl[!is.na(value)]
+  #browser()
+  dtl4<-dtl.addswapsprd(dtl3,prl)
+################
+  toc()
+  list('prw'=prw,'prl'=prl,'dtl4'=dtl4,'br'=br)
+}
+preprocess<-function(bondref,dtl,prl,monthlyonly=TRUE,issfiltertype=2){
+  tic()
+  dtl<-copy(dtl)
+  prl<-copy(prl)
+  prl<-backfillNAs.prl(prl) # fill eubsv 3s6s basis backwarks a bit
+  br<-bondref[!is.na(pk)] %>% issfilter(.,type=issfiltertype)
+  br <- br %>% semi_join(dtl,by='pk') %>% as.data.table()
+  setkey(br,pk)
+  if (nrow(showdups(br,'pk'))!=0){
+    message('error: duplicate pks; dedupe based on amt')
+    br<-br[order(pk,-amt)]
+    setkey(br,pk)
+    br<-unique(br)
+  }
+
+  # MERGE RATING AND ADD MATURITY BUCKETS -----------------------------------
+  setkey(dtl,pk);setkey(br,pk)
+  if (monthlyonly) {
+    dtl<-dtl[monthend==1]
+    prl<-prl[monthend==1]
+  } else{
+    print('daily data')
+    
+    pk_daily0<-unique(dtl[monthend==0,.(pk)])
+    # alternatively, count pk as daily obs if there are more than three times as many daily obs as monthly obs
+    pkcount<-dtl[,.N,.(pk,monthend)] %>% dcast(pk~monthend)
+    pk_daily<-pkcount[`0`>3*`1`,.(pk)]
+    setkey(pk_daily,pk)
+    dtl<-dtl[pk_daily]
+  }
+  dtl2<-dtl[br[,.(ccy,mat2,nrating,upcusip,pk,ytofm,sicfac,sic1)],nomatch=0]
+  dtl2[,ytm:=as.numeric((mat2-date)/365)]
+  dtl3<-dtl2[ytm >.05]
+  dtl3[is.na(nrating),nrating:=0]
+  dtl3<-dtl3[ccy %ni% c('sek','nok')] # don't know how these appeared, but let's get rid of them.
+  if ('field' %in% ds(dtl)) dtl3<-dtl3[field=='YLD_YTM_MID']
+  dtl3<-dtl3 %>% bucketrating() %>% bucketytm()
+  prl<-prl[date>'2002-01-01']
+  prl[ticker %like% '^\\w\\wsw\\d+' | ticker %like% '^eusa\\d+',value:=value*100]
+  prw<-prl %>% distinct() %>% data.table::dcast(.,date~ticker,value.var = 'value')
+  dtl3<-dtl3[date>'2004-01-01']
+  dtl3[,liq:=ytm/ytofm]
+  dtl3<-dtl3[liq %between% c(0.05,1.0)]
+  dtl3[liq<.5,liq_bucket:=0] # more illiq
+  dtl3[liq>=.5,liq_bucket:=1] # liq
+  # gen eusw=eusa-eubsv
+  # gen eusz=eusw+eubs
+  prw[,`:=`(eusw1=eusa1-eubsv1,eusw10=eusa10-eubsv10,eusw12=eusa12-eubsv12,eusw15=eusa15-eubsv15,eusw2=eusa2-eubsv2,eusw20=eusa20-eubsv20,eusw30=eusa30-eubsv30,eusw5=eusa5-eubsv5,eusw7=eusa7-eubsv7)]
+  prw[,`:=`(eusz10=eusw10+eubs10,eusz12=eusw12+eubs12,eusz15=eusw15+eubs15,eusz2=eusw2+eubs2,eusz20=eusw20+eubs20,eusz30=eusw30+eubs30,eusz5=eusw5+eubs5,eusz7=eusw7+eubs7,eusz1=eusw1+eubs1)]
+  prw[,`:=`(jysz10=jysw10+jybs10,jysz12=jysw12+jybs12,jysz15=jysw15+jybs15,jysz2=jysw2+jybs2,jysz20=jysw20+jybs20,jysz30=jysw30+jybs30,jysz5=jysw5+jybs5,jysz7=jysw7+jybs7,jysz1=jysw1+jybs1)]
+  prw[,`:=`(bpsz10=bpsw10+bpbs10,bpsz12=bpsw12+bpbs12,bpsz15=bpsw15+bpbs15,bpsz2=bpsw2+bpbs2,bpsz20=bpsw20+bpbs20,bpsz30=bpsw30+bpbs30,bpsz5=bpsw5+bpbs5,bpsz7=bpsw7+bpbs7,bpsz1=bpsw1+bpbs1)]
+  prw[,`:=`(adsz1=adsw1+adbs1,adsz10=adsw10+adbs10,adsz2=adsw2+adbs2,adsz5=adsw5+adbs5,adsz7=adsw7+adbs7,adsz15=adsw15+adbs15,adsz20=adsw20+adbs20,adsz12=adsw12+adbs12,adsz30=adsw30+adbs30)]
+  prw[,`:=`(cdsz1=cdsw1+cdbs1,cdsz2=cdsw2+cdbs2,cdsz3=cdsw3+cdbs3,cdsz4=cdsw4+cdbs4,cdsz5=cdsw5+cdbs5,cdsz6=cdsw6+cdbs6,cdsz7=cdsw7+cdbs7,cdsz8=cdsw8+cdbs8,cdsz9=cdsw9+cdbs9,cdsz10=cdsw10+cdbs10,cdsz12=cdsw12+cdbs12,cdsz15=cdsw15+cdbs15,cdsz20=cdsw20+cdbs20,cdsz25=cdsw25+cdbs25,cdsz30=cdsw30+cdbs30)]
+  prw[,`:=`(sfsz1=sfsw1+sfbs1,sfsz2=sfsw2+sfbs2,sfsz3=sfsw3+sfbs3,sfsz4=sfsw4+sfbs4,sfsz5=sfsw5+sfbs5,sfsz6=sfsw6+sfbs6,sfsz7=sfsw7+sfbs7,sfsz8=sfsw8+sfbs8,sfsz9=sfsw9+sfbs9,sfsz10=sfsw10+sfbs10,sfsz12=sfsw12+sfbs12,sfsz15=sfsw15+sfbs15,sfsz20=sfsw20+sfbs20,sfsz25=sfsw25+sfbs25,sfsz30=sfsw30+sfbs30)]
+  prw[,approx_eubs1:=(eur/(eur+eur12m/10000)*(1+ussw1/10000)-(1+eusw1/10000))*10000]
+  prw[,approx_eubs5:=((eur/(eur+eur5y/10000))^(1/5)*(1+ussw5/10000)-(1+eusw5/10000))*10000]
+  # transform prw back to prl
+  prl<-data.table::melt(prw,id.vars='date',variable.name='ticker')
+  prl<-prl[!is.na(value)]
+  #browser()
+  dtl4<-dtl.addswapsprd(dtl3,prl)
+################
+  toc()
+  list('prw'=prw,'prl'=prl,'dtl4'=dtl4,'br'=br)
+}
 
 dtl.addswapsprd<-function(dtl,prl){
   ######## calculate interpolated swap spread for each and every single bond
@@ -318,6 +272,122 @@ dtl.addswapsprd<-function(dtl,prl){
   dtl
 }
 
+resyldsprdv4<-function(dtlin,pricein,regversion=2,globaluponly=1,returndt=0,adjccybs=0,winsor.=.01){
+  # a wrapper for FE regression
+  tic()
+  dtl<-copy(dtlin)
+  # get rid of dates with only one ccy
+  setkey(dtl,date)
+  dtl<-dtl[dtl[,.N,by=c('date','ccy')][,.N,date][N!=1,.(date)]]
+
+  if (globaluponly){ # get rid of up where up doesn't have bonds in both ccys for each date
+    dtl<-filterglobaluponly(dtl)
+  }
+  if (adjccybs==1)
+    lsout<-getccyFE2(dtl,fieldstr='swapsprdadj',version=regversion,winsor=winsor.)
+  else
+    lsout<-getccyFE2(dtl,fieldstr='swapsprd',version=regversion,winsor=winsor.)
+  
+  toc()
+  if (returndt==1)
+    lsout
+  else
+    lsout[[1]]
+}
+
+getccyFE2<-function(dfin,fieldstr='OAS_SPREAD_BID',version=2,winsor=.01){
+#  Generalized function for calculating FE 
+print(str_c('FE on field: ',fieldstr))
+  if ('field' %in% ds(dfin)) { # if dfin is in the long format with a field called 'field'
+    df2<-dfin[field==fieldstr]
+    lhs<-'value'
+  } else { # if dfin is in the semi-wide format with a column called fieldstr
+    df2<-copy(dfin)
+    lhs<-fieldstr
+  }
+  setkey(df2,date,upcusip,ccy)
+
+#winsorize each date
+  if (winsor!=0){
+    df2[,pctl:=percent_rank(eval(exparse(lhs))),by=.(date,ccy)]
+    df2<-df2[pctl>=winsor & pctl<=(1-winsor)]
+  }
+    #get rid of days with only single observation and ones with only one ccy
+    #df2<-df2[date %ni% df2[,.N,by=c('date','ccy')][N==1,date]]
+    #df2<-df2[date %ni% df2[,.N,.(date,ccy)][,.N,date][N==1,date]]
+
+# set alphabetical order such that dummies are on foreign ccys
+  df2[ccy=='usd',ccy:='1usd']
+        
+# introduce liquidity measure based on bond age
+    df2[,liq:=ytm/ytofm]
+    df2<-df2[liq %between% c(0,1.1)]
+    df2[liq<.5,liq_bucket:=0] # more illiq
+    df2[liq>=.5,liq_bucket:=1] # liq
+  regfun<-function(dt,ccylist,regversion=1,bylist){
+    tryCatch({
+        if (regversion==1){
+          # regversion 1:: run regression directly on data set without taking out bonds that do not have matching pairs
+          reg<-lm(eval(exparse(lhs))~ccy+upcusip,data=dt)
+        } else if (regversion==3){
+          # regversion 3: like regversion 2 but also adds maturity considerations in regression
+          reg<-lm(eval(exparse(lhs))~ccy+upcusip+ytm_bucket,data=dt)
+        } else if (regversion==4){
+          # regversion 4: regversion 3+ 3 rating buckets as dummies
+          reg<-lm(eval(exparse(lhs))~ccy+upcusip+ytm_bucket+rating_bucket,data=dt)
+        } else if (regversion==5){
+         # regversion 5: regversion 3+ 3 rating buckets as dummies
+          reg<-lm(eval(exparse(lhs))~ccy+upcusip+ytm_bucket+rating_bucket+sicfac,data=dt)
+        } else if (regversion==6){
+         # regversion 6, add illiqudity index
+          reg<-lm(eval(exparse(lhs))~ccy+upcusip+ytm_bucket+rating_bucket+sicfac+liq_bucket,data=dt)
+        } else if (regversion==7){
+         # regversion 7, like 6 but w/o sicfac
+          reg<-lm(eval(exparse(lhs))~ccy+upcusip+ytm_bucket+rating_bucket+liq_bucket,data=dt)
+        } else if (regversion==8){
+         # regversion 8, like 7 but only focus on liq
+          reg<-lm(eval(exparse(lhs))~ccy+upcusip+ytm_bucket+liq_bucket,data=dt)
+        }
+    }, error=function(err){
+      print(err)
+      print(bylist)
+      reg<-data.table(coefficients=as.numeric(NA))
+      browser()
+    })
+      dtcoef<-data.frame(as.list(reg$coefficients)) %>% select(starts_with('ccy')) %>%  as.data.table()
+      missccy<-ccylist[str_c('ccy',ccylist) %ni% c('ccy1usd',ds(dtcoef,'ccy'))]
+      if (length(missccy)>0){ # if missing ccy on a particular date
+        for (iccy in missccy){
+          dtcoef[,str_c('ccy',iccy):=as.numeric(NA)]
+        }
+      }
+      dtcoef
+  }
+
+  ccylist<-(df2 %>% distinct(ccy) %>% select(ccy))[[1]]
+  regcoef<-df2[,regfun(.SD,ccylist,version,.BY),by='date']
+  setkey(regcoef,date)
+  lsout<-list('regcoef'=regcoef,'dtreg'=df2)
+  lsout
+}
+intrwrap<-function(dfin,sp,bylist,interprule=1){
+#wrapper function for interpolation
+  splocal<-sp[date==bylist$date & ccy==bylist$ccy]
+  if (nrow(splocal)<3) {
+    if (bylist$date %between% c(2,6)) 
+      print(str_c('No swap data; NAs on ',bylist$date,bylist$ccy))
+    #browser()
+    rep(0,nrow(dfin))
+  } else{
+    tryCatch(dfout<-approx(x=splocal$tenor,y=splocal$value,xout=dfin$ytm,rule=interprule),
+             error=function(err){
+               print(err)
+               print(bylist)
+               browser()
+             })
+    dfout$y
+  }
+}
 
 icollapse3<-function(dtin,ccyA="eur",natA="Eurozone"){
   # newer version of collapsing 
@@ -372,29 +442,29 @@ expandfulldates<-function(dfin){
 }
 
 icollapse_all <- function(dfin){
-  df_euus<- dfin %>% icollapse(.,ccyA = "EUR",natA="Eurozone") %>% 
-    select(date,I_net_fus,IN_fus) %>% 
-    rename(I_net_euus=I_net_fus,IN_euus=IN_fus) %>% 
-    expandfulldates(.)
-  df_gbus<- dfin %>% icollapse(.,ccyA = "GBP",natA="United Kingdom") %>% 
-    select(date,I_net_fus,IN_fus) %>% 
-    rename(I_net_gbus=I_net_fus,IN_gbus=IN_fus) %>% 
-    expandfulldates(.)
-  df_jpus<- dfin %>% icollapse(.,ccyA = "JPY",natA="Japan") %>% 
-    select(date,I_net_fus,IN_fus) %>% 
-    rename(I_net_jpus=I_net_fus,IN_jpus=IN_fus) %>% 
-    expandfulldates(.)
-  df_auus<- dfin %>% icollapse(.,ccyA = "AUD",natA="Australia") %>% 
-    select(date,I_net_fus,IN_fus) %>% 
-    rename(I_net_auus=I_net_fus,IN_auus=IN_fus) %>% 
-    expandfulldates(.)
+df_euus<- dfin %>% icollapse(.,ccyA = "EUR",natA="Eurozone") %>% 
+  select(date,I_net_fus,IN_fus) %>% 
+  rename(I_net_euus=I_net_fus,IN_euus=IN_fus) %>% 
+  expandfulldates(.)
+df_gbus<- dfin %>% icollapse(.,ccyA = "GBP",natA="United Kingdom") %>% 
+  select(date,I_net_fus,IN_fus) %>% 
+  rename(I_net_gbus=I_net_fus,IN_gbus=IN_fus) %>% 
+  expandfulldates(.)
+df_jpus<- dfin %>% icollapse(.,ccyA = "JPY",natA="Japan") %>% 
+  select(date,I_net_fus,IN_fus) %>% 
+  rename(I_net_jpus=I_net_fus,IN_jpus=IN_fus) %>% 
+  expandfulldates(.)
+df_auus<- dfin %>% icollapse(.,ccyA = "AUD",natA="Australia") %>% 
+  select(date,I_net_fus,IN_fus) %>% 
+  rename(I_net_auus=I_net_fus,IN_auus=IN_fus) %>% 
+  expandfulldates(.)
 
-  df_fus<- df_euus %>% 
-    full_join(.,df_gbus,by='date') %>% 
-    full_join(.,df_jpus,by='date') %>% 
-    full_join(.,df_auus,by='date') %>% 
-    arrange(date)
-  df_fus
+df_fus<- df_euus %>% 
+  full_join(.,df_gbus,by='date') %>% 
+  full_join(.,df_jpus,by='date') %>% 
+  full_join(.,df_auus,by='date') %>% 
+  arrange(date)
+df_fus
 }
 
 plotgl <- function(dfin,fields=c('I_net_euus'),afteryr=2002){
@@ -446,21 +516,38 @@ wgplot <- function(dfwide,idvar='date'){
 }
 
 
+# issfilter <- function(df_issraw,type=1){
+#   if (type==1){
+#   df_issraw  %>% 
+#   filter(amt>=50,ytofm>=2, ytofm<=99999,nrating<=16, (pub=="Public" | pub=="Sub."), 
+#          mdealtype %ni% c("P","ANPX","M","EP","CEP","TM","PP","R144P"), 
+#          secur %ni% c("Cum Red Pfd Shs", "Non-Cum Pref Sh" , "Preferred Shs" ,"Pfd Stk,Com Stk"),
+#          tf_mid_desc!='Government Sponsored Enterprises',
+#          nrating>1)
+#   } else if (type==2){
+#   df_issraw  %>% 
+#   filter(amt>=100,ytofm>=2, ytofm<=99999, 
+#          mdealtype %ni% c("P","ANPX","M","EP","CEP","TM","PP","R144P"), 
+#          secur %ni% c("Cum Red Pfd Shs", "Non-Cum Pref Sh" , "Preferred Shs" ,"Pfd Stk,Com Stk"),
+#          tf_mid_desc!='Government Sponsored Enterprises')
+#   }
+# }
 issfilter<-function(dtin,type=1){
-  dtout<-dtin
-  dtout %<>% filter(
-     amt >= 50,
-     ytofm >= 1,
-     ytofm <= 99999,
-     mdealtype %ni% c("P", "ANPX", "M", "EP", "CEP", "TM", "PP"),
-     secur %ni% c("Cum Red Pfd Shs","Non-Cum Pref Sh" ,"Preferred Shs" ,"Pfd Stk,Com Stk"),
-     !grepl('Government Sponsored Enterprises',tf_mid_desc),!grepl('Flt', secur),!grepl('Zero Cpn', secur),!grepl('Float', secur),!grepl('Fl', descr),
-     !grepl('Zero Cpn', descr),!grepl('Mortgage-backed', issue_type_desc),!grepl('Asset-backed', issue_type_desc),!grepl('Federal Credit Agency', issue_type_desc),!grepl('Loan', descr)
-   ) 
-  if (type==2){
-    dtout %<>% filter(amt>=100)
-  }
-  dtout %>% as.data.table()
+dtout<-dtin
+dtout %<>% filter(
+   amt >= 50,
+   ytofm >= 1,
+   ytofm <= 99999,
+   mdealtype %ni% c("P", "ANPX", "M", "EP", "CEP", "TM", "PP"),
+   secur %ni% c("Cum Red Pfd Shs","Non-Cum Pref Sh" ,"Preferred Shs" ,"Pfd Stk,Com Stk"),
+   !grepl('Government Sponsored Enterprises',tf_mid_desc),!grepl('Flt', secur),!grepl('Zero Cpn', secur),!grepl('Float', secur),!grepl('Fl', descr),
+   !grepl('Zero Cpn', descr),!grepl('Mortgage-backed', issue_type_desc),!grepl('Asset-backed', issue_type_desc),!grepl('Federal Credit Agency', issue_type_desc),!grepl('Loan', descr)
+ ) 
+if (type==2){
+  dtout %<>% filter(amt>=100)
+}
+
+dtout %>% as.data.table()
 }
 
 
@@ -473,15 +560,15 @@ tabulate <- function(dfin,byvar='variable'){
 unpackbbgprices<-function(prices){
   # use when prices are batched in a list of say 20 groups
   a0 <- unlist(prices, recursive = FALSE)
-  tickernames <- names(a0)
-  df_prices <- data.frame() %>% tbl_df()
-  for (i in 1:length(tickernames)) {
-    temp_new <- a0[[i]] %>% mutate(ticker = tickernames[i]) %>% tbl_df()
-    if (nrow(temp_new) == 0)
-      print (str_c('empty:#', i, ' name:', tickernames[i]))
-    df_prices %<>% dplyr::bind_rows(., temp_new)
-  }
-  df_prices
+tickernames <- names(a0)
+df_prices <- data.frame() %>% tbl_df()
+for (i in 1:length(tickernames)) {
+  temp_new <- a0[[i]] %>% mutate(ticker = tickernames[i]) %>% tbl_df()
+  if (nrow(temp_new) == 0)
+    print (str_c('empty:#', i, ' name:', tickernames[i]))
+  df_prices %<>% dplyr::bind_rows(., temp_new)
+}
+df_prices
 }
 
 
@@ -490,88 +577,88 @@ requestfigibyisin<-function(df_isins){
  # given a dataframe of isins, get a dataframe of isin and figi mappings 
   require('magrittr')
   require('httr')
-  require('jsonlite')
-  #require('tidyjson')
-  # figireq<-'[{"idType":"ID_ISIN","idValue":"XS1033736890"},
-  # {"idType":"ID_BB_UNIQUE","idValue":"JK354407"},
-  # {"idType":"ID_BB","idValue":"JK354407"},
-  # {"idType":"COMPOSITE_ID_BB_GLOBAL","idValue":"JK354407"},
-  # {"idType":"TICKER","idValue":"JK354407 Corp"},
-  # {"idType":"ID_BB_GLOBAL","idValue":"BBG0005HH8B8"}]' ## FIGI code
-  # # figireq<-'[{"idType":"ID_BB_GLOBAL","idValue":"BBG0005HH8B8"}]'
-  print(str_c('min est:',nrow(df_isins)/10000))
-    ptm <- proc.time()
-    counter <- 0 # count request up to 100, for figi limit of 100 request per minute
-    df_isin2figi_all<-as.data.frame(list()) %>% tbl_df()
-    diag_response<-list()
-    for (j in 1:ceiling(nrow(df_isins)/100)){
-      counter <- counter+1
-      if (counter==100){
-       save(df_isin2figi_all,file='temp_dfisinfigi.rdata')
-         print(str_c("row (j):",j*100))
-         # if ((proc.time() - ptm)[[3]]<=60){ # let it sleep to a full minute if it hasn't been a full minute
-           print(str_c('last cycle:',(proc.time() - ptm)[[3]]))
-           print(str_c('sleeping max of full 60 sec or next min:',Sys.time()))
-           Sys.sleep(max(61-(Sys.time() %>% second()),61-((proc.time() - ptm)[[3]])))
-           print(str_c('awake:',Sys.time()))
-           #counter %>% print
-           ptm <- proc.time()
-           counter <- 0
-      #    } else { # continue and reset counters and time
-      #   ## let it sleep till the next minute regardless
-      #     print(str_c('sleeping till next min:',proc.time()[[3]]))
-      #     Sys.sleep(60-Sys.time() %>% second())
-      #     ptm <- proc.time()
-      #     print(str_c('awake:',proc.time()[[3]]))
-      #     counter <- 0
-      # } 
-      }
-      tempreq <- df_isins %>% slice(((j-1)*100+1):min(j*100,nrow(.)))
-      figireq<- tempreq %>%  mutate(idType='ID_ISIN',idValue=isin) %>% select(-isin)  %>% jsonlite::toJSON() 
-      r<-POST(url='https://api.openfigi.com/v1/mapping',add_headers(`Content-Type`='text/json',`X-OPENFIGI-APIKEY`='b0128aa2-fe78-4707-a8ec-d9623d6f9928'), body = figireq, encode = "json")
-      # responsejson %<>% bind_rows(.,r %>% content(as="text") %>% fromJSON(simplifyDataFrame = TRUE))
-      tryCatch({
-        responsejson <-   r %>% content(as = "text") %>% fromJSON(simplifyDataFrame = TRUE)
-      }, error = function(err) {
-        print(r %>% content(as = "text") %>% str_sub(.,1,50))
-        
-        counter <- 0
-        print(str_c('sleeping on error:',Sys.time()))
-        Sys.sleep(60)
-        ptm <- proc.time()
-        print(str_c('awake:',Sys.time()))
-        r<-POST(url='https://api.openfigi.com/v1/mapping',add_headers(`Content-Type`='text/json',`X-OPENFIGI-APIKEY`='b0128aa2-fe78-4707-a8ec-d9623d6f9928'), body = figireq, encode = "json")
-        tryCatch({
-          responsejson <-  r %>% content(as = "text") %>% fromJSON(simplifyDataFrame = TRUE)
-        }, error=function(err){
-          error('repeated request error, stopping')
-          stop()
-        })
-      })
-      
-     if (colnames(responsejson)==c('error')){
-        next
-      }
-      diag_response[j]<-responsejson
-      # extract 100x100 results at a time
-      temp_isin2figi<-as.data.frame(list()) %>% tbl_df()
-      if (nrow(responsejson)!=nrow(tempreq)) stop('response not mathcing request row numbers') 
-      for  (i in 1:nrow(responsejson)){
-        if (ncol(responsejson)==1) { # only data column
-          
-          temp_isin2figi %<>% bind_rows(.,responsejson$data[i][[1]] %>% mutate(isin=tempreq$isin[i][[1]]))
-        } else{ # data column and error column #####something is not right
-          if (is.na(responsejson$error[i][[1]]))
-            temp_isin2figi %<>% bind_rows(.,responsejson$data[i][[1]] %>% mutate(isin=tempreq$isin[i][[1]]))
-          else
-            temp_isin2figi %<>% bind_rows(.,data_frame(isin=tempreq$isin[i][[1]]))
-        }
-      }
-      if (nrow(temp_isin2figi)<nrow(tempreq)) browser()
-      df_isin2figi_all %<>% bind_rows(.,temp_isin2figi)
+require('jsonlite')
+#require('tidyjson')
+# figireq<-'[{"idType":"ID_ISIN","idValue":"XS1033736890"},
+# {"idType":"ID_BB_UNIQUE","idValue":"JK354407"},
+# {"idType":"ID_BB","idValue":"JK354407"},
+# {"idType":"COMPOSITE_ID_BB_GLOBAL","idValue":"JK354407"},
+# {"idType":"TICKER","idValue":"JK354407 Corp"},
+# {"idType":"ID_BB_GLOBAL","idValue":"BBG0005HH8B8"}]' ## FIGI code
+# # figireq<-'[{"idType":"ID_BB_GLOBAL","idValue":"BBG0005HH8B8"}]'
+print(str_c('min est:',nrow(df_isins)/10000))
+  ptm <- proc.time()
+  counter <- 0 # count request up to 100, for figi limit of 100 request per minute
+  df_isin2figi_all<-as.data.frame(list()) %>% tbl_df()
+  diag_response<-list()
+  for (j in 1:ceiling(nrow(df_isins)/100)){
+    counter <- counter+1
+    if (counter==100){
+     save(df_isin2figi_all,file='temp_dfisinfigi.rdata')
+       print(str_c("row (j):",j*100))
+       # if ((proc.time() - ptm)[[3]]<=60){ # let it sleep to a full minute if it hasn't been a full minute
+         print(str_c('last cycle:',(proc.time() - ptm)[[3]]))
+         print(str_c('sleeping max of full 60 sec or next min:',Sys.time()))
+         Sys.sleep(max(61-(Sys.time() %>% second()),61-((proc.time() - ptm)[[3]])))
+         print(str_c('awake:',Sys.time()))
+         #counter %>% print
+         ptm <- proc.time()
+         counter <- 0
+    #    } else { # continue and reset counters and time
+    #   ## let it sleep till the next minute regardless
+    #     print(str_c('sleeping till next min:',proc.time()[[3]]))
+    #     Sys.sleep(60-Sys.time() %>% second())
+    #     ptm <- proc.time()
+    #     print(str_c('awake:',proc.time()[[3]]))
+    #     counter <- 0
+    # } 
     }
-    #this is the isin to figi mapping that contains 
-    list(df_isin2figi_all,diag_response)
+    tempreq <- df_isins %>% slice(((j-1)*100+1):min(j*100,nrow(.)))
+    figireq<- tempreq %>%  mutate(idType='ID_ISIN',idValue=isin) %>% select(-isin)  %>% jsonlite::toJSON() 
+    r<-POST(url='https://api.openfigi.com/v1/mapping',add_headers(`Content-Type`='text/json',`X-OPENFIGI-APIKEY`='b0128aa2-fe78-4707-a8ec-d9623d6f9928'), body = figireq, encode = "json")
+    # responsejson %<>% bind_rows(.,r %>% content(as="text") %>% fromJSON(simplifyDataFrame = TRUE))
+    tryCatch({
+      responsejson <-   r %>% content(as = "text") %>% fromJSON(simplifyDataFrame = TRUE)
+    }, error = function(err) {
+      print(r %>% content(as = "text") %>% str_sub(.,1,50))
+      
+      counter <- 0
+      print(str_c('sleeping on error:',Sys.time()))
+      Sys.sleep(60)
+      ptm <- proc.time()
+      print(str_c('awake:',Sys.time()))
+      r<-POST(url='https://api.openfigi.com/v1/mapping',add_headers(`Content-Type`='text/json',`X-OPENFIGI-APIKEY`='b0128aa2-fe78-4707-a8ec-d9623d6f9928'), body = figireq, encode = "json")
+      tryCatch({
+        responsejson <-  r %>% content(as = "text") %>% fromJSON(simplifyDataFrame = TRUE)
+      }, error=function(err){
+        error('repeated request error, stopping')
+        stop()
+      })
+    })
+    
+   if (colnames(responsejson)==c('error')){
+      next
+    }
+    diag_response[j]<-responsejson
+    # extract 100x100 results at a time
+    temp_isin2figi<-as.data.frame(list()) %>% tbl_df()
+    if (nrow(responsejson)!=nrow(tempreq)) stop('response not mathcing request row numbers') 
+    for  (i in 1:nrow(responsejson)){
+      if (ncol(responsejson)==1) { # only data column
+        
+        temp_isin2figi %<>% bind_rows(.,responsejson$data[i][[1]] %>% mutate(isin=tempreq$isin[i][[1]]))
+      } else{ # data column and error column #####something is not right
+        if (is.na(responsejson$error[i][[1]]))
+          temp_isin2figi %<>% bind_rows(.,responsejson$data[i][[1]] %>% mutate(isin=tempreq$isin[i][[1]]))
+        else
+          temp_isin2figi %<>% bind_rows(.,data_frame(isin=tempreq$isin[i][[1]]))
+      }
+    }
+    if (nrow(temp_isin2figi)<nrow(tempreq)) browser()
+    df_isin2figi_all %<>% bind_rows(.,temp_isin2figi)
+  }
+  #this is the isin to figi mapping that contains 
+  list(df_isin2figi_all,diag_response)
 }
 
 
@@ -1154,44 +1241,44 @@ ggplotw.comp<-function(dtin){
 #    dfout
 # }
 
-# resyldsprdv2<-function(dtlin,pricein,regversion=2,globaluponly=1,returndt=0){
-#   # Residualize yld sprd ----------------------------------------------------
-#   #create yield spread for aggregate 
-#   dtl<-copy(dtlin[field=='YLD_YTM_MID'])
-#   dtl[,ytm:=as.numeric((mat2-date)/365)]
-#   #winsorize by value a little
-#   #[,pctl:=percent_rank(value),by=.(date,ccy)][pctl>=.01 & pctl<=.99]
-#   # get rid of dates with only one ccy
-#   setkey(dtl,date)
-#   dtl<-dtl[dtl[,.N,by=c('date','ccy')][,.N,date][N!=1,.(date)]]
+resyldsprdv2<-function(dtlin,pricein,regversion=2,globaluponly=1,returndt=0){
+  # Residualize yld sprd ----------------------------------------------------
+  #create yield spread for aggregate 
+  dtl<-copy(dtlin[field=='YLD_YTM_MID'])
+  dtl[,ytm:=as.numeric((mat2-date)/365)]
+  #winsorize by value a little
+  #[,pctl:=percent_rank(value),by=.(date,ccy)][pctl>=.01 & pctl<=.99]
+  # get rid of dates with only one ccy
+  setkey(dtl,date)
+  dtl<-dtl[dtl[,.N,by=c('date','ccy')][,.N,date][N!=1,.(date)]]
 
-#   if (globaluponly){
-#   # get rid of up where up doesn't have bonds in both ccys for each date
-#     dtl<-filterglobaluponly(dtl)
-#   }
+  if (globaluponly){
+  # get rid of up where up doesn't have bonds in both ccys for each date
+    dtl<-filterglobaluponly(dtl)
+  }
   
-#   # next step, try to generate yield sprd at the individual bond level instead of taking avg 
-#   # bring in the bbg prices
-#   swappricesl<-pricein[ticker %like% '^ussw' | ticker %like% '^eusa' | ticker %like% '^bpsw' | ticker %like% '^jysw' | ticker %like% '^adsw',.(date,ticker,value)] 
-#   setnames(swappricesl,'ticker','field')
-#   swappricesl[,ccy:=stringr::str_sub(field,1,2)][ccy=='eu',ccy:='eur'][ccy=='us',ccy:='usd'][ccy=='bp',ccy:='gbp'][ccy=='jy',ccy:='jpy'][ccy=='ad',ccy:='aud'][,tenor:=as.numeric(str_extract(field,regex('\\d+')))]
-#   #swappricesl[,.N,ticker][,.(field,tictenor=str_sub(ticker,5))] 
-#   swappricesl[field=='bpswsc',tenor:=.25]
-#   if (swappricesl[is.na(tenor),.N]!=0) warning('swappricesl has tenor not parsed')
-#   setkey(swappricesl,date,ccy,tenor,field)
-#   setkey(dtl,date,ccy)
+  # next step, try to generate yield sprd at the individual bond level instead of taking avg 
+  # bring in the bbg prices
+  swappricesl<-pricein[ticker %like% '^ussw' | ticker %like% '^eusa' | ticker %like% '^bpsw' | ticker %like% '^jysw' | ticker %like% '^adsw',.(date,ticker,value)] 
+  setnames(swappricesl,'ticker','field')
+  swappricesl[,ccy:=stringr::str_sub(field,1,2)][ccy=='eu',ccy:='eur'][ccy=='us',ccy:='usd'][ccy=='bp',ccy:='gbp'][ccy=='jy',ccy:='jpy'][ccy=='ad',ccy:='aud'][,tenor:=as.numeric(str_extract(field,regex('\\d+')))]
+  #swappricesl[,.N,ticker][,.(field,tictenor=str_sub(ticker,5))] 
+  swappricesl[field=='bpswsc',tenor:=.25]
+  if (swappricesl[is.na(tenor),.N]!=0) warning('swappricesl has tenor not parsed')
+  setkey(swappricesl,date,ccy,tenor,field)
+  setkey(dtl,date,ccy)
   
-#   dtl[!is.na(ytm),swapyld:=intrwrap(.SD,swappricesl,.BY),by=.(date,ccy)][swapyld==0,swapyld:=NA]
-#   dtl[,value:=value*100-swapyld][,field:='yldsprd']
-#   setkey(dtl,date,upcusip)
+  dtl[!is.na(ytm),swapyld:=intrwrap(.SD,swappricesl,.BY),by=.(date,ccy)][swapyld==0,swapyld:=NA]
+  dtl[,value:=value*100-swapyld][,field:='yldsprd']
+  setkey(dtl,date,upcusip)
 
-#   dtl<-dtl[value!='NA'] #get rid of ones that can't be interpolated for one reason or another
-#   lsout<-getccyFE2(dtl,fieldstr='yldsprd',version=regversion)
-#   if (returndt==1)
-#     lsout
-#   else
-#     lsout[[1]]
-# }
+  dtl<-dtl[value!='NA'] #get rid of ones that can't be interpolated for one reason or another
+  lsout<-getccyFE2(dtl,fieldstr='yldsprd',version=regversion)
+  if (returndt==1)
+    lsout
+  else
+    lsout[[1]]
+}
 
 # resyldsprd<-function(dtlin,pricein,regversion=2){
 #   # Residualize yld sprd ----------------------------------------------------
