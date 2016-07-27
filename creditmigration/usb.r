@@ -1,5 +1,6 @@
 setwd('E:/')
 setwd('J:/')
+setwd('/Volumes/GORDON LIAO')
 rm(list=ls(all=TRUE))
 load('gldb.RData')
 source('util.r')
@@ -94,3 +95,51 @@ dtchf %>% showdups()
 save(dtchf,file='tempdtchffirst2batches.rdata')
 
 dtchf3<-downloadbbg('restart',filestr='chf...')
+
+#6/30
+dtchf4<-downloadbbg('restart')
+load('tempdtchffirst2batches.rdata')
+dtchf4
+dtchfdaily<-update.dt(dtchf,dtchf4)
+save(dtchfdaily,file='dtchfdaily.RData')
+
+#dtsmalliss<-downloadbbg('restart',filestr = 'temp_bbg_smalliss_160624.RData')
+#save(dtsmalliss,file='smallIssuance.RData')
+
+dtsmalliss<-loadBBGdownload2df('smallIssuance.RData')
+load('temp_temp_bbg_smalliss_160624.RData')
+aa<-data.table('pk'=(tickerslist %>% unlist()))
+
+aa<-data.table()
+for (i in 1:length(tickerslist)){
+  aa<-rbind(aa,data.table('pk'=tickerslist[[i]],'nbatch'=i,'tot'=length(tickerslist[[i]])))
+}
+
+miss<-aa %>% anti_join(dtsmalliss[,.N,pk],by='pk')
+miss %>% numSummary()
+miss[,.N,nbatch][order(nbatch)] %>% View
+
+
+# 2016-07-26 update monthly bond data 
+rm
+load('bonds2update160726.rdata')
+dtladd.daily2<-downloadbbg(unique(dttoget2[,.N,pk][,.(pk)]),filestr='dtl160726dailyB.RData',fieldstr='YLD_YTM_MID',startdt=ymd('2016-04-01'),periodstr='DAILY',splitN=1)
+
+load('temp_bbgdownload_restart.RData')
+i<-36
+save(prices,tickers,tickerslist,i,fieldstr,startdt,opt,splitN,file='temp_bbgdownload_restart.RData')
+
+source('util.r')
+dtladd.daily<-downloadbbg('restart')
+save.image('temp4_daily.rdata')
+
+dtladd.daily<-update.dt(dtladd.daily,dtladd.daily2,keyfield = c('pk','date'))
+save(dtladd.daily,file='dtl160726_daily_addition.RData')
+
+dttoget2<-dttoget %>% anti_join(dtladd.daily[,.N,pk],by='pk')
+
+prices[[41]]
+load('temp3.rdata')
+prices %>% length()
+dtladd.mo[,.N,pk]
+dttoget[,.N,pk]

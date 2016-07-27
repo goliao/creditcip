@@ -9,7 +9,7 @@ require(dplyr)
 require(lubridate)
 require(ggplot2)
 require(sandwich)
-require(stargazer)
+#require(stargazer)
 require(reshape2)
 # require(sqldf)
 require(magrittr)
@@ -105,7 +105,7 @@ preprocess<-function(bondref,dtl,prl,monthlyonly=TRUE,issfiltertype=2){
   toc()
   list('prw'=prw,'prl'=prl,'dtl4'=dtl4,'br'=br)
 }
-resyldsprdv4<-function(dtlin,pricein,regversion=2,globaluponly=1,returndt=0,adjccybs=0,winsor.=.01){
+resyldsprdv4<-function(dtlin,pricein,regversion=2,globaluponly=1,returndt=0,adjccybs=0,winsor.=.025){
   # a wrapper for FE regression
   tic()
   dtl<-copy(dtlin)
@@ -128,7 +128,7 @@ resyldsprdv4<-function(dtlin,pricein,regversion=2,globaluponly=1,returndt=0,adjc
     lsout[[1]]
 }
 
-getccyFE2<-function(dfin,fieldstr='OAS_SPREAD_BID',version=2,winsor=.01){
+getccyFE2<-function(dfin,fieldstr='OAS_SPREAD_BID',version=2,winsor=.025){
   #  Generalized function for calculating FE 
   print(str_c('FE on field: ',fieldstr))
     if ('field' %in% ds(dfin)) { # if dfin is in the long format with a field called 'field'
@@ -248,11 +248,24 @@ backfillNAs.prl<-function(prl,tickerpattern='^eubsv\\d',dates2fill.='eu', roll.=
   setkey(prlnew,date,ticker,pk)
   prlnew
 }
+get.dtl.status.mo<-function(dtl,gracewindow=60,bondref.=bondref){
+  # get a sense of what data needs to be updated at the monthly and daily frequency
+  # gracewindow is the number of days that are allowed to elapse to be considered as filled back starting today
+  dtl<-copy(dtl)
+  aa<-dtl[,.(MonthlyMin=min(date),MonthlyMax=max(date)),.(pk)] 
+  #setnames(aa,c('maxdt_0','mindt_0','maxdt_1','mindt_1'),c('DailyMax','DailyMin','MonthlyMax','MonthlyMin'))
+  bb<-merge(bondref.[,.(pk,i,descr,d,settlement2,mat2,matbbg,ccy)],aa,by='pk',all.y=TRUE)
+  bb[!is.na(mat2),mat:=mat2][is.na(mat) & !is.na(matbbg),mat:=matbbg]
+  bb[mat<=today(),matured:=1][is.na(matured),matured:=0]
+  bb[MonthlyMax>mat-50 | MonthlyMax>today()-gracewindow,monthlyfilled:=1][is.na(monthlyfilled),monthlyfilled:=0]
+  print(bb[monthlyfilled==0,.N,MonthlyMax][order(-N)])
+  bb
+}
 
 get.dtl.status<-function(dtl,gracewindow=60,bondref.=bondref){
   # get a sense of what data needs to be updated at the monthly and daily frequency
   # gracewindow is the number of days that are allowed to elapse to be considered as filled back starting today
-
+  dtl<-copy(dtl)
   aa<-dtl[,.(mindt=min(date),maxdt=max(date)),.(pk,monthend)] %>% dcast(pk~monthend,value.var=c('maxdt','mindt'))
   setnames(aa,c('maxdt_0','mindt_0','maxdt_1','mindt_1'),c('DailyMax','DailyMin','MonthlyMax','MonthlyMin'))
   bb<-merge(bondref.[,.(pk,i,descr,d,settlement2,mat2,matbbg,ccy)],aa,by='pk',all.y=TRUE)
@@ -872,7 +885,8 @@ downloadbbg<-function(tickers,filestr=str_c('bbg_',today(),'.RData'),startdt=ymd
         save(prices,tickers,tickerslist,i,fieldstr,startdt,opt,splitN,file='temp_bbgdownload_restart.RData')
         #browser()
         blpDisconnect(con)      
-        return(NA)
+        return(NULL)
+        break()
     }
     )
     # will remove this following line later
@@ -912,6 +926,25 @@ update.dtl<-function(dtlin,dtladd,overridein=FALSE,diagret=FALSE,monthenddates.=
   dtladd[,pk:=tolower(pk)]
   dtladd<-fixmonthend(monthenddates.,dtladd)
   dtout<-update.dt(dtout,dtladd,keyfield = c('date','pk','field'),override=overridein,diagnostic_rt=diagret)
+  dtout
+}
+
+update.dtl.mo<-function(dtlin,dtladd,overridein=FALSE,diagret=FALSE){
+  # a condensed version for only YLD_YTM_MID and w/o regard for monthend
+  # can also be applied to daily data
+  dtout<-copy(dtlin)
+  dtladd<-copy(dtladd)
+  if ('field' %in% ds(dtladd)){
+    message('resticting field to be only YLD_YTM_MID')
+    dtladd<-dtladd[field=='YLD_YTM_MID']
+  }
+  dtout[,pk:=tolower(pk)]
+  dtladd[,pk:=tolower(pk)]
+  dtout<-dtout[,.(date,pk,value)]
+  dtladd<-dtladd[,.(date,pk,value)]
+  
+  setkey(dtout,date,pk); setkey(dtladd,date,pk)
+  dtout<-update.dt(dtout,dtladd,keyfield = c('date','pk'),override=overridein,diagnostic_rt=diagret)
   dtout
 }
 update.br<-function(bondref,dtadd,keystr='figi'){
@@ -1012,7 +1045,7 @@ update.dt<-function(dtA,dtB,keyfield='auto',updatefield='auto',insertnewrow=TRUE
   }
   setkeyv(dtA,keyoriginal)
   if (diagnostic_rt){
-    list(dtA,conflist)
+    list('dtout'=dtA,'dtret'=conflist)
   } else {
     dtA  
   }

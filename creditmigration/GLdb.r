@@ -524,6 +524,8 @@ dtl<-dtl %>% distinct(date,pk,field)
 rm(list=ls(all=TRUE));load('gldb.RData')
 dtl<-dtl[field=='YLD_YTM_MID'][,field:=NULL]
 prl[,field:=NULL]
+
+
 #save(dtl,prl,bondref,monthenddates,file='gldbsmall.RData')
 # 
 # 
@@ -538,4 +540,12 @@ prl[,field:=NULL]
 # gdbwrite('glsecval',dtl2,dbname='temp.sqlite',bool_overwrite = TRUE)
 
 
-
+# 7/26/16 Reconstruct Gldb (dtl bond data) monthly only 
+# see GLdbmo.r
+# 7/27/16 reconstructed dtldaily.
+# see GLdbdailydtl.r
+rm(list=ls(all=TRUE))
+load('GLdb.RData')
+save(bondref,file='bondref.RData')
+save(prl,file='prl.RData')
+save(monthenddates,file='monthenddates.RData')
