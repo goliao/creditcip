@@ -549,3 +549,17 @@ load('GLdb.RData')
 save(bondref,file='bondref.RData')
 save(prl,file='prl.RData')
 save(monthenddates,file='monthenddates.RData')
+
+
+
+# prl and monthenddate update July 31, 2016
+load('prl.RData'); 
+load('monthenddates.RData')
+monthenddates<-rbind(monthenddates,data.table('date'=c(ymd('2016-06-30'),ymd('2016-07-29'))))
+#save(monthenddates,file='monthenddates.RData')
+load(file='prlupdate160731.RData')
+prl<-update.prl(prl,prladd.daily,override=T)
+save(prl,file='prl.RData')
+
+
+#update.dt(prladd.daily,prladd.mo,keyfield=c('pk','date'))

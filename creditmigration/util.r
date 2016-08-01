@@ -58,18 +58,19 @@ preprocess<-function(bondref,dtl,prl,monthlyonly=TRUE,issfiltertype=2){
   }
   # MERGE RATING AND ADD MATURITY BUCKETS -----------------------------------
   setkey(dtl,pk);setkey(br,pk)
-  if (monthlyonly) {
-    dtl<-dtl[monthend==1]
-    prl<-prl[monthend==1]
-  } else{
-    print('daily data')
-    
-    pk_daily0<-unique(dtl[monthend==0,.(pk)])
-    # alternatively, count pk as daily obs if there are more than three times as many daily obs as monthly obs
-    pkcount<-dtl[,.N,.(pk,monthend)] %>% dcast(pk~monthend)
-    pk_daily<-pkcount[`0`>3*`1`,.(pk)]
-    setkey(pk_daily,pk)
-    dtl<-dtl[pk_daily]
+  if ('monthend' %in% ds(dtl)){
+    if (monthlyonly) {
+      dtl<-dtl[monthend==1]
+      prl<-prl[monthend==1]
+    } else{
+      print('daily data')
+      pk_daily0<-unique(dtl[monthend==0,.(pk)])
+      # alternatively, count pk as daily obs if there are more than three times as many daily obs as monthly obs
+      pkcount<-dtl[,.N,.(pk,monthend)] %>% dcast(pk~monthend)
+      pk_daily<-pkcount[`0`>3*`1`,.(pk)]
+      setkey(pk_daily,pk)
+      dtl<-dtl[pk_daily]
+    }
   }
   dtl2<-dtl[br[,.(ccy,mat2,nrating,upcusip,pk,ytofm,sicfac,sic1)],nomatch=0]
   dtl2[,ytm:=as.numeric((mat2-date)/365)]
@@ -663,24 +664,24 @@ countdups<-function(dfin,field='isin'){
 
 
 loadBBGdownload2df<-function(filename='../data/bloomberg/bbg_gbonds_160426_mo_batch1.RData'){
-  # takes in a filename associated with bbg download; spits out price dataframe with field as colnames and a variable type
-  load(filename)
-  # tryCatch({
-    a0 <- unlist(prices, recursive = FALSE)
-    dtw<-data.table::rbindlist(a0,use.names=TRUE,idcol=TRUE)
-    dtl<-melt(dtw,id.vars=c('date','.id'),variable.name='field')[!is.na(value)]
-    setnames(dtl,'.id','pk')
-    setkey(dtl,date,pk)
-    dtl
-  # }, error=function(err) { #BDP
-  #   dtw<- prices[[1]] %>% as.data.table()
-  #   dtw[,pk:=rownames(prices[[1]])]
-  #   setkey(dtw,pk)
-  #   print('BDP')
-  #   #browser()
-  #   dtw
-  # })
-  
+# takes in a filename associated with bbg download; spits out price dataframe with field as colnames and a variable type
+load(filename)
+# tryCatch({
+  a0 <- unlist(prices, recursive = FALSE)
+  dtw<-data.table::rbindlist(a0,use.names=TRUE,idcol=TRUE)
+  dtl<-melt(dtw,id.vars=c('date','.id'),variable.name='field')[!is.na(value)]
+  setnames(dtl,'.id','pk')
+  setkey(dtl,date,pk)
+  dtl
+# }, error=function(err) { #BDP
+#   dtw<- prices[[1]] %>% as.data.table()
+#   dtw[,pk:=rownames(prices[[1]])]
+#   setkey(dtw,pk)
+#   print('BDP')
+#   #browser()
+#   dtw
+# })
+
 }
 
 
@@ -882,15 +883,14 @@ downloadbbg<-function(tickers,filestr=str_c('bbg_',today(),'.RData'),startdt=ymd
     }, error=function(err){
         print(err)
         message('Limit Hit on ', i, ' consider restarting download on another machine or another day')
-        save(prices,tickers,tickerslist,i,fieldstr,startdt,opt,splitN,file='temp_bbgdownload_restart.RData')
+        save(prices,tickers,tickerslist,i,fieldstr,startdt,opt,splitN,filestr,file='temp_bbgdownload_restart.RData')
         #browser()
         blpDisconnect(con)      
-        return(NULL)
-        break()
+        stop(err)
     }
     )
     # will remove this following line later
-    save(prices,tickers,tickerslist,i,fieldstr,startdt,opt,splitN,file=str_c('temp_',filestr))
+    save(prices,tickers,tickerslist,i,fieldstr,startdt,opt,splitN,filestr,file=str_c('temp_',filestr))
   }
   blpDisconnect(con)
   save(prices,file=filestr)
@@ -1133,6 +1133,15 @@ ggplotw.comp<-function(dtin){
   print(dtin[,.(date,ccycad,i.ccycad)] %>% ggplotw())
   dev.flush();flush.console();Sys.sleep(1)
 
+}
+
+dt2clip = function(x,sep="\t",col.names=T,...) { 
+  write.table(x
+             ,file = pipe("pbcopy")
+             ,sep=sep
+             ,col.names = col.names
+             ,row.names = F
+             ,quote = F,...)
 }
 # old/defunct
 

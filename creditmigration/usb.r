@@ -1,6 +1,6 @@
 setwd('E:/')
 setwd('J:/')
-setwd('/Volumes/GORDON LIAO')
+setwd('/Volumes/GORDONLIAO')
 rm(list=ls(all=TRUE))
 load('gldb.RData')
 source('util.r')
@@ -120,26 +120,46 @@ miss %>% numSummary()
 miss[,.N,nbatch][order(nbatch)] %>% View
 
 
-# 2016-07-26 update monthly bond data 
-rm
+# 2016-07-26 update daily bond data 
 load('bonds2update160726.rdata')
 dtladd.daily2<-downloadbbg(unique(dttoget2[,.N,pk][,.(pk)]),filestr='dtl160726dailyB.RData',fieldstr='YLD_YTM_MID',startdt=ymd('2016-04-01'),periodstr='DAILY',splitN=1)
-
 load('temp_bbgdownload_restart.RData')
 i<-36
-save(prices,tickers,tickerslist,i,fieldstr,startdt,opt,splitN,file='temp_bbgdownload_restart.RData')
-
+#save(prices,tickers,tickerslist,i,fieldstr,startdt,opt,splitN,file='temp_bbgdownload_restart.RData')
 source('util.r')
 dtladd.daily<-downloadbbg('restart')
-save.image('temp4_daily.rdata')
-
+#save.image('temp4_daily.rdata')
 dtladd.daily<-update.dt(dtladd.daily,dtladd.daily2,keyfield = c('pk','date'))
-save(dtladd.daily,file='dtl160726_daily_addition.RData')
-
+#save(dtladd.daily,file='dtl160726_daily_addition.RData')
 dttoget2<-dttoget %>% anti_join(dtladd.daily[,.N,pk],by='pk')
 
-prices[[41]]
-load('temp3.rdata')
-prices %>% length()
-dtladd.mo[,.N,pk]
-dttoget[,.N,pk]
+
+
+# 2016-07-31 update monthly bond data 
+source('util.r')
+#load('bonds2update160726.rdata')
+#dtladd.monthly<-downloadbbg(unique(dttoget[,.N,pk][,.(pk)]),filestr='dtl160731mo.RData',fieldstr='YLD_YTM_MID',startdt=ymd('2016-03-01'),periodstr='MONTHLY',splitN=50)
+dtladd.monthly<-downloadbbg('restart')
+#save(dtladd.monthly,file='dtlmoadd20160731.RData')
+
+#update prl daily
+rm(list=ls(all=TRUE))
+load('gldb.RData')
+source('util.r')
+
+prl2get<-get.prl.status(prl)
+prladd.daily<-downloadbbg(prl2get[,.(pk=str_c(ticker,' curncy'))],filestr='prl160731daily.RData',fieldstr='PX_LAST',startdt=ymd('2016-05-25'),periodstr='DAILY',splitN=4)
+#save(prladd.daily,file='prlupdate160731.RData')
+prladd.mo<-downloadbbg(prl2get[,.(pk=str_c(ticker,' curncy'))],filestr='prl160731daily.RData',fieldstr='PX_LAST',startdt=ymd('2016-05-25'),periodstr='MONTHLY',splitN=4)
+#save(prladd.daily,prladd.mo,file='prlupdate160731.RData')
+prl2get[,.N,DailyMax]
+prl2get[DailyMax<'2016-06-01']
+
+
+# getting new issuance
+rm(list=ls(all=TRUE))
+source('util.r')
+newiss2get<-fread('newiss2get160731.csv',sep=',')
+dtladd.monthly<-downloadbbg(newiss2get,filestr='dtl160731newissmo.RData',fieldstr='YLD_YTM_MID',startdt=ymd('2016-04-01'),periodstr='MONTHLY',splitN=6)
+dtladd.daily<-downloadbbg(newiss2get,filestr='dtl160731newissdaily.RData',fieldstr='YLD_YTM_MID',startdt=ymd('2016-04-01'),periodstr='DAILY',splitN=6)
+# save(dtladd.monthly,dtladd.daily,file='dtl160731newiss.RData')

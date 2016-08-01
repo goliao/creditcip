@@ -59,15 +59,28 @@ dtltemp<-update.dtl.mo(dtl,dtladd.mo,overridein = T,diagret = T)
 dtl<-dtltemp[[1]]
 recheck<-rbind(recheck,dtltemp[[2]][[1]][,.N,pk][,.(pk)])
 dtl.mo<-dtl
+
+#Update old bonds until july 31,2016
+load('dtlmoadd20160731.RData')
+dtltemp<-update.dtl.mo(dtl.mo,dtladd.monthly,overridein = T,diagret = T)
+dtl.mo<-dtltemp[[1]]
+recheck<-rbind(recheck,dtltemp[[2]][[1]][,.N,pk][,.(pk)])
+
+#Update with new issuance until july 31,2016
+load(file='dtl160731newiss.RData')
+dtltemp<-update.dtl.mo(dtl.mo,dtladd.monthly,overridein = T,diagret = T)
+dtl.mo<-dtltemp[[1]]
+recheck<-rbind(recheck,dtltemp[[2]][[1]][,.N,pk][,.(pk)])
 #save(dtl.mo,recheck,file='dtlmo.rdata')
 
 
-
-#This update seems to be pretty incomplete. try again later
-rm(list=ls(all=TRUE))
+# load again
 setwd("/Users/gliao/Dropbox/Research/ccy basis/creditmigration");#setwd("C:/Users/gliao/Dropbox/Research/ccy basis/creditmigration")
-source('util.r')
+rm(list=ls(all=TRUE))
 load('dtlmo.rdata')
+source('util.r')
+
+
 # load('gldb.RData')
 # bondstatus<-get.dtl.status.mo(dtl.mo,gracewindow=30,bondref)
 # dttoget<-bondstatus[matured==0 & monthlyfilled==0 & !is.na(ccy)]
@@ -76,27 +89,3 @@ load('dtlmo.rdata')
 # dtladd.mo<-loadBBGdownload2df('dtl160726.RData')
 # update.dtl.mo(dtl.mo,dtladd.mo)
 
-
-
-# ### bunch of dailies 
-# dtladd.mo1<-loadBBGdownload2df('bbg_2016-07-26.RData')
-# dtladd.mo2<-loadBBGdownload2df('temp_bbg_2016-07-26.RData')
-# dtladd.mo3<-loadBBGdownload2df('temp_bbgdownload_restart.RData')
-# dtladd.mo1[,.N,pk]
-# dtladd.mo2[,.N,pk]
-# dtladd.mo3[,.N,pk]
-# dtladd.mo1[,.N,date]
-# dtladd.mo2[,.N,date]
-# dtladd.mo3[,.N,date]
-# 
-# dtladd.mo<-update.dtl.mo(dtladd.mo0,dtladd.mo1)
-# dtladd.mo[,.N,pk]
-# dtladd.mo2[,.N,date]
-# 
-# 
-# # #Daily need to use monthly instead
-# # loadBBGdownload2df('bbg_dailybondsadd_160624.RData')
-# # # add daily bond data:
-# # load('dailyprices.rdata')
-# # dtadd2<-loadBBGdownload2df('../data/bloomberg/bbg_gbonds_160426_daily_batch2.RData')
-# # load('../data/bloomberg/dtchfdaily.RData')

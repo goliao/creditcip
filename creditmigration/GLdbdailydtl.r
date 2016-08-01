@@ -28,7 +28,15 @@ temp<-update.dtl.mo(dtl.daily,dtladd,overridein=T,diagret=T)
 dtl.daily<-temp$dtout
 recheck.daily<-temp$dtret[[1]][,.N,pk][,.(pk)]
 
+# load new issuance data from april to july 31, 2016
+load(file='dtl160731newiss.RData')
+dtltemp<-update.dtl.mo(dtl.daily,dtladd.daily,overridein = T,diagret = T)
+dtl.daily<-dtltemp[[1]]
+recheck.daily<-rbind(recheck.daily,dtltemp[[2]][[1]][,.N,pk][,.(pk)])
+
 #save(dtl.daily,recheck.daily,file='dtldaily.RData')
+
+
 
 
 # load('dtldaily.RData')

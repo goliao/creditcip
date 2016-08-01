@@ -4,9 +4,9 @@ rm(list=ls(all=TRUE));load('gldbsmall.RData')
 source('util.r')
 dtm<-preprocess(bondref,dtl,prl,issfiltertype = 2)
 
-
-
 dtm$ys1<-resyldsprdv4(dtm$dtl4,dtm$prl,regversion = 6)
+save(dtm,file='temp.RData')
+dtm$ys1 %>% ggplotw()
 
 dtm$ys2<-resyldsprdv4(dtm$dtl4[ccy %in% c('usd','jpy')],dtm$prl,regversion = 6)
 

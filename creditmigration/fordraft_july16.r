@@ -77,8 +77,15 @@ obs[,yr:=year(date)][,mo:=month(date)][,euryrmo:=as.double(median(eur)),.(yr,mo)
 obsdiscard<-obs[eur<0.8*euryrmo | `1usd`<.8*usdyrmo,.(date)]
 #obs[!obsdiscard][!monthenddates][,.(date,`1usd`,eur)] %>% ggplotw()
 
-cdrus<-RQuantLib::getHolidayList('UnitedStates',from=ymd('2004-01-01'),to=ymd('2016-07-01'))
-cdreu<-RQuantLib::getHolidayList('Germany',from=ymd('2004-01-01'),to=ymd('2016-07-01'))
+cdrus<-RQuantLib::getHolidayList('UnitedStates',from=ymd('2002-01-01'),to=ymd('2017-08-01'))
+cdreu<-RQuantLib::getHolidayList('Germany',from=ymd('2002-01-01'),to=ymd('2017-08-01'))
+cdrjp<-RQuantLib::getHolidayList('Japan',from=ymd('2002-01-01'),to=ymd('2017-08-01'))
+cdrau<-RQuantLib::getHolidayList('Australia',from=ymd('2002-01-01'),to=ymd('2017-08-01'))
+cdrbp<-RQuantLib::getHolidayList('UnitedKingdom',from=ymd('2002-01-01'),to=ymd('2017-08-01'))
+cdrcd<-RQuantLib::getHolidayList('Canada',from=ymd('2002-01-01'),to=ymd('2017-08-01'))
+cdrsf<-RQuantLib::getHolidayList('Switzerland',from=ymd('2002-01-01'),to=ymd('2017-08-01'))
+
+save(cdrus,cdreu,cdrjp,cdrau,cdrbp,cdrcd,cdrsf,file='holidaycalendar.RData')
 
 holidays<-data.table('date'=unique(c(cdrus,cdreu)))
 setkey(holidays,date)
