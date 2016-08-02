@@ -4,6 +4,7 @@ require(stringr)
 require(tidyr)
 require(dplyr)
 #require('readstata13')
+# require('haven')
 # require('ggfortify')
 # require('doBy')
 require(lubridate)
@@ -505,6 +506,7 @@ requestfigibyisin<-function(df_isins){
   require('magrittr')
   require('httr')
   require('jsonlite')
+  tic()
   #require('tidyjson')
   # figireq<-'[{"idType":"ID_ISIN","idValue":"XS1033736890"},
   # {"idType":"ID_BB_UNIQUE","idValue":"JK354407"},
@@ -584,6 +586,7 @@ requestfigibyisin<-function(df_isins){
       if (nrow(temp_isin2figi)<nrow(tempreq)) browser()
       df_isin2figi_all %<>% bind_rows(.,temp_isin2figi)
     }
+    toc()
     #this is the isin to figi mapping that contains 
     list(df_isin2figi_all,diag_response)
 }
@@ -592,6 +595,7 @@ requestfigibyisin<-function(df_isins){
 
 requestfigiinfo<-function(df_id,idstr='ID_ISIN'){
  # given a dataframe of ids, get info from openfigi isin
+  tic()
   require('magrittr'); require('httr'); require('jsonlite')
   print(str_c('min est:',nrow(df_id)/10000))
   ptm <- proc.time()
@@ -654,6 +658,7 @@ requestfigiinfo<-function(df_id,idstr='ID_ISIN'){
     if (nrow(temp_isin2figi)<nrow(tempreq)) browser()
     df_isin2figi_all %<>% bind_rows(.,temp_isin2figi)
   }
+  toc()
   #this is the isin to figi mapping that contains 
   list(df_isin2figi_all,diag_response)
 }
@@ -950,10 +955,13 @@ update.dtl.mo<-function(dtlin,dtladd,overridein=FALSE,diagret=FALSE){
 update.br<-function(bondref,dtadd,keystr='figi'){
   bondrefout<-copy(bondref)
   dtadd<-copy(as.data.table(dtadd))
-  dtadd[,figiloaded:=1]
+  dtadd[!is.na(figi),figiloaded:=1]
   checkcn<-checkcnexist(bondrefout,dtadd)
-  if (length(checkcn)!=0) {message('no matching col in bondref, not inserted: '); print(checkcn)}
-  dtadd<-dtadd[,!checkcn,with=F]
+  if (length(checkcn)!=0) {
+    message('no matching col in bondref, not inserted: '); print(checkcn)
+    dtadd<-dtadd[,!checkcn,with=F]
+  }
+  
   dtadd[,`:=`(matbbg=mdy(str_extract(ticker,"\\d\\d\\/\\d\\d\\/\\d\\d")),couponbbg=as.numeric(str_extract(ticker,"(?<=\\s)\\d+\\.*(\\d+)?(?=\\s)")))]
   bondrefout<-update.dt(bondrefout,dtadd,keyfield = keystr )
   bondrefout[,matdiff:=as.numeric((matbbg-mat2)/365)]
@@ -1066,7 +1074,7 @@ resave <- function(..., list = character(), file) {
 }
 
 checkcnexist<-function(dtold,dtadd){
-# check whick colnames in dtadd do not exists in dtold
+# check which colnames in dtadd do not exists in dtold
   cnexist<-dtold %>% ds()
   cnadd<-dtadd %>% ds()
   cnadd[cnadd %ni% cnexist]
