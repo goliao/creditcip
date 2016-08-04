@@ -74,12 +74,43 @@ recheck<-rbind(recheck,dtltemp[[2]][[1]][,.N,pk][,.(pk)])
 #save(dtl.mo,recheck,file='dtlmo.rdata')
 
 
-# load again
-setwd("/Users/gliao/Dropbox/Research/ccy basis/creditmigration");#setwd("C:/Users/gliao/Dropbox/Research/ccy basis/creditmigration")
-rm(list=ls(all=TRUE))
-load('dtlmo.rdata')
-source('util.r')
+# add new bond downloads from Aug 3,2016
+	# 
+	# 'dtl160803_yr04-06add.RData' bonds issued in 2004-2006 that were previously missing
+	# 'dtl160803_1-2yrallccynewadd.RData' 1-2yr original maturity that were previously missing
+	# 'dtl160803_otherccy.RData' all other currencys
+	# 'dtl160803_completesdc.RData' # downloading pks that we have matched in sdc, but yet undownloaded
+	# 'dtl160803_recheck1add.RData' # #downloading rechecks
+	rm(list=ls(all=TRUE))
+	load('db/dtlmo.rdata')
+	#save.image(file='db/archieve/dtlmo160803.RData')
+	source('util.r')
 
+	load(file='dtl160803_yr04-06add.RData')
+	dtl.mo<-update.dtl.mo(dtl.mo,dtladd1.monthly)
+	load(file='dtl160803_1-2yrallccynewadd.RData')
+	dtl.mo<-update.dtl.mo(dtl.mo,dtladd2.monthly,overridein=T)
+	load(file='dtl160803_otherccy.RData')
+	dtl.mo<-update.dtl.mo(dtl.mo,dtladd3.monthly)
+	load(file='dtl160803_completesdc.RData')
+		load('db/bondref160803.RData')
+		pk.got<-dtladd4.monthly[,.N,pk][,.(pk)]
+		pk.got %>% setkey(pk)
+		pk.have<-dtl.mo[,.N,pk][,.(pk)]
+		pk.have %>% setkey(pk)
+		pk.got[pk.have,nomatch=0] # didn't really get much out of it
+	dtl.mo<-update.dtl.mo(dtl.mo,dtladd4.monthly,overridein=T)
+	load(file='dtl160803_recheck1add.RData')
+	dtl.mo<-update.dtl.mo(dtl.mo,recheck1.monthly,overridein=T)
+	recheck=data.table()
+	#save(dtl.mo,recheck,file='db/dtlmo.rdata')
+
+pk.have[order(str_length(pk))]
+# load again
+	setwd("/Users/gliao/Dropbox/Research/ccy basis/creditmigration");#setwd("C:/Users/gliao/Dropbox/Research/ccy basis/creditmigration")
+	rm(list=ls(all=TRUE))
+	load('db/dtlmo.rdata')
+	source('util.r')
 
 # load('gldb.RData')
 # bondstatus<-get.dtl.status.mo(dtl.mo,gracewindow=30,bondref)
@@ -88,4 +119,3 @@ source('util.r')
 # 
 # dtladd.mo<-loadBBGdownload2df('dtl160726.RData')
 # update.dtl.mo(dtl.mo,dtladd.mo)
-

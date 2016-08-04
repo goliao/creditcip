@@ -1,7 +1,8 @@
 setwd("/Users/gliao/Dropbox/Research/ccy basis/creditmigration")
 rm(list=ls(all=TRUE));
-load('dtlmo.RData');load('bondref.RData');load('prl.RData');load('monthenddates.RData');
+load('db/dtlmo.RData');load('db/bondref160803.RData');load('prl.RData');load('monthenddates.RData');
 source('util.r')
+
 dtm<-preprocess(bondref,dtl.mo,prl,issfiltertype =2)
 prw<-dtm$prw
 ys1<-resyldsprdv4(dtm$dtl4,dtm$prl,regversion=6)

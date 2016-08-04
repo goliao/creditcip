@@ -84,6 +84,7 @@ bondref<-bondref %>% maintain.bondref(.)
 	# }
 
 
+
 dedupe.by.pk2<-function(dtbondref){
 	# input a bondref dt, output a bondref dt unique in pk
 	# order by deal_no ascending
@@ -171,7 +172,7 @@ dedupe.by.pk2<-function(dtbondref){
 
 	setkey(bondref,deal_no);setkey(rid1,deal_no);setkey(rid2,deal_no)
 	bondref<-bondref[!rid1][!rid2]
-
+bondrefall<-bondref
 	# Lastly; just apply dedupe by deal number order on the rest of duplicates
 	bondref<-bondref[!is.na(pk)] %>% dedupe.by.pk2()
 
@@ -206,3 +207,17 @@ dedupe.by.pk2<-function(dtbondref){
 
 
 
+###### assess what pks missing from the SDC data.base
+	pkmissing<-issfilter(bondrefall[is.na(pk)],2)[,.(totamt=na.omit(sum(amt)),N=.N),.(isin,cusip9)][order(-totamt)]
+	pkmissing2<-pkmissing %>% head(100)
+	pkmissing2
+	pkmissing2 %>% setkey(isin)
+	bondrefall %>% setkey(isin)
+	bondrefall[pkmissing2,nomatch=0]
+bondrefall['IT0004969207']
+bb<-issfilter(bondref[!is.na(pk)],2)[,.(totamt=na.omit(sum(amt)),N=.N),.(isin,cusip9)][order(-totamt)]
+bb[,sum(totamt)]
+
+bondref %>% ds()
+cc<-issfilter(bondrefall,3)[marketSector=='Corp' | is.na(marketSector)]
+cc[,.N,ccy][order(-N)] %>% head(20)

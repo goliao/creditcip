@@ -2,7 +2,7 @@ setwd('E:/')
 setwd('J:/')
 setwd('/Volumes/GORDONLIAO')
 rm(list=ls(all=TRUE))
-load('gldb.RData')
+#load('gldb.RData')
 source('util.r')
 
 # 2016-06-27: redownload some data for verification
@@ -163,3 +163,76 @@ newiss2get<-fread('newiss2get160731.csv',sep=',')
 dtladd.monthly<-downloadbbg(newiss2get,filestr='dtl160731newissmo.RData',fieldstr='YLD_YTM_MID',startdt=ymd('2016-04-01'),periodstr='MONTHLY',splitN=6)
 dtladd.daily<-downloadbbg(newiss2get,filestr='dtl160731newissdaily.RData',fieldstr='YLD_YTM_MID',startdt=ymd('2016-04-01'),periodstr='DAILY',splitN=6)
 # save(dtladd.monthly,dtladd.daily,file='dtl160731newiss.RData')
+
+
+
+# 2016-08-03
+	# get even more bond data:
+	load('db/pk_lookup.RData')
+	pk2get1<-fread('pk2download160803_04-06.csv',sep=',') #2004-2006 missing data
+	pk2get2<-fread('pk2download160803_1-2yrallccynew.csv',sep=',') 
+	pk2get3<-fread('pk2download160803_otherccyA.csv',sep=',')
+
+	pk2get1 %>% setkey(pk)
+	pk2get2 %>% setkey(pk)
+	pk2get3 %>% setkey(pk)
+
+	pk2get1[,pk:=tolower(pk)]
+	pk2get2[,pk:=tolower(pk)]
+	pk2get3[,pk:=tolower(pk)]
+
+	load('db/bondref160803.RData')
+	bondref %>% setkey(pk)
+
+	pk2get1.<-bondref[pk2get1,nomatch=0]
+	pk2get2.<-bondref[pk2get2,nomatch=0]
+	pk2get3.<-bondref[pk2get3,nomatch=0]
+	# many are missing in SDC data base unfortunate
+	pk2get1.[,.N]/pk2get1[,.N]
+	pk2get2.[,.N]/pk2get2[,.N]
+	pk2get3.[,.N]/pk2get3[,.N]
+
+	dtladd1.monthly<-downloadbbg(pk2get1.$pk,filestr='dtl160803_yr04-06addmo.RData',fieldstr='YLD_YTM_MID',startdt=ymd('2002-01-01'),periodstr='MONTHLY',splitN=1)
+	dtladd1.daily<-downloadbbg(pk2get1.$pk,filestr='dtl160803_yr04-06adddaily.RData',fieldstr='YLD_YTM_MID',startdt=ymd('2002-01-01'),periodstr='DAILY',splitN=1)
+	#save(dtladd1.monthly,dtladd1.daily, file='dtl160803_yr04-06add.RData')
+
+
+	dtladd2.monthly<-downloadbbg(pk2get2.$pk,filestr='dtl160803_1-2yrallccynewaddmo.RData',fieldstr='YLD_YTM_MID',startdt=ymd('2002-01-01'),periodstr='MONTHLY',splitN=10)
+	dtladd2.daily<-downloadbbg(pk2get2.$pk,filestr='dtl160803_1-2yrallccynewadddaily.RData',fieldstr='YLD_YTM_MID',startdt=ymd('2002-01-01'),periodstr='DAILY',splitN=10)
+	#save(dtladd2.monthly,dtladd2.daily, file='dtl160803_1-2yrallccynewadd.RData')
+
+
+	dtladd3.monthly<-downloadbbg(pk2get3.$pk,filestr='dtl160803_otherccymo.RData',fieldstr='YLD_YTM_MID',startdt=ymd('2002-01-01'),periodstr='MONTHLY',splitN=20)
+	#dtladd3.monthly<-downloadbbg('restart')
+	dtladd3.daily<-downloadbbg(pk2get3.$pk,filestr='dtl160803_otherccydaily.RData',fieldstr='YLD_YTM_MID',startdt=ymd('2002-01-01'),periodstr='DAILY',splitN=20)
+	#save(dtladd3.monthly,dtladd3.daily, file='dtl160803_otherccy.RData')
+
+	pkgot<-rbind(pk2get1.[,.(pk)],pk2get2.[,.(pk)],pk2get3.[,.(pk)]) %>% unique()
+	pkgot %>% setkey(pk)
+	
+	#get what's missing from SDC's prespective
+	load('db/bondref160803.RData')
+	load('db/dtlmo.RData')
+	bondref %>% setkey(pk)
+	dtl.mo %>% setkey(pk)
+	pk2getnew<-bondref[!dtl.mo][!is.na(pk)] %>% issfilter(.,3)
+	
+	pk2getnew<-pk2getnew[,.(pk)]
+	pk2getnew %>% setkey(pk)
+	
+	pk2get4.<-pk2getnew[pkgot]
+	#save(pk2get4.,file='pk2get_complete_sdc_160803.RData')
+	
+	dtladd4.monthly<-downloadbbg(pk2get4.$pk,filestr='dtl160803_completesdc.RData',fieldstr='YLD_YTM_MID',startdt=ymd('2002-01-01'),periodstr='MONTHLY',splitN=40)
+	#dtladd4.monthly<-downloadbbg('restart')
+	dtladd4.daily<-downloadbbg(pk2get4.$pk,filestr='dtl160803_completesdc.RData',fieldstr='YLD_YTM_MID',startdt=ymd('2002-01-01'),periodstr='DAILY',splitN=40)
+	#save(dtladd4.monthly,dtladd4.daily, file='dtl160803_completesdc.RData')
+	
+	# recheck conflicting bond prices in dtlmo.RData
+	recheck1.monthly<-downloadbbg(recheck$pk,filestr='dtl160803_recheck1mo.RData',fieldstr='YLD_YTM_MID',startdt=ymd('2002-01-01'),periodstr='MONTHLY',splitN=1)
+	recheck1.daily<-downloadbbg(recheck$pk,filestr='dtl160803_recheck1daily.RData',fieldstr='YLD_YTM_MID',startdt=ymd('2002-01-01'),periodstr='DAILY',splitN=1)
+	#save(recheck1.monthly,recheck1.daily, file='dtl160803_recheck1add.RData')
+	
+	
+	
+	

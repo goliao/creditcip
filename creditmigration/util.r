@@ -476,6 +476,12 @@ issfilter<-function(dtin,type=1){
   if (type==2){
     dtout %<>% filter(amt>=100)
   }
+  if (type==3){
+    dtout  %<>%  filter(!grepl('Mtg',typesec),
+          !grepl('FRN',typesec), issue_type_desc!='Agency, Supranational, Sovereign',
+          !grepl('Mortgage',secur),!grepl('Mtg',secur)
+        )
+  }
   dtout %>% as.data.table()
 }
 
