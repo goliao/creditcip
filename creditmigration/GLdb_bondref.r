@@ -8,19 +8,14 @@ source('util.r')
 # getting a list of pk isin figi full info mapping
 # load('gldb_160614.RData')
 # save(pifigi,file='pifigi.RData') # this has all the pfi additions until 160614, including all of pfi.rdata file
+# load('bondref.RData')
+# bondref160727<-copy(bondref)
+# save(bondref160727,file='bondref160727.RData')
 
 rm(list=ls(all=TRUE));source('util.r')
-
 # pfi data ----------------------------------------------------------------
 load('pifigi.RData')
-
-load('bondref.RData')
-bondref160727<-copy(bondref)
-save(bondref160727,file='bondref160727.RData')
-
-filestr_sdcclean='sdc96_clean2.dta'
-filestr_bondref='bondref_160801_test.RData'
-
+filestr_sdcclean='sdc96_clean2.dta';filestr_bondref='bondref_160803.RData'
 
 # BondRefData
 # generate sdc comprehensive with isin and parsekeyables ------------------
@@ -81,14 +76,16 @@ save(bondref,file=filestr_bondref)
 
 
 # try to squeeze more out of existing data from SDC and add to bond ref
-rm(list=ls(all=TRUE)); source('util.r'); load(filestr_bondref)
+rm(list=ls(all=TRUE)); source('util.r'); 
+filestr_sdcclean='sdc96_clean2.dta';filestr_bondref='bondref_160803.RData'
+load(file=filestr_bondref)
 dt_sdc0<-readstata13::read.dta13(filestr_sdcclean) %>% as.data.table()
 setkey(dt_sdc0,isin)
 dt_sdc1<-dt_sdc0[isin!='-',.(i,tic,isin,cu,upcusip,d,nat,amt,descr,ccy,rating, nrating,mat2,ytofm,deal_no,master_deal_type,issue_type_desc,mdealtype,secur,tf_mid_desc,sic1,sic2,upsicp,sicp,upnat,sp,mdy,settlement2,modnat,modupnat,rank_domicile_nation,upnames,tf_macro_desc,mkt,exch,pub,cusip9,num_packageid,main_tranche)][order(isin,-amt)]
 cn1<-dt_sdc1 %>% ds
 cn0<-dt_sdc0 %>% ds
 cn1[cn1 %ni% cn0];cn0[cn0 %ni% cn1]
-load(file='sdcnew.rdata')
+load(file='7.rdata')
 dt_sdc2<-df_sdcnew %>% filter(isin!='-') %>% rename(i=issname,rank_domicile_nation=domnat,tic=ticker_sdc,cu=cusip,mkt=mktplace,mdy=rating_mdy,sp=rating_sp,upnames=upco,upsicp=upsic,sicp=sic_main,deal_no=sdcdealnumber) %>% as.data.table()
 dt_sdc2[,id_package_sdc:=NULL]
 cn2<-dt_sdc2 %>% ds
@@ -113,12 +110,11 @@ setkey(dt_sdc1,isin,deal_no)
 setkey(dt_sdc2,isin,deal_no)
 dt_sdcall2<-update.dt(dt_sdc1,dt_sdc2)
 dt_sdcall3<-dt_sdcall2[order(num_packageid,-main_tranche,-amt)] %>% distinct(isin,.keep_all=T)
-save(dt_sdcall3,file='sdcall_160801.RData')
+# save(dt_sdcall3,file='sdcall_160801.RData')
 
-rm(list=ls(all=TRUE)); source('util.r'); load(filestr_bondref)
-load(file='sdcall_160801.RData')
+# rm(list=ls(all=TRUE)); source('util.r'); load(filestr_bondref)
+# load(file='sdcall_160801.RData')
 bondref2<-update.dt(bondref,dt_sdcall3,keyfield = 'isin',override = T)
-
 # test how many NAs were eliminated/introdueced in the process
 brn<-bondref %>% ds()
 brn2<-bondref2 %>% ds()
@@ -128,24 +124,33 @@ for (cn in brnu){
   naelim<-bondref[is.na(eval(exparse(cn))),.N]-bondref2[is.na(eval(exparse(cn))),.N]
   if (naelim<0)  print(str_c(cn,':  ',naelim))
 }
-
 bondref<-copy(bondref2)
-save(bondref,file=filestr_bondref)
-
-
 # get figi data
-source('util.r')
 figis2request<-bondref[is.na(figi) & !is.na(isin),.(isin)]
-figiaddinfo<-figis2request %>% sample_frac(1) %>% requestfigibyisin(.)
+
+source('util.r')
+figiaddinfo<-figis2request %>% requestfigibyID2(.,diagnostics=T)
+
 #load(file='temp_dfisinfigi.rdata')
 dtadd<-figiaddinfo[[1]] %>% as.data.table()
 bondref<-update.dt(bondref,dtadd, keyfield = 'isin')
 save(bondref,file=filestr_bondref)
 
+isinfigi<-copy(dtadd)
+
+figiaddinfo2<-figis2request %>% sample_frac(1) %>% requestfigibyID2(.,diagnostics=T)
+
+dt.isin.figi<-unique(figiaddinfo2$dtout)
+
+isin.no.figi<-figiaddinfo2$missing[,.(isin)]
+
+
 
 # bondref data maintainance -----------------------------------------------
 # run everytime there is new additions
-rm(list=ls(all=TRUE));source('util.r');load(filestr_bondref)
+rm(list=ls(all=TRUE));source('util.r');
+filestr_sdcclean='sdc96_clean2.dta';filestr_bondref='bondref_160803.RData';
+load(filestr_bondref)
 bondref[,sic1:=as.numeric(str_sub(as.character(sicp),1,1))]
 bondref[,upsic1:=as.numeric(str_sub(as.character(upsicp),1,1))]
 bondref[is.na(sic1),sic1:=upsic1]
@@ -172,7 +177,6 @@ bondref[,nrating_mdy:=NULL]
 setkey(bondref,isin,parsekeyable)
 
 
-#rm(list=ls(all=TRUE));source('util.r');load(filestr_bondref)
 pfigiadd<-fread('parsekeyablemap2figi_160624.csv')
 setnames(pfigiadd,'FIGI','figi')
 bondref[!is.na(deal_no),sdcloaded:=1]
@@ -183,11 +187,19 @@ bondref<-update.dt(bondref,pisinadd,keyfield = 'parsekeyable')
 bondref<-distinct(bondref)
 figireq<-bondref[is.na(figiloaded) & !is.na(figi)][,.(figi)]
 setnames(figireq,'figi','id')
-figiadd<-requestfigiinfo(figireq,'ID_BB_GLOBAL')
+figiadd<-requestfigibyID2(figireq,'figi')
 dtadd<-figiadd[[1]] %>% as.data.table()
+if (nrow(dtadd[figi!=id,.(figi,id)])>0) message('error from downloading figi!!!!')
 bondref<-update.br(bondref,dtadd)
 save(bondref,file=filestr_bondref)
 
+
+load(filestr_bondref)
+bondref<-bondref[!is.na(figiloaded) | !is.na(sdcloaded)]
+bondref<-distinct(bondref)
+
+
+# new pk figi add
 pkfigiadd<-fread('parsekeyable2figi_08012016.csv') 
 setnames(pkfigiadd, c('FIGI','Name','Ticker','Exchange Code' ,'Security Type' ,'Market Sector','FIGI Composite','Share Class','Unique ID'  ),c('figi','name','ticker','exchCode','securityType'  ,'marketSector', 'compositeFIGI' , 'shareClassFIGI' , 'uniqueID'   ))
 pkfigiadd[compositeFIGI=='#N/A Field Not Applicable',compositeFIGI:=NA];pkfigiadd[shareClassFIGI=='#N/A Field Not Applicable',shareClassFIGI:=NA]
@@ -195,35 +207,82 @@ bondref<-update.br(bondref,pkfigiadd)
 setnames(bondref,'parsekeyable','pk')
 bondref<-bondref[!is.na(figiloaded) | !is.na(sdcloaded)]
 bondref<-distinct(bondref)
-save(bondref,file=filestr_bondref)
+#save(bondref,file=filestr_bondref)
 
+
+
+
+rm(list=ls(all=TRUE))
+setwd("/Users/gliao/Dropbox/Research/ccy basis/creditmigration")
+filestr_sdcclean='sdc96_clean2.dta';filestr_bondref='bondref_160803.RData'
+#setwd("C:/Users/gliao/Dropbox/Research/ccy basis/creditmigration")
+source('util.r')
+load(filestr_bondref)
+bondref<-bondref[!is.na(figiloaded) | !is.na(sdcloaded)]
+bondref<-distinct(bondref)
 load('bondref160727.RData')
 
-bondref160727[is.na(pk),.N]
-bondref[is.na(pk),.N]
+setnames(bondref,'parsekeyable','pk')
+# bondref160727[is.na(pk),.N]
+# bondref[is.na(pk),.N]
 
-bondref160727[is.na(isin),.N]
-bondref[is.na(isin),.N]
+# bondref160727[is.na(isin),.N]
+# bondref[is.na(isin),.N]
 
-bondref160727[is.na(figi) & !is.na(pk),.N]
-bondref[is.na(figi) & !is.na(pk),.N]
+# bondref160727[is.na(figi) & !is.na(pk),.N]
+# bondref[is.na(figi) & !is.na(pk),.N]
 
-bondref160727[is.na(figi),.N]
-bondref160727[is.na(deal_no),.N]
-bondref160727[is.na(deal_no) & is.na(figi),.N]
-showdups(bondref160727[!is.na(deal_no)],'deal_no')
+# bondref160727[is.na(figi),.N]
+# bondref[is.na(figi),.N]
 
-bondref<-bondref[order(isin,figi,-amt)] %>% distinct(figi,.keep_all=T)
+# bondref160727[is.na(deal_no),.N]
+# bondref160727[is.na(deal_no) & is.na(figi),.N]
+# showdups(bondref160727[!is.na(deal_no)],'deal_no')
+# showdups(bondref[!is.na(deal_no)],'deal_no')
 
+# bondref<-bondref[order(isin,figi,-amt)] %>% distinct(figi,.keep_all=T)
 
-bondrefA<-bondref[!is.na(figi)]
-bondrefB<-bondref160727[!is.na(figi)]
+# bondref[order(isin,pk)] %>% unique(by=c('isin'))
+
+bondrefA<-bondref[!is.na(figi)][order(figi,pk,isin,deal_no,-amt)] %>% unique(by='figi')
+bondrefB<-bondref160727[!is.na(figi)][order(figi,pk,isin,deal_no,-amt)] %>% unique(by='figi')
+bondrefA[,pk:=tolower(pk)]
+bondrefB[,pk:=tolower(pk)]
+
 aa<-update.dt(bondrefA,bondrefB,keyfield='figi',diagnostic_rt=T)
 
-aa[[2]][[1]]
-aa[[2]][[2]]
-ch
+bondrefA<-bondref[!is.na(figi)][order(isin,pk,figi,deal_no,-amt)] %>% unique(by='isin')
+bondrefB<-bondref160727[!is.na(figi)][order(isin,pk,figi,deal_no,-amt)] %>% unique(by='isin')
+bondrefA[,pk:=tolower(pk)]
+bondrefB[,pk:=tolower(pk)]
 
+bb<-update.dt(bondrefA[,.(isin,figi)],bondrefB[,.(isin,figi)],keyfield='isin',diagnostic_rt=T)
+
+
+# only 4 pk isin mismatch
+bb$dtconflicts[!is.na(pk)] 
+# around 1000 pk figi matches, need to request figiinfo by isin again.
+figiadd<-bb$dtconflicts[!is.na(figi),.(isin)] %>% sample_frac(1) %>% requestfigibyisin(.)
+
+source('util.r')
+figiadd2<-bb$dtconflicts[!is.na(figi),.(isin)] %>% requestfigibyID2(.)
+cc<-figiadd[[1]] %>% as.data.table %>% showdups('isin') 
+cc[,.N,isin]
+
+dd<-figiadd[[1]] %>% as.data.table
+dd[,.N,by=marketSector]
+
+dd<-dd[marketSector=='Corp']
+ee<-update.dt(bb$dtconflicts[!is.na(figi)],dd,keyfield='isin')
+ee %>% View
+
+ff<-update.dt(bondrefA,dd,keyfield='isin',diagnostic_rt=T,override=T)
+setkey(ff$dtout,isin)
+setkey(ff$dtconflicts,isin)
+ff$dtout[ff$dtconflicts][,.(isin,figi,i,name,i.name,i.name.1)] %>% View
+
+
+dtisin<-bb$dtconflicts[!is.na(figi),.(isin)]
 # bondref[is.na(figiloaded) & is.na(sdcloaded)]
 # bondref160727[is.na(figiloaded) & is.na(sdcloaded)]
 # setkey(bondref,pk,isin)

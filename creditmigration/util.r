@@ -14,13 +14,13 @@ require(sandwich)
 require(reshape2)
 # require(sqldf)
 require(magrittr)
-require(data.table)
+require(xda)
 require(beepr)
+require(data.table)
+require(ggthemes)
 '%ni%' <- Negate('%in%')
 '%nlk%' <- Negate('%like%')
 '%lk%' <- '%like%'
-require(xda)
-require(ggthemes)
 #source('dbutil.r')
 
 df2clip<-function(x)(write.table(x, "clipboard.csv", sep=","))
@@ -49,6 +49,7 @@ preprocess<-function(bondref,dtl,prl,monthlyonly=TRUE,issfiltertype=2){
   prl<-copy(prl)
   prl<-backfillNAs.prl(prl) # fill eubsv 3s6s basis backwarks a bit
   br<-bondref[!is.na(pk)] %>% issfilter(.,type=issfiltertype)
+  br[,ccy:=tolower(ccy)]
   br <- br %>% semi_join(dtl,by='pk') %>% as.data.table()
   setkey(br,pk)
   if (nrow(showdups(br,'pk'))!=0){
@@ -593,6 +594,174 @@ requestfigibyisin<-function(df_isins){
 
 
 
+requestfigibyID2<-function(dtid_in,idtypein='isin',diagnostics=F,uselocalfirst=T){
+ # given a dataframe of ID, get a dataframe of isin and figi mappings 
+
+
+
+
+  require('httr');  require('jsonlite');  
+  tic()
+  ##########
+  getresult100<-function(id2req){
+    # this function would return a data.table of 100 rows if it's good, return 1 if bad
+     json2req <- id2req %>% jsonlite::toJSON() 
+      tryCatch({
+      result100<-POST(url='https://api.openfigi.com/v1/mapping',add_headers(`Content-Type`='text/json',`X-OPENFIGI-APIKEY`='b0128aa2-fe78-4707-a8ec-d9623d6f9928'), body = json2req, encode = "json")
+        result100_json <-   result100 %>% content(as = "text") %>% fromJSON(simplifyDataFrame = TRUE)
+        
+
+        if (!is.data.frame(result100_json)) browser()
+        dt100temp<-result100_json %>% as.data.table()
+        dt100temp$idValue<-id2req$idValue
+        
+        dtout<-data.table()
+        for (m in 1:nrow(dt100temp)){
+          singlerow<-dt100temp[,.(data)][[1]][[m]] %>% as.data.table()
+          if (nrow(singlerow)>0){
+            singlerow$idValue=dt100temp[,.(idValue)][[1]][[m]]
+            dtout<-rbind(dtout,singlerow,fill=T)
+          } else if (dt100temp[,.(error)][[1]][[m]]=='No identifier found.'){
+            # dtout<-rbind(dtout,data.table('idValue'=dt100temp[,.(idValue)][[1]][[m]],'figi'=NA),fill=T)
+          } else {
+            browser()
+          }
+        }
+                
+        #dtout <- unlist(result100_json,recursive=F) %>% rbindlist(.,idcol='Nid')
+        # dtout[,Nid:=as.numeric(str_sub(Nid,5))]
+        # id2req[,Nid:=.I]
+        # dtout<-merge(dtout,id2req,by='Nid')
+        # browser()
+        dtout
+      }, error = function(err) {
+        errstr<-result100 %>% content(as = "text") %>% str_sub(.,1,50)
+        #browser()
+        #result100 %>% content(as = "text") %>% str_replace_all(.,'{\"error\":\"No identifier found.\"}','')
+        if (length(grep('error|Too Many',errstr))==0) browser()
+        # if (length(grep('Too Many',errstr))==0) print(errstr)
+        if (length(grep('Too Many',errstr))==1) {
+          Sys.sleep(60); counter <<- 0
+          print(str_c("Sleep: row (j):",j*100))
+        }
+        return(errstr)
+      })
+    }
+
+#############
+    print(str_c('min est:',nrow(dtid_in)/10000))
+
+    dtid_in<-unique(copy(dtid_in[!is.na(eval(exparse(idtypein))),.(eval(exparse(idtypein)))]))
+    dtid<-copy(dtid_in) # create a copy so that the original can be compared to get missing at the end
+    
+    # first check the existance of the data in local database
+    if ((idtypein=='isin' | idtypein=='figi') & uselocalfirst){
+      load(file='db/dt_isin_figi.RData')
+      setkeyv(dt.isin.figi,idtypein)
+      setkeyv(dtid,idtypein)
+      if ( idtypein=='isin'){ # if requesting by isin, can check against known missing list
+        setkeyv(isin.no.figi,idtypein)
+        dtid <- dtid[!isin.no.figi] #rid of missing figi requests
+      }
+      dtfigiout<-dt.isin.figi[dtid,nomatch=0] # matched requests output
+      dtid <- dtid[!dtfigiout] #rid of matched requests
+      if (nrow(dtid)==0) {
+        print ('no new request made, all requests are from local DB')
+        if (diagnostics)
+          return(list('dtout'=dtfigiout))
+        else
+          return(dtfigiout)
+      }
+    } else if ((idtypein=='cusip9' | idtypein=='cusip8') & uselocalfirst){
+      load(file='db/cusip_figi.RData')
+      setkeyv(cusip.figi,idtypein)
+      setkeyv(dtid,idtypein)
+      dtfigiout<-cusip.figi[dtid,nomatch=0] # matched requests output
+      dtid <- dtid[!dtfigiout] #rid of matched requests
+      if (nrow(dtid)==0) {
+        print ('no new request made, all requests are from local DB')
+        if (diagnostics)
+          return(list('dtout'=dtfigiout))
+        else
+          return(dtfigiout)
+      }
+    } else { #starting from scratch
+      print('starting from scratch')
+      dtfigiout<-data.table()
+    }
+
+    print(str_c('requesting total of :',nrow(dtid)))
+    splitN<-ceiling(nrow(dtid)/100)
+    dtid[,grp:=ceiling(.I/100)]
+
+
+    if (idtypein=='isin') dtid$idType='ID_ISIN'
+    if (idtypein=='figi') dtid$idType='ID_BB_GLOBAL'
+    if (idtypein=='cusip8' | idtypein=='cusip9') dtid$idType='ID_CUSIP'
+    
+
+    counter <- 0 # count request up to 100, for figi limit of 100 request per minute
+    
+    
+    #####Loop
+    for (j in 1:ceiling(nrow(dtid)/100)){
+      counter <- counter+1
+      # if (counter==100){
+         # print(str_c("Sleep: row (j):",j*100))
+         # Sys.sleep(60); counter <- 0
+      # }
+      
+      idreqtemp <- dtid[grp==j,.(idType,idValue=eval(exparse(idtypein)))]
+      result100 <- getresult100(idreqtemp)
+
+      if (!is.data.table(result100)){
+        # Sys.sleep(60); counter=0
+        result100 <- getresult100(idreqtemp)
+      }
+      if (!is.data.table(result100)){
+        print('sleep for a second time due to error')
+        # Sys.sleep(60); counter=0
+        result100 <- getresult100(idreqtemp)
+      }
+      if (!is.data.table(result100)){
+        print(str_c('give up due to error on grp: ',j))
+        print(result100)
+      } else { # this is the good scenario
+        result100[,grp:=j]
+        if (idtypein=='isin') setnames(result100,'idValue','isin')
+        if (idtypein=='cusip8' | idtypein=='cusip9') setnames(result100,'idValue',idtypein)
+        if (idtypein=='figi'){
+           setnames(result100, 'figi','figi_old')
+           setnames(result100,'idValue','figi')
+          }
+
+        dtfigiout<-rbind(dtfigiout,result100,fill=T)
+      }
+    }
+    toc()
+    setkeyv(dtfigiout,idtypein)
+    setkeyv(dtid_in,idtypein)
+    missing <- dtid_in[!dtfigiout]
+    if (nrow(missing)>0){ 
+      print('missing:')
+      print(missing)
+    }
+
+    dups<-dtfigiout[,.N,eval(exparse(idtypein))][N>1]
+    if (nrow(dups)>0){
+      print('dups:')
+      print(dups)
+      print('marketsector of dups:')
+      print(dups[dtfigiout,nomatch=0][,.N,marketSector])
+    }
+
+    if (diagnostics)
+      list('dtout'=dtfigiout[,c(idtypein,'figi', 'marketSector',  'ticker', 'name', 'securityType', 'exchCode'),with=F], 'dtfull'=dtfigiout, 'missing'=missing, 'dups'=dups)
+    else 
+      dtfigiout[,c(idtypein,'figi', 'marketSector',  'ticker', 'name', 'securityType', 'exchCode'),with=F]
+}
+
+
 requestfigiinfo<-function(df_id,idstr='ID_ISIN'){
  # given a dataframe of ids, get info from openfigi isin
   tic()
@@ -967,7 +1136,22 @@ update.br<-function(bondref,dtadd,keystr='figi'){
   bondrefout[,matdiff:=as.numeric((matbbg-mat2)/365)]
   bondrefout
 }
+update.br2<-function(bondref,dtadd,keystr='figi',diagnostics=F){
+  bondrefout<-copy(bondref)
+  dtadd<-copy(as.data.table(dtadd))
 
+  dtadd[!is.na(figi),figiloaded:=1]
+  checkcn<-checkcnexist(bondrefout,dtadd)
+  if (length(checkcn)!=0) {
+    message('no matching col in bondref, not inserted: '); print(checkcn)
+    dtadd<-dtadd[,!checkcn,with=F]
+  }
+  
+  dtadd[,`:=`(matbbg=mdy(str_extract(ticker,"\\d\\d\\/\\d\\d\\/\\d\\d")),couponbbg=as.numeric(str_extract(ticker,"(?<=\\s)\\d+\\.*(\\d+)?(?=\\s)")))]
+  bondrefout<-update.dt(bondrefout,dtadd,keyfield = keystr )
+  bondrefout[,matdiff:=as.numeric((matbbg-mat2)/365)]
+  bondrefout
+}
 fixmonthend<-function(dtby=monthenddates,dtfix=dtby){
   #fix monthend date field of dtfix with monthend dates of dtby; return dtfix
   dtby<-copy(dtby)
@@ -1019,8 +1203,18 @@ update.dt<-function(dtA,dtB,keyfield='auto',updatefield='auto',insertnewrow=TRUE
       #if (override) warning('overriding:') else warning('skiping:')
       #print(problemdt[,c(keyfield,lhs[j],rhs[j]),with=FALSE])
       
-      if (lhs[j]=='value') { # additionally create a value diff if field is 'value'
-        problemdt[,valdiff:=i.value-value]
+      # if (lhs[j]=='value') { # additionally create a value diff if field is 'value'
+      gettypefrom<-problemdt[,lhs[j],with=FALSE][[1]]
+      if (is.numeric(gettypefrom) | is.Date(gettypefrom) | is.character(gettypefrom)){
+        if (is.numeric(gettypefrom)) 
+          problemdt[,valdiff:=eval(exparse(lhs[j]))-eval(exparse(rhs[j]))]
+        else if (is.Date(gettypefrom))
+          problemdt[,valdiff:=(as.numeric(eval(exparse(lhs[j]))-eval(exparse(rhs[j]))))/365]
+        else if (is.character(gettypefrom))
+          problemdt[,valdiff:=adist(eval(exparse(lhs[j])),eval(exparse(rhs[j])),ignore.case=TRUE)/str_length(eval(exparse(lhs[j]))),by=1:nrow(problemdt)]
+        else
+          message('ERROR type of problemdt column')
+
         confdt<-problemdt[,c(keyfield,lhs[j],rhs[j],'valdiff'),with=FALSE]
         message('\n val diff summary: \n',print_and_capture(summary(confdt$valdiff)))
       } else {
@@ -1053,7 +1247,25 @@ update.dt<-function(dtA,dtB,keyfield='auto',updatefield='auto',insertnewrow=TRUE
   }
   setkeyv(dtA,keyoriginal)
   if (diagnostic_rt){
-    list('dtout'=dtA,'dtret'=conflist)
+    # merging the list of conflicting problematic data.tables all together into one single database
+    if (length(conflist)>0) dtconflict<-data.table(conflist[[1]]) else dtconflict<-data.table()
+    tryCatch({setnames(dtconflict,'valdiff',str_c('diff_',colnames(conflist[[1]])[2]))},error=function(e){})
+    if (length(conflist)>1){
+      sink("/dev/null")
+      print('Constructing conflict table:')
+      for (k in 2:length(conflist)){
+         dtconflictadd<-as.data.table(conflist[[k]])
+         tryCatch({setnames(dtconflictadd,'valdiff',str_c('diff_',colnames(dtconflictadd)[2]))},error=function(e){})
+         dtconflict<-update.dt(dtconflict,dtconflictadd,keyfield=keyfield,diagnostic_rt=F)
+      }
+
+
+
+      sink();sink();
+        dtconflict[,Nconf:=(sum(!is.na(.SD))-1)/3,by=1:nrow(dtconflict)]
+    }
+
+    list('dtout'=dtA,'dtconflicts'=dtconflict)
   } else {
     dtA  
   }
@@ -1151,6 +1363,62 @@ dt2clip = function(x,sep="\t",col.names=T,...) {
              ,row.names = F
              ,quote = F,...)
 }
+get.dt.class<-function(dtin){
+  data.table('columnname'=ds(dtin),'classtype'=unlist(lapply(dtin,class)))
+}
+
+
+cleanup.sdc.by.col<-function(dtsdc){
+  # this function cleans up dtsdc by column, replaceing '-'  with NA and get rid of factor columns
+  dtsdc<-copy(dtsdc)
+  dtclass<-get.dt.class(dtsdc)
+  dtsdc<-subset(dtsdc,select=dtclass[classtype!='factor',columnname])
+  dtclass<-get.dt.class(dtsdc)
+  dtclass[,rowN:=.I]
+  for (k in 1:nrow(dtclass)){
+    if(dtclass[rowN==k,classtype=='character']){
+      cname<-dtclass[rowN==k,columnname]
+      dtsdc[,eval(exparse(cname)):=str_trim(eval(exparse(cname)))]
+      dtsdc[eval(exparse(cname)) %in% c('','-','N/A','TBA','NA'),eval(exparse(cname)):=NA]
+    }
+  }
+  dtsdc
+}
+
+CUSIPcheck <- function(x){
+  #check cusip number
+  # cusip9.to.check<-cusip9.to.get[str_length(cusip9)==9]
+  # cusip9.to.check[,digit9:=CUSIPcheck(str_sub(.SD[,cusip9],0,8)),by=1:nrow(cusip9.to.check)]
+  # cusip9.to.check[str_sub(.SD[,cusip9],9)!=digit9]
+  if(nchar(x)!=8){stop("Provided CUSIP does not have length 8")}
+  v <- unlist(strsplit(x,""))
+  if(any(v %in% LETTERS)){
+  v[which(v %in% LETTERS)] <- which(LETTERS %in% v[which(v %in% LETTERS)])+9
+  v <- as.numeric(v)
+  }else{v <- as.numeric(v)}
+  out <- 0
+  for(i in 1:8){
+  if(i%%2==0){v[i]<-v[i]*2}
+  out <- out + v[i]%/%10 + v[i]%%10
+  }
+  (10-(out%%10))%%10
+}
+
+
+
+show.dupe.col<-function(dtin){
+  # iterate through the columns of dtin and show only duplicated asOneSidedFormula
+  dup.col<-data.table('col'=1:ncol(dtin),'dupe'=0)
+  for (colq in 1:ncol(dtin))  {
+    # if(anyDuplicated(dtin[,colq,with=F])==0) # colq is not the same
+    if((dtin[,colq,with=F] %>% duplicated() %>% not()  %>% sum())>1)
+      dup.col[col==colq,dupe:=1]
+  }
+  dtin[,dup.col[dupe==1,col],with=F]
+}
+
+
+
 # old/defunct
 
 # icollapse2<-function(dfin,ccyA="EUR",natA="Eurozone"){
