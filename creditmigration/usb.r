@@ -1,4 +1,5 @@
 setwd('E:/')
+setwd('f:/')
 setwd('J:/')
 setwd('/Volumes/GORDONLIAO')
 rm(list=ls(all=TRUE))
@@ -235,4 +236,19 @@ dtladd.daily<-downloadbbg(newiss2get,filestr='dtl160731newissdaily.RData',fields
 	
 	
 	
+#8/4 to get next: 
+	rm(list=ls(all=TRUE));
+	load('db/dtlmo.RData');load('db/bondref160803.RData');
+	source('util.r')
+
+	bondref %>% setkey(pk)
+	dtl.mo %>% setkey(pk)
+	pk2get84<-(bondref %>% issfilter(.,3))[,.(pk)][!dtl.mo]
+	# load(file='pk2get_complete_sdc_160803.RData')
+	pk2get0804<-pk2get84 #%>% anti_join(pk2get4.) %>% as.data.table()
 	
+	dtladd5.monthly<-downloadbbg(pk2get0804$pk,filestr='dtl160804_completesdc.RData',fieldstr='YLD_YTM_MID',startdt=ymd('2002-01-01'),periodstr='MONTHLY',splitN=40)
+	#dtladd5.monthly<-downloadbbg('restart')
+	dtladd5.daily<-downloadbbg(pk2get0804$pk,filestr='dtl160804_completesdc.RData',fieldstr='YLD_YTM_MID',startdt=ymd('2002-01-01'),periodstr='DAILY',splitN=40)
+	#save(dtladd5.monthly,dtladd5.daily, file='dtl160804_completesdc.RData')
+

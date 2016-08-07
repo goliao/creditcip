@@ -172,13 +172,14 @@ dedupe.by.pk2<-function(dtbondref){
 
 	setkey(bondref,deal_no);setkey(rid1,deal_no);setkey(rid2,deal_no)
 	bondref<-bondref[!rid1][!rid2]
-bondrefall<-bondref
+	bondrefall<-bondref
+	# save(bondrefall,file='db/bondrefall.RData')
 	# Lastly; just apply dedupe by deal number order on the rest of duplicates
 	bondref<-bondref[!is.na(pk)] %>% dedupe.by.pk2()
 
 	readme<-'bondref generated from sdc data, unique in pk, deal_no; deduped by various conflict resolvation with bbg and finally deduping by ascending deal_no'
 
-	# save(bondref,readme,file='db/bondref160803.RData')
+	# save(bondref,readme,file='db/bondref.RData')
 
 
 

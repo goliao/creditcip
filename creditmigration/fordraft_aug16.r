@@ -1,6 +1,6 @@
 setwd("/Users/gliao/Dropbox/Research/ccy basis/creditmigration")
 rm(list=ls(all=TRUE));
-load('db/dtlmo.RData');load('db/bondref160803.RData');load('prl.RData');load('monthenddates.RData');
+load('db/dtlmo.RData');load('db/bondref.RData');load('prl.RData');load('monthenddates.RData');
 source('util.r')
 
 dtm<-preprocess(bondref,dtl.mo,prl,issfiltertype =2)
@@ -22,11 +22,10 @@ fig1
 fig2<-ys1[,.(date,ccyeur,ccygbp,ccyjpy,ccyaud)] %>% ggplotw(x11.=F)+xlab('')+ylab('bps')+geom_hline(yintercept=0)+ scale_color_discrete('',labels = c("AUD", "EUR",'GBP','JPY'))+theme_stata(base_size = 15)+theme(axis.title.y = element_text(margin =margin(0, 10, 0, 0)))
 fig2
 
-
 #ggsave(file='../paper/figures/fig2_creditmisprice.pdf',fig2,width=9,height=6)
 
 # Figure 3 Credit mispring and CIP for EUR
-fig3<-ys1[prw][date>'2004-01-01',.(date,ccyeur,eubs5)] %>% ggplotw()+xlab('')+ylab('bps')+geom_hline(yintercept=0)+ scale_color_discrete('',labels = c('Res. credit spread diff (EU-US)','CIP deviations 5yr (implied - actual euro funding rate)'))+theme_stata(base_size = 15)+theme(axis.title.y = element_text(margin =margin(0, 10, 0, 0)))
+fig3<-ys1[prw,nomatch=0][date>'2004-01-01',.(date,ccyeur,eubs5)] %>% ggplotw()+xlab('')+ylab('bps')+geom_hline(yintercept=0)+ scale_color_discrete('',labels = c('Res. credit spread diff (EU-US)','CIP deviations 5yr (implied - actual euro funding rate)'))+theme_stata(base_size = 15)+theme(axis.title.y = element_text(margin =margin(0, 10, 0, 0)))
 fig3
 #ggsave(file='../paper/figures/fig3_creditCIPeur.pdf',fig3,width=9,height=6)
 
@@ -42,47 +41,49 @@ ys_hy<-resyldsprdv4(dtm$dtl4[ccy %in% c('usd','eur') & nrating>6],dtm$prl,regver
 fig5<-ys_hg[ys_hy][,.(date,ccyeur,i.ccyeur)] %>% ggplotw()+xlab('')+ylab('bps')+geom_hline(yintercept=0)+ scale_color_discrete('',labels = c('HG','HY'))+theme_stata(base_size = 12)+theme(axis.title.y = element_text(margin =margin(0, 0, 0, 0)))
 fig5
 
-require('gridExtra')
-# matching mispricing graphs
-fig6<-list()
-X11(width=7,height=9)
-fig6[[1]]<-ys1[prw][date>'2004-01-01',.(date,ccyeur,eubs5)] %>% ggplotw()+xlab('')+ylab('bps')+geom_hline(yintercept=0)+ scale_color_discrete('',labels = c('Credit mispricing','CIP deviations'))+ggtitle('EUR')+theme_stata()
-legendcommon<-get_legend(fig6[[1]])
-fig6[[1]]<-fig6[[1]]+theme(legend.position='none')
-fig6[[2]]<-ys1[prw][date>'2004-01-01',.(date,ccygbp,bpbs5)] %>% ggplotw()+xlab('')+ylab('bps')+geom_hline(yintercept=0)+theme_stata()+theme(legend.position='none')+ggtitle('GBP')
-fig6[[3]]<-ys1[prw][date>'2004-01-01',.(date,ccyjpy,jybs5)] %>% ggplotw()+xlab('')+ylab('bps')+geom_hline(yintercept=0)+theme_stata()+theme(legend.position='none')+ggtitle('JPY')
-fig6[[4]]<-ys1[prw][date>'2004-01-01',.(date,aud=ccyaud,basis_aud=adbs5)] %>% ggplotw()+xlab('')+ylab('bps')+geom_hline(yintercept=0)+theme_stata()+theme(legend.position='none')+ggtitle('AUD')
-fig6[[5]]<-ys1[prw][date>'2004-01-01',.(date,ccychf,sfbs5)] %>% ggplotw()+xlab('')+ylab('bps')+geom_hline(yintercept=0)+theme_stata()+theme(legend.position='none')+ggtitle('CHF')
-fig6[[6]]<-ys1[prw][date>'2004-01-01',.(date,ccycad,cdbs5)] %>% ggplotw()+xlab('')+ylab('bps')+geom_hline(yintercept=0)+theme_stata()+theme(legend.position='none')+ggtitle('CAD')
-fig6all<-grid.arrange(fig6[[1]],fig6[[2]],fig6[[3]],fig6[[4]],fig6[[5]],fig6[[6]],legendcommon,ncol=2,nrow=4,layout_matrix=rbind(c(1,2),c(3,4),c(5,6),c(7,7)),heights=c(2,2,2,.25))
-#ggsave(file='../paper/figures/fig6_creditmispricings.pdf',fig6all,width=7,height=9)
-ys1l<-ys1[,.(date,ccyeur,ccygbp,ccyjpy,ccyaud,ccychf,ccycad)] %>% melt(id.vars='date')
-ys1l[,variable:=str_sub(variable,4,6)]
-setnames(ys1l,c('variable','value'),c('ccy','credit'))
-setkey(ys1l,date,ccy)
-cip<-prw[date>'2004-01-01',.(date,eubs5,bpbs5,jybs5,adbs5,sfbs5,cdbs5)] %>% melt(id.vars='date')
-setnames(cip,c('variable','value'),c('ccy','cip'))
-cip[ccy=='eubs5',ccy:='eur'][ccy=='jybs5',ccy:='jpy'][ccy=='bpbs5',ccy:='gbp'][ccy=='adbs5',ccy:='aud'][ccy=='cdbs5',ccy:='cad'][ccy=='sfbs5',ccy:='chf']
-cip<-cip[!is.na(cip)]
-setkey(cip,date,ccy)
-
-dt.panel<-ys1l[cip,nomatch=0]
-
-ys1[prw]
-write.dta(dt.panel,file='mispricings_long_160730.dta')
-
-reg<-lm(credit~cip+factor(ccy)-1,data=dt.panel)
-summary(reg)
-summary(reg)$coefficients %>% write.csv('temp.csv')
-aa
-table1<-stargazer::stargazer(reg,type='text')
-
-reg<-lm(cip~credit+factor(ccy)-1,data=dt.panel)
-summary(reg)
 
 
+# getting the correlation of CIP and credit mispricing by ccy
+	ys1l<-ys1[,.(date,ccyeur,ccygbp,ccyjpy,ccyaud,ccychf,ccycad)] %>% melt(id.vars='date')
+	ys1l[,variable:=str_sub(variable,4,6)]
+	setnames(ys1l,c('variable','value'),c('ccy','credit'))
+	setkey(ys1l,date,ccy)
+	cip<-prw[date>'2004-01-01',.(date,eubs5,bpbs5,jybs5,adbs5,sfbs5,cdbs5)] %>% melt(id.vars='date')
+	setnames(cip,c('variable','value'),c('ccy','cip'))
+	cip[ccy=='eubs5',ccy:='eur'][ccy=='jybs5',ccy:='jpy'][ccy=='bpbs5',ccy:='gbp'][ccy=='adbs5',ccy:='aud'][ccy=='cdbs5',ccy:='cad'][ccy=='sfbs5',ccy:='chf']
+	cip<-cip[!is.na(cip)]
+	setkey(cip,date,ccy)
+	dt.panel<-ys1l[cip,nomatch=0]
+	#write.dta(dt.panel,file='mispricings_long_160730.dta')
+	cor(dt.panel$credit,dt.panel$cip)
+	dt.panel[,cor(credit,cip),by=ccy]
 
-table1
+	# reg<-lm(credit~cip+factor(ccy)-1,data=dt.panel)
+	# summary(reg)
+	# summary(reg)$coefficients %>% write.csv('temp.csv')
+	# table1<-stargazer::stargazer(reg,type='text')
+	# reg<-lm(cip~credit+factor(ccy)-1,data=dt.panel)
+	# summary(reg)
+	
+# Graphing CIP and credit mispriing overlay
+	require('gridExtra')
+	fig6<-list()
+	X11(width=7,height=9)
+	ys1.prw<-ys1[prw,nomatch=0][date>='2004-01-01']
+
+	fig6[[1]]<-ys1.prw[,.(date,ccyeur,eubs5)] %>% ggplotw()+xlab('')+ylab('bps')+geom_hline(yintercept=0)+ scale_color_discrete('',labels = c('Credit mispricing','CIP deviations'))+ggtitle('EUR')+theme_stata()
+	legendcommon<-get_legend(fig6[[1]])
+	fig6[[1]]<-fig6[[1]]+theme(legend.position='none')
+	fig6[[2]]<-ys1.prw[,.(date,ccygbp,bpbs5)] %>% ggplotw()+xlab('')+ylab('bps')+geom_hline(yintercept=0)+theme_stata()+theme(legend.position='none')+ggtitle('GBP')
+	fig6[[3]]<-ys1.prw[,.(date,ccyjpy,jybs5)] %>% ggplotw()+xlab('')+ylab('bps')+geom_hline(yintercept=0)+theme_stata()+theme(legend.position='none')+ggtitle('JPY')
+	fig6[[4]]<-ys1.prw[,.(date,aud=ccyaud,basis_aud=adbs5)] %>% ggplotw()+xlab('')+ylab('bps')+geom_hline(yintercept=0)+theme_stata()+theme(legend.position='none')+ggtitle('AUD')
+	fig6[[5]]<-ys1.prw[,.(date,ccychf,sfbs5)] %>% ggplotw()+xlab('')+ylab('bps')+geom_hline(yintercept=0)+theme_stata()+theme(legend.position='none')+ggtitle('CHF')
+	fig6[[6]]<-ys1.prw[,.(date,ccycad,cdbs5)] %>% ggplotw()+xlab('')+ylab('bps')+geom_hline(yintercept=0)+theme_stata()+theme(legend.position='none')+ggtitle('CAD')
+	fig6all<-grid.arrange(fig6[[1]],fig6[[2]],fig6[[3]],fig6[[4]],fig6[[5]],fig6[[6]],legendcommon,ncol=2,nrow=4,layout_matrix=rbind(c(1,2),c(3,4),c(5,6),c(7,7)),heights=c(2,2,2,.25))
+	#ggsave(file='../paper/figures/fig6_creditmispricings.pdf',fig6all,width=7,height=9)
+
+
+
 # daily time series -------------------------------------------------------
 
 

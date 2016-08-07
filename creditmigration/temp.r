@@ -1,5 +1,47 @@
+setwd("/Users/gliao/Dropbox/Research/ccy basis/creditmigration")
+rm(list=ls(all=TRUE));
+load('db/dtlmo.RData');load('db/bondref160803.RData');
+source('util.r')
 
 
+
+
+load('dtl160803_yr04-06add.RData')
+update.dtl.mo(dtladd1.daily,dtladd1.monthly)
+
+load('dtl160803_1-2yrallccynewadd.RData')
+update.dtl.mo(dtladd2.daily,dtladd2.monthly)
+
+load('dtl160803_otherccy.RData')
+update.dtl.mo(dtladd3.daily,dtladd3.monthly)
+
+load('dtl160803_completesdc.RData')
+update.dtl.mo(dtladd4.daily,dtladd4.monthly)
+
+load('dtl160803_recheck1add.RData')
+update.dtl.mo(recheck1.daily,recheck1.monthly)
+
+load('dtl160804_completesdc.RData')
+update.dtl.mo(dtladd5.daily,dtladd5.monthly)
+aa<-compare.dt(dtladd5.daily,dtladd5.monthly,bykey.=c('date','pk'),mask=F)
+aa$BniA
+
+dtladd5.daily[pk=='cp501918 corp']
+lubridate::wday('2002-01-31',label=T)
+
+
+dtl.mo %>% setkey(pk)
+bondref %>% setkey(pk)
+
+aa<-bondref[!dtl.mo] %>% issfilter(.,3)
+
+tickers %>% setkey(pk)
+
+tickers[aa$pk,nomatch=0]
+load('dtl160804_completesdc.RData')
+
+dtladd5.monthly %>% setkey(pk)
+dtladd5.monthly[aa$pk,nomatch=0]
   getresult100<-function(id2req){
       test<-tryCatch({
       	result100_json='c'

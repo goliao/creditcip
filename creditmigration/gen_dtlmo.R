@@ -73,7 +73,6 @@ dtl.mo<-dtltemp[[1]]
 recheck<-rbind(recheck,dtltemp[[2]][[1]][,.N,pk][,.(pk)])
 #save(dtl.mo,recheck,file='dtlmo.rdata')
 
-
 # add new bond downloads from Aug 3,2016
 	# 
 	# 'dtl160803_yr04-06add.RData' bonds issued in 2004-2006 that were previously missing
@@ -103,9 +102,13 @@ recheck<-rbind(recheck,dtltemp[[2]][[1]][,.N,pk][,.(pk)])
 	load(file='dtl160803_recheck1add.RData')
 	dtl.mo<-update.dtl.mo(dtl.mo,recheck1.monthly,overridein=T)
 	recheck=data.table()
+
+	load('dtl160804_completesdc.RData')
+	dtl.mo<-update.dtl.mo(dtl.mo,dtladd5.monthly)
 	#save(dtl.mo,recheck,file='db/dtlmo.rdata')
 
-pk.have[order(str_length(pk))]
+
+
 # load again
 	setwd("/Users/gliao/Dropbox/Research/ccy basis/creditmigration");#setwd("C:/Users/gliao/Dropbox/Research/ccy basis/creditmigration")
 	rm(list=ls(all=TRUE))
