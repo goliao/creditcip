@@ -1,0 +1,106 @@
+---
+title: "Credit and CIP mispricings"
+author: "Gordon Liao"
+date: "August 8, 2016"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(cache=TRUE)
+#knitr::opts_chunk$set(include=FALSE)
+knitr::opts_chunk$set(autodep=TRUE)
+knitr::opts_chunk$set(cache.comments=FALSE)
+setwd("/Users/gliao/Dropbox/Research/ccy basis/creditmigration")
+rm(list=ls(all=TRUE));
+source('util.r')
+```
+
+
+```{r monthlysetup,include=FALSE}
+load('db/dtlmo.RData');load('db/bondref.RData');load('db/prl.RData');load('db/monthenddates.RData');
+dtm<-preprocess(bondref,dtl.mo,prl,issfiltertype =3)
+ys1m<-resyldsprdv4(dtm$dtl4[ccy %in% c('usd','eur')],dtm$prl,regversion=6,returndt=T)
+ys3m<-resyldsprdv4(dtm$dtl4[ccy %in% c('usd','eur','aud','jpy','gbp')],dtm$prl,regversion=6,returndt=T)
+ys2m<-resyldsprdv4(dtm$dtl4[ccy %in% c('usd','eur')],dtm$prl,regversion=6,adjccybs=TRUE);
+save(dtm,ys1m,ys2m,file='tempmots.RData')
+load('tempmots.RData')
+```
+
+#### EUR-USD credit mispring, monthly time series with error bars:
+```{r}
+ys1m$regresult[ccy=='eur'] %>% ggplot(aes(x=date,y=est,colour=ccy))+geom_errorbar(aes(ymin=est-1.96*se,ymax=est+1.96*se),colour='black')+geom_line()+geom_point(size=1)
+```
+
+#### HG vs HY
+```{r}
+ys_hg<-resyldsprdv4(dtm$dtl4[ccy %in% c('usd','eur') & nrating %between% c(1,6)],dtm$prl,regversion=3)
+ys_hy<-resyldsprdv4(dtm$dtl4[ccy %in% c('usd','eur') & nrating>6],dtm$prl,regversion=3)
+fig5<-ys_hg$dtcoef[ys_hy$dtcoef][,.(date,ccyeur,i.ccyeur)] %>% ggplotw()+xlab('')+ylab('bps')+geom_hline(yintercept=0)+ scale_color_discrete('',labels = c('HG','HY'))+theme_stata(base_size = 12)+theme(axis.title.y = element_text(margin =margin(0, 0, 0, 0)))
+```
+
+```{r dailysetup,include=FALSE}
+#   load('db/dtldaily.RData');load('db/bondref.RData')
+# 	load('db/prl.RData');load('db/monthenddates.RData');
+# 	source('util.r')
+# 	nmdates<-nonmarket.dates(dtl.daily,bondref)
+# 	dtl.daily<-dtl.daily[!nmdates][date<'2016-07-26']
+# 	dtmd<-preprocess(bondref,dtl.daily,prl,issfiltertype =3,monthlyonly = FALSE)
+# 	ys1<-resyldsprdv4(dtmd$dtl4[ccy %in% c('usd','eur')],dtmd$prl,regversion=6,returndt = T)
+# 	ys1b<-resyldsprdv4(dtmd$dtl4[ccy %in% c('usd','eur')],dtmd$prl,regversion=1,returndt = T)
+# 	ys2<-resyldsprdv4(dtmd$dtl4[ccy %in% c('usd','eur')],dtmd$prl,regversion=6,returndt = T,adjccybs=T)
+	#save(dtmd,ys1,ys1b,ys2,file='tempdailyts.RData')
+	load('tempdailyts.RData')
+```
+
+### EUR Daily time series
+```{r}
+ys1$regresult[ccy=='eur']  %>% ggplot(aes(x=date,y=est,colour=ccy))+geom_ribbon(aes(ymin=est-1.96*se,ymax=est+1.96*se),alpha=.3,colour=NA)+geom_line()
+```
+
+Daily ts in 2011-12   
+```{r}
+ys1m$regresult[ccy=='eur'][date %between% c('2011-05-01','2012-06-01'),median(se)]
+ys1m$regresult[ccy=='eur'][date %between% c('2011-05-01','2012-06-01')]  %>% ggplot(aes(x=date,y=est,colour=ccy))+geom_ribbon(aes(ymin=est-1.96*se,ymax=est+1.96*se),alpha=.3,colour=NA)+geom_line()
+```
+Monthly ts in 2011-12    
+```{r}
+ys1$regresult[ccy=='eur'][date %between% c('2011-05-01','2012-06-01'), median(se)]
+ys1$regresult[ccy=='eur'][date %between% c('2011-05-01','2012-06-01')]  %>% ggplot(aes(x=date,y=est,colour=ccy))+geom_ribbon(aes(ymin=est-1.96*se,ymax=est+1.96*se),alpha=.3,colour=NA)+geom_line()
+```
+Compare regression verison 1 vs 6 on daily data  
+```{r}
+ys1$regresult[ccy=='eur'][date %between% c('2011-05-01','2012-06-01'), median(se)]
+ys1b$regresult[ccy=='eur'][date %between% c('2011-05-01','2012-06-01'), median(se)]
+ys1ab<-ys1$regcoef[ys1b$regcoef,nomatch=0]; ys1ab %>% setnames('i.eur','eur_v1')
+ys1ab %>% ggplotw()
+```
+# Chg during quarter end dates  
+using quarter end dates do not really work since there isn't really a noticable quarter end effect   
+```{r}
+# quarter end dates   
+credit.mispricing<-ys1$regcoef
+quarterend<-credit.mispricing[,.(date,yrq=str_c(year(date),quarter(date)))][,.(date=max(date)),yrq]
+quarterend %>% setkey(date)
+xccy.mispricing<-dtmd$prw[date>='2004-01-01',.(date,eubs5)][!is.na(eubs5)]
+quarterend.xccy<-xccy.mispricing[,.(date,yrq=str_c(year(date),quarter(date)))][,.(date=max(date)),yrq]
+quarterend.xccy %>% setkey(date)
+# get rid of year end dates that are not credit market quarter end dates in the xccy data
+date.rid.xccy<-c(merge(quarterend,quarterend.xccy,all=TRUE)[is.na(yrq.x),date],ymd('2004-12-30'))
+#redo find quarterend dates for xccy; after taking out the year end dates
+xccy.mispricing<-xccy.mispricing[date %ni% date.rid.xccy]
+quarterend.xccy<-xccy.mispricing[,.(date,yrq=str_c(year(date),quarter(date)))][,.(date=max(date)),yrq]
+quarterend.xccy %>% setkey(date)
+quarterend<-quarterend.xccy[date!='2016-07-28']
+dt2mispricings<-xccy.mispricing[credit.mispricing,nomatch=0]
+dt2mispricings[,`:=`(credit.chg1d=eur-lag(eur),xccy.chg1d=eubs5-lag(eubs5))];
+dt2mispricings[quarterend,is.quarterend:=1][is.na(is.quarterend),is.quarterend:=0];
+dt2mispricings[!is.na(credit.chg1d),.(credit.meanchg1d=mean(credit.chg1d),credit.medianchg1d=median(credit.chg1d),credit.sdchg1d=sd(credit.chg1d),xccy.meanchg1d=mean(xccy.chg1d),xccy.medianchg1d=median(xccy.chg1d),xccy.sdchg1d=sd(xccy.chg1d)),is.quarterend]
+lm(xccy.chg1d~is.quarterend,data=dt2mispricings) %>% summary()
+#lm(credit.chg1d~is.quarterend,data=dt2mispricings) %>% summary()
+dt2mispricings %>% ggplot(aes(x=xccy.chg1d,y=credit.chg1d,colour=factor(is.quarterend)))+geom_point()
+#lm(xccy.chg1d~credit.chg1d,data=dt2mispricings) %>% summary()
+```
+

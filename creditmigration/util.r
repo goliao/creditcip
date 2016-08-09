@@ -25,8 +25,7 @@ require(ggthemes)
 
 df2clip<-function(x)(write.table(x, "clipboard.csv", sep=","))
 # df2clip<-function(x)(write.table(x, "clipboard", sep="\t"))
-tic <- function(gcFirst = TRUE, type=c("elapsed", "user.self", "sys.self"))
-{
+tic <- function(gcFirst = TRUE, type=c("elapsed", "user.self", "sys.self")){
   type <- match.arg(type)
   assign(".type", type, envir=baseenv())
   if(gcFirst) gc(FALSE)
@@ -34,8 +33,7 @@ tic <- function(gcFirst = TRUE, type=c("elapsed", "user.self", "sys.self"))
   assign(".tic", tic, envir=baseenv())
   invisible(tic)
 }
-toc <- function()
-{
+toc <- function(){
   type <- get(".type", envir=baseenv())
   toc <- proc.time()[type]
   tic <- get(".tic", envir=baseenv())
@@ -43,17 +41,18 @@ toc <- function()
   beep()
   invisible(toc)
 }
-preprocess<-function(bondref,dtl,prl,monthlyonly=TRUE,issfiltertype=2){
+preprocess<-function(bondref,dtl,prl,monthlyonly=TRUE,issfiltertype=2,ccyfilter=c('usd','eur','jpy','gbp','aud','cad','chf')){
   tic()
   dtl<-copy(dtl)
   prl<-copy(prl)
   prl<-backfillNAs.prl(prl) # fill eubsv 3s6s basis backwarks a bit
   br<-bondref[!is.na(pk)] %>% issfilter(.,type=issfiltertype)
   br[,ccy:=tolower(ccy)]
+  br <- br[ccy %in% ccyfilter]
   br <- br %>% semi_join(dtl,by='pk') %>% as.data.table()
   setkey(br,pk)
   if (nrow(showdups(br,'pk'))!=0){
-    message('error: duplicate pks; dedupe based on amt')
+    print('error: duplicate pks; dedupe based on amt')
     br<-br[order(pk,-amt)]
     setkey(br,pk)
     br<-unique(br)
@@ -78,10 +77,9 @@ preprocess<-function(bondref,dtl,prl,monthlyonly=TRUE,issfiltertype=2){
   dtl2[,ytm:=as.numeric((mat2-date)/365)]
   dtl3<-dtl2[ytm >.05]
   dtl3[is.na(nrating),nrating:=0]
-  dtl3<-dtl3[ccy %ni% c('sek','nok')] # don't know how these appeared, but let's get rid of them.
   if ('field' %in% ds(dtl)) dtl3<-dtl3[field=='YLD_YTM_MID']
   dtl3<-dtl3 %>% bucketrating() %>% bucketytm()
-  prl<-prl[date>'2002-01-01']
+  prl<-prl[date>'2002-01-01' & wday(date) %between% c(2,6)]
   prl[ticker %like% '^\\w\\wsw\\d+' | ticker %like% '^eusa\\d+',value:=value*100]
   prw<-prl %>% distinct() %>% data.table::dcast(.,date~ticker,value.var = 'value')
   dtl3<-dtl3[date>'2004-01-01']
@@ -98,8 +96,8 @@ preprocess<-function(bondref,dtl,prl,monthlyonly=TRUE,issfiltertype=2){
   prw[,`:=`(adsz1=adsw1+adbs1,adsz10=adsw10+adbs10,adsz2=adsw2+adbs2,adsz5=adsw5+adbs5,adsz7=adsw7+adbs7,adsz15=adsw15+adbs15,adsz20=adsw20+adbs20,adsz12=adsw12+adbs12,adsz30=adsw30+adbs30)]
   prw[,`:=`(cdsz1=cdsw1+cdbs1,cdsz2=cdsw2+cdbs2,cdsz3=cdsw3+cdbs3,cdsz4=cdsw4+cdbs4,cdsz5=cdsw5+cdbs5,cdsz6=cdsw6+cdbs6,cdsz7=cdsw7+cdbs7,cdsz8=cdsw8+cdbs8,cdsz9=cdsw9+cdbs9,cdsz10=cdsw10+cdbs10,cdsz12=cdsw12+cdbs12,cdsz15=cdsw15+cdbs15,cdsz20=cdsw20+cdbs20,cdsz25=cdsw25+cdbs25,cdsz30=cdsw30+cdbs30)]
   prw[,`:=`(sfsz1=sfsw1+sfbs1,sfsz2=sfsw2+sfbs2,sfsz3=sfsw3+sfbs3,sfsz4=sfsw4+sfbs4,sfsz5=sfsw5+sfbs5,sfsz6=sfsw6+sfbs6,sfsz7=sfsw7+sfbs7,sfsz8=sfsw8+sfbs8,sfsz9=sfsw9+sfbs9,sfsz10=sfsw10+sfbs10,sfsz12=sfsw12+sfbs12,sfsz15=sfsw15+sfbs15,sfsz20=sfsw20+sfbs20,sfsz25=sfsw25+sfbs25,sfsz30=sfsw30+sfbs30)]
-  prw[,approx_eubs1:=(eur/(eur+eur12m/10000)*(1+ussw1/10000)-(1+eusw1/10000))*10000]
-  prw[,approx_eubs5:=((eur/(eur+eur5y/10000))^(1/5)*(1+ussw5/10000)-(1+eusw5/10000))*10000]
+  # prw[,approx_eubs1:=(eur/(eur+eur12m/10000)*(1+ussw1/10000)-(1+eusw1/10000))*10000]
+  # prw[,approx_eubs5:=((eur/(eur+eur5y/10000))^(1/5)*(1+ussw5/10000)-(1+eusw5/10000))*10000]
   # transform prw back to prl
   prl<-data.table::melt(prw,id.vars='date',variable.name='ticker')
   prl<-prl[!is.na(value)]
@@ -108,7 +106,7 @@ preprocess<-function(bondref,dtl,prl,monthlyonly=TRUE,issfiltertype=2){
   toc()
   list('prw'=prw,'prl'=prl,'dtl4'=dtl4,'br'=br)
 }
-resyldsprdv4<-function(dtlin,pricein,regversion=2,globaluponly=1,returndt=0,adjccybs=0,winsor.=.025){
+resyldsprdv4<-function(dtlin,pricein,regversion=2,globaluponly=1,returndt=T,adjccybs=0,winsor.=.025){
   # a wrapper for FE regression
   tic()
   dtl<-copy(dtlin)
@@ -128,7 +126,7 @@ resyldsprdv4<-function(dtlin,pricein,regversion=2,globaluponly=1,returndt=0,adjc
   if (returndt==1)
     lsout
   else
-    lsout[[1]]
+    lsout$regcoef
 }
 
 getccyFE2<-function(dfin,fieldstr='OAS_SPREAD_BID',version=2,winsor=.025){
@@ -190,20 +188,25 @@ getccyFE2<-function(dfin,fieldstr='OAS_SPREAD_BID',version=2,winsor=.025){
         reg<-data.table(coefficients=as.numeric(NA))
         browser()
       })
-        dtcoef<-data.frame(as.list(reg$coefficients)) %>% select(starts_with('ccy')) %>%  as.data.table()
-        missccy<-ccylist[str_c('ccy',ccylist) %ni% c('ccy1usd',ds(dtcoef,'ccy'))]
-        if (length(missccy)>0){ # if missing ccy on a particular date
-          for (iccy in missccy){
-            dtcoef[,str_c('ccy',iccy):=as.numeric(NA)]
-          }
-        }
-        dtcoef
+        # dtcoef<-data.frame(as.list(reg$coefficients)) %>% select(starts_with('ccy')) %>%  as.data.table()
+        # missccy<-ccylist[str_c('ccy',ccylist) %ni% c('ccy1usd',ds(dtcoef,'ccy'))]
+        # if (length(missccy)>0){ # if missing ccy on a particular date
+        #   for (iccy in missccy){
+        #     dtcoef[,str_c('ccy',iccy):=as.numeric(NA)]
+        #   }
+        # }
+        dtcoef2<-(coef(summary(reg)) %>% as.data.table(keep.rownames=T))[rn %like% '^ccy',.(ccy=str_sub(rn,4),est=Estimate,se=`Std. Error`)]
+        dtccy<-data.table('ccy'=ccylist);dtccy %>% setkey(ccy)
+        dtcoef2 %>% setkey(ccy)
+        dtcoef2 <- dtcoef2[dtccy[ccy!='1usd']]
+        # browser()
+        dtcoef2
     }
-
     ccylist<-(df2 %>% distinct(ccy) %>% select(ccy))[[1]]
-    regcoef<-df2[,regfun(.SD,ccylist,version,.BY),by='date']
-    setkey(regcoef,date)
-    lsout<-list('regcoef'=regcoef,'dtreg'=df2)
+    regresult<-df2[,regfun(.SD,ccylist,version,.BY),by='date']
+    regcoef <- regresult %>% dcast(date~ccy,value.var='est'); regcoef %>% setkey(date)
+    regse <- regresult %>% dcast(date~ccy,value.var='se'); regse %>% setkey(date)
+    lsout<-list('regcoef'=regcoef,'regse'=regse,'regresult'=regresult,'dtreg'=df2)
     lsout
 }
 intrwrap<-function(dfin,sp,bylist,interprule=1){
@@ -311,14 +314,15 @@ dtl.addswapsprd<-function(dtl,prl){
   setkey(dtl,date,ccy)
   
   # find out what swap prices are missing
-  dates2interp<-dtl[!is.na(ytm) & wday(date) %between% c(2,6),.N,by=.(date,ccy)]
-  setkey(dates2interp,date,ccy)
-  sp2interp<-swappricesl[,.N,.(date,ccy)][str_length(ccy)==3]
-  missingswap<-sp2interp[dates2interp][is.na(N) | N<3]
-  setkey(missingswap,date,ccy)
-  print(missingswap)
-  dtl <- dtl %>% anti_join(missingswap,by=c('date','ccy')) %>% as.data.table()
-  setkey(dtl,date,pk,value)
+    dates2interp<-dtl[!is.na(ytm) & wday(date) %between% c(2,6),.N,by=.(date,ccy)]
+    setkey(dates2interp,date,ccy)
+    sp2interp<-swappricesl[,.N,.(date,ccy)][str_length(ccy)==3]
+    missingswap<-sp2interp[dates2interp][is.na(N) | N<3]
+    setkey(missingswap,date,ccy)
+    print('missing swap prices on these dates for these ccys:')
+    print(missingswap)
+    dtl <- dtl %>% anti_join(missingswap,by=c('date','ccy')) %>% as.data.table()
+    setkey(dtl,date,pk,value)
   #dtl[!is.na(ytm),swapyld:=intrwrap(.SD,swappricesl,.BY,interprule=1),by=.(date,ccy)]
   dtl[!is.na(ytm) & wday(date) %between% c(2,6),swapyld:=intrwrap(.SD,swappricesl,.BY,interprule=1),by=.(date,ccy)][swapyld==0,swapyld:=NA]
   dtl[!is.na(ytm) & wday(date) %between% c(2,6),swapyldadj:=intrwrap(.SD,swappricesladj,.BY,interprule=1),by=.(date,ccy)][swapyldadj==0,swapyldadj:=NA]
@@ -977,23 +981,23 @@ filterglobaluponly<-function(dtlin){
 
 bucketrating<-function(dtlin){
   # creates new column called rating bucket as factor with 4 levels 
-  dtlout<-dtlin
-  dtlout[nrating %between% c(1,4),rating_bucket:=3]
-  dtlout[nrating %between% c(5,10),rating_bucket:=2]
-  dtlout[nrating>10,rating_bucket:=1]
-  dtlout[nrating==0,rating_bucket:=0]
-  dtlout[is.na(nrating),rating_bucket:=0]
-  dtlout[,rating_bucket:=factor(rating_bucket)]
-  dtlout
+  #dtlout<-dtlin
+  dtlin[nrating %between% c(1,4),rating_bucket:=3]
+  dtlin[nrating %between% c(5,10),rating_bucket:=2]
+  dtlin[nrating>10,rating_bucket:=1]
+  dtlin[nrating==0,rating_bucket:=0]
+  dtlin[is.na(nrating),rating_bucket:=0]
+  dtlin[,rating_bucket:=factor(rating_bucket)]
+  dtlin
 }
 bucketytm<-function(dtlin){
-  dtlout<-dtlin[!is.na(ytm)]
-  dtlout[ytm %between% c(0,3),ytm_bucket:=1]
-  dtlout[ytm %between% c(3,7),ytm_bucket:=2]
-  dtlout[ytm %between% c(7,10),ytm_bucket:=3]
-  dtlout[ytm >10,ytm_bucket:=4]
-  dtlout[,ytm_bucket:=factor(ytm_bucket)]
-  dtlout
+  dtlin<-dtlin[!is.na(ytm)]
+  dtlin[ytm %between% c(0,3),ytm_bucket:=1]
+  dtlin[ytm %between% c(3,7),ytm_bucket:=2]
+  dtlin[ytm %between% c(7,10),ytm_bucket:=3]
+  dtlin[ytm >10,ytm_bucket:=4]
+  dtlin[,ytm_bucket:=factor(ytm_bucket)]
+  dtlin
 }
 
 downloadbbg<-function(tickers,filestr=str_c('bbg_',today(),'.RData'),startdt=ymd('1996-01-01'),periodstr='MONTHLY',fieldstr='PX_LAST',splitN=1){
@@ -1408,9 +1412,9 @@ compare.dt<-function(A,B, bykey.=key(A),mask=T,unique.=T){
     list('AB'=AB.intersect,'AniB'=AnotB,'BniA'=BnotA,'A.N'=Acount,'B.N'=Bcount,'AB.N'=AB.intersect[,.N],'AniB.N'=AnotB[,.N],'BniA.N'=BnotA[,.N])
 }
 
-fread.xls<-function(path){
+fread.xls<-function(path,sheet.=excel_sheets(path)){
   require('readxl')
-  dt.out<-rbindlist(lapply(excel_sheets(path), function(x,path){
+  dt.out<-rbindlist(lapply(sheet., function(x,path){
     dt.sheet<-(read_excel(path,x) %>% as.data.table())
     dt.sheet[,sheet:=x]
     dt.sheet
@@ -1418,15 +1422,23 @@ fread.xls<-function(path){
   dt.out
 }
 
-nonmarket.dates<-function(dtl){
+nonmarket.dates<-function(dtl,bondref){
   #retrieve nonmarket dates for daily time series based on holiday schedule and consecutive observation drop
   dtl<-copy(dtl)
+  br<-copy(bondref[!is.na(pk),.(ccy,mat2,nrating,upcusip,pk,ytofm,sicfac,sic1)])
+  br[,ccy:=tolower(ccy)]
+  setkey(dtl,pk); setkey(br,pk)
+  dtl<-dtl[br]
+
   load('db/holidaycalendar.RData')
   holidays<-data.table('date'=unique(c(cdrus,cdreu)))
   setkey(holidays,date)
+  setkey(dtl,date)
   dtl<-dtl[!holidays][date<'2016-07-26']
  # consecutive obs drop 
+  dtl.count<-(dtl[ccy %in% c('usd','eur')][,.N,.(date,ccy)][N>5] %>% dcast(date~ccy,value.var='N'))[order(date)]   
   dtl.count[,usd.L:=lag(usd)]
+  # dtl.count[,usd.L:=mean(lag(usd),lag(usd),lag(usd),lag(usd),lag(usd))]
   dtl.count[usd<.90*usd.L,sharpobsdrop:=1][is.na(sharpobsdrop),sharpobsdrop:=0]
   drop.dates<-rbind(dtl.count[sharpobsdrop==1,.(date)],holidays)
   drop.dates %>% setkey(date)

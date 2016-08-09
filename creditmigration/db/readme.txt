@@ -108,14 +108,22 @@ this is used to construct bondref
 
 
 'dtlmo.rdata'
-has monthly bond price data from bloomberg, constructed with GLdbmo.r
+has monthly bond price data from bloomberg, constructed with gen_dtlmo.R
 
+'db/dtldaily.RData'
+has daily bond price data from bloomberg, constructed with gen_dtldaily.R in the same way as dtl.mo
 
 'db/bondref160803.RData'
 bondref generated from sdc data, unique in pk, deal_no; 
 deduped by various conflict resolvation with bbg and finally deduping by ascending deal_no
-# generated using 'GLdb_bondref_new.r'
+# generated using 'gen_bondref.R'
+
+
+'bondrefall.RData'  
+this has the undedubed version of bondref even when tehre are no pks
 
 
 
+'prl.RData'
 
+'montheenddates.Rdata'
