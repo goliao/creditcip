@@ -1,93 +1,110 @@
-setwd("/Users/gliao/Dropbox/Research/ccy basis/creditmigration")
-rm(list=ls(all=TRUE));
-load('db/dtlmo.RData');load('db/bondref160803.RData');
-source('util.r')
+# this version of resyldsprdv4 is dated 2016-08-11
+resyldsprdv4<-function(dtlin,pricein,regversion=2,globaluponly=1,returndt=T,adjccybs=0,winsor.=.025){
+  getccyFE2<-function(dfin,fieldstr='OAS_SPREAD_BID',version=2,winsor=.025){
+    #  Generalized function for calculating FE 
+    print(str_c('FE on field: ',fieldstr))
+      if ('field' %in% ds(dfin)) { # if dfin is in the long format with a field called 'field'
+        df2<-dfin[field==fieldstr]
+        lhs<-'value'
+      } else { # if dfin is in the semi-wide format with a column called fieldstr
+        df2<-copy(dfin)
+        lhs<-fieldstr
+      }
+      setkey(df2,date,upcusip,ccy)
 
-
-
-
-load('dtl160803_yr04-06add.RData')
-update.dtl.mo(dtladd1.daily,dtladd1.monthly)
-
-load('dtl160803_1-2yrallccynewadd.RData')
-update.dtl.mo(dtladd2.daily,dtladd2.monthly)
-
-load('dtl160803_otherccy.RData')
-update.dtl.mo(dtladd3.daily,dtladd3.monthly)
-
-load('dtl160803_completesdc.RData')
-update.dtl.mo(dtladd4.daily,dtladd4.monthly)
-
-load('dtl160803_recheck1add.RData')
-update.dtl.mo(recheck1.daily,recheck1.monthly)
-
-load('dtl160804_completesdc.RData')
-update.dtl.mo(dtladd5.daily,dtladd5.monthly)
-aa<-compare.dt(dtladd5.daily,dtladd5.monthly,bykey.=c('date','pk'),mask=F)
-aa$BniA
-
-dtladd5.daily[pk=='cp501918 corp']
-lubridate::wday('2002-01-31',label=T)
-
-
-dtl.mo %>% setkey(pk)
-bondref %>% setkey(pk)
-
-aa<-bondref[!dtl.mo] %>% issfilter(.,3)
-
-tickers %>% setkey(pk)
-
-tickers[aa$pk,nomatch=0]
-load('dtl160804_completesdc.RData')
-
-dtladd5.monthly %>% setkey(pk)
-dtladd5.monthly[aa$pk,nomatch=0]
-  getresult100<-function(id2req){
-      test<-tryCatch({
-      	result100_json='c'
-     	#stop('glerr')
-      }, error = function(err) {
-        print('erro step')
-        return(1)
-      })
-      test
+    #winsorize each date
+      if (winsor!=0){
+        df2[,pctl:=percent_rank(eval(exparse(lhs))),by=.(date,ccy)]
+        df2<-df2[pctl>=winsor & pctl<=(1-winsor)]
+      }
+    # set alphabetical order such that dummies are on foreign ccys
+      df2[ccy=='usd',ccy:='1usd']
+            
+    # introduce liquidity measure based on bond age
+        df2[,liq:=ytm/ytofm]
+        df2<-df2[liq %between% c(0,1.1)]
+        df2[liq<.5,liq_bucket:=0] # more illiq
+        df2[liq>=.5,liq_bucket:=1] # liq
+      regfun<-function(dt,ccylist,regversion=1,bylist){
+        tc.ret<-tryCatch({
+            if (regversion==1){
+              # regversion 1:: run regression directly on data set without taking out bonds that do not have matching pairs
+              reg<-lm(eval(exparse(lhs))~ccy+upcusip,data=dt)
+            } else if (regversion==3){
+              # regversion 3: like regversion 2 but also adds maturity considerations in regression
+              reg<-lm(eval(exparse(lhs))~ccy+upcusip+ytm_bucket,data=dt)
+            } else if (regversion==4){
+              # regversion 4: regversion 3+ 3 rating buckets as dummies
+              reg<-lm(eval(exparse(lhs))~ccy+upcusip+ytm_bucket+rating_bucket,data=dt)
+            } else if (regversion==5){
+             # regversion 5: regversion 3+ 3 rating buckets as dummies
+              reg<-lm(eval(exparse(lhs))~ccy+upcusip+ytm_bucket+rating_bucket+sicfac,data=dt)
+            } else if (regversion==6){
+             # regversion 6, add illiqudity index
+              reg<-lm(eval(exparse(lhs))~ccy+upcusip+ytm_bucket+rating_bucket+sicfac+liq_bucket,data=dt)
+            } else if (regversion==7){
+             # regversion 7, like 6 but w/o sicfac
+              reg<-lm(eval(exparse(lhs))~ccy+upcusip+ytm_bucket+rating_bucket+liq_bucket,data=dt)
+            } else if (regversion==8){
+             # regversion 8, like 7 but only focus on liq
+              reg<-lm(eval(exparse(lhs))~ccy+upcusip+ytm_bucket+liq_bucket,data=dt)
+            }
+        }, error=function(err){
+          print(err)
+          print(bylist)
+          #reg<-data.table(coefficients=as.numeric(NA))
+          browser()
+          return(data.table('ccy'='eur','est'=NA,se=NA))
+        })
+          dtcoef2<-(coef(summary(reg)) %>% as.data.table(keep.rownames=T))[rn %like% '^ccy',.(ccy=str_sub(rn,4),est=Estimate,se=`Std. Error`)]
+          dtccy<-data.table('ccy'=ccylist);dtccy %>% setkey(ccy)
+          dtcoef2 %>% setkey(ccy)
+          dtcoef2 <- dtcoef2[dtccy[ccy!='1usd']]
+           # browser()
+          dtcoef2
+      }
+      ccylist<-(df2 %>% distinct(ccy) %>% select(ccy))[[1]]
+      regresult<-df2[,regfun(.SD,ccylist,version,.BY),by='date']
+      regcoef <- regresult %>% dcast(date~ccy,value.var='est'); regcoef %>% setkey(date)
+      regse <- regresult %>% dcast(date~ccy,value.var='se'); regse %>% setkey(date)
+      lsout<-list('regcoef'=regcoef,'regse'=regse,'regresult'=regresult,'dtreg'=df2)
+      lsout
+  }
+  intrwrap<-function(dfin,sp,bylist,interprule=1){
+   #wrapper function for interpolation
+    splocal<-sp[date==bylist$date & ccy==bylist$ccy]
+    if (nrow(splocal)<3) {
+      if (bylist$date %between% c(2,6)) 
+        print(str_c('No swap data; NAs on ',bylist$date,bylist$ccy))
+      #browser()
+      rep(0,nrow(dfin))
+    } else{
+      tryCatch(dfout<-approx(x=splocal$tenor,y=splocal$value,xout=dfin$ytm,rule=interprule),
+               error=function(err){
+                 print(err)
+                 print(bylist)
+                 browser()
+               })
+      dfout$y
     }
+  }
+    tic()
+    dtl<-copy(dtlin)
+    # get rid of dates with only one ccy
+    setkey(dtl,date)
+    dtl<-dtl[dtl[,.N,by=c('date','ccy')][,.N,date][N!=1,.(date)]]
+    if (globaluponly){ # get rid of up where up doesn't have bonds in both ccys for each date
+      dtl<-filterglobaluponly(dtl)
+    }
+    if (adjccybs==1)
+      lsout<-getccyFE2(dtl,fieldstr='swapsprdadj',version=regversion,winsor=winsor.)
+    else
+      lsout<-getccyFE2(dtl,fieldstr='YLD_YTM_MID',version=regversion,winsor=winsor.)    
+    toc()
+    if (returndt==1)
+      lsout
+    else
+      lsout$regcoef
+}
 
-
-    jj<-getresult100('test')
-    jj
-
-
-
-
-
-
-
- testfun<-function(){
- 	a<-21
- 	if (1){
- 		return(7)
- 	}
- 	8
- }
- testfun()
-
-
-
-
-
- json2req<-[{"idType":"ID_CUSIP_8_CHR","idValue":"001765AC0"},{"idType":"ID_CUSIP_8_CHR","idValue":"048825AU7"},{"idType":"ID_CUSIP_8_CHR","idValue":"048825AV5"}]
-
- result100<-POST(url='https://api.openfigi.com/v1/mapping',add_headers(`Content-Type`='text/json',`X-OPENFIGI-APIKEY`='b0128aa2-fe78-4707-a8ec-d9623d6f9928'), body = json2req, encode = "json")
-        result100_json <-   result100 %>% content(as = "text") %>% fromJSON(simplifyDataFrame = TRUE)
-
-
-
-curl -v -X POST 'https://api.openfigi.com/v1/mapping'  --header 'Content-Type: text/json'  --data '[{"idType":"ID_WERTPAPIER","idValue":"851399","exchCode":"US"}]'
-
-
-
-curl -v -X POST 'https://api.openfigi.com/v1/mapping'  --header 'Content-Type: text/json'  --data '[{"idType":"ID_CUSIP_8_CHR","idValue":"001765AC0"}]'
-
-
-curl -v -X POST 'https://api.openfigi.com/v1/mapping'  --header 'Content-Type: text/json'  --data '[{"idType":"ID_CUSIP","idValue":"001765AC"}]'
+ys_hy4<-resyldsprdv4(dtl3[ccy %in% c('usd','eur') & nrating>6 & date>'2004-09-01'],prl,regversion=3)

@@ -2,7 +2,9 @@ setwd("/Users/gliao/Dropbox/Research/ccy basis/creditmigration")
 rm(list=ls(all=TRUE));
 load('db/dtlmo.RData');load('db/bondref.RData');load('db/prl.RData');load('db/monthenddates.RData');
 source('util.r')
+load('dtclean160624.RData')
 
+load('tempmots.RData')
 dtm<-preprocess(bondref,dtl.mo,prl,issfiltertype =3)
 ys1m<-resyldsprdv4(dtm$dtl4[ccy %in% c('usd','eur','gbp','aud','jpy')],dtm$prl,regversion=6,returndt=T)
 ys2m<-resyldsprdv4(dtm$dtl4[ccy %in% c('usd','eur','gbp','aud','jpy')],dtm$prl,regversion=6,adjccybs=TRUE);
@@ -40,11 +42,31 @@ fig1
 fig2<-ys1[,.(date,ccyeur,ccygbp,ccyjpy,ccyaud)] %>% ggplotw(x11.=F)+xlab('')+ylab('bps')+geom_hline(yintercept=0)+ scale_color_discrete('',labels = c("AUD", "EUR",'GBP','JPY'))+theme_stata(base_size = 15)+theme(axis.title.y = element_text(margin =margin(0, 10, 0, 0)))
 fig2
 
+
+
+
 #ggsave(file='../paper/figures/fig2_creditmisprice.pdf',fig2,width=9,height=6)
 
 # Figure 3 Credit mispring and CIP for EUR
 fig3<-ys1[prw,nomatch=0][date>'2004-01-01',.(date,ccyeur,eubs5)] %>% ggplotw()+xlab('')+ylab('bps')+geom_hline(yintercept=0)+ scale_color_discrete('',labels = c('Res. credit spread diff (EU-US)','CIP deviations 5yr (implied - actual euro funding rate)'))+theme_stata(base_size = 15)+theme(axis.title.y = element_text(margin =margin(0, 10, 0, 0)))
 fig3
+# dtm$prw %>% key(date) 
+
+### construct credit mispricings with 95% CI
+ys1m$regresult %>% setkey(date)
+dtplot<-ys1m$regresult[ccy=='eur'][dtm$prw[,.(date,eubs5)],nomatch=0][date>'2004-01-01']
+dtplot2<-melt(dtplot,id.vars=c('date','ccy','se'));dtplot2[variable=='eubs5',se:=0];
+dtplot2[variable=='eubs5',variable:='cip deviation'][variable=='est',variable:='credit mispricing']
+fig3b<-dtplot2 %>% ggplot(aes(x=date,y=value,colour=variable))+geom_errorbar(aes(ymin=value-1.96*se,ymax=value+1.96*se))+geom_line()+geom_point(size=1)+xlab('')+ylab('bps')+geom_hline(yintercept=0)+ scale_color_discrete('',labels = c('CIP deviations 5yr (implied - actual euro funding rate)','Credit mispricing (EU-US)'))+theme_stata(base_size = 15)+theme(axis.title.y = element_text(margin =margin(0, 10, 0, 0)))
+ggsave(file='../paper/figures/meetingwSam160810/fig3_creditCIPeur.pdf',fig3b,width=9,height=6)
+
+dtplot2[variable=='credit mispricing'] %>% ggplot(aes(x=date,y=value,colour=variable))+geom_errorbar(aes(ymin=value-1.96*se,ymax=value+1.96*se,colour='grey'))+geom_line()+geom_point(size=1)+xlab('')+ylab('bps')+geom_hline(yintercept=0)+ scale_color_discrete('',labels = c('Credit mispricing (Residualized credit spread diff EU-US)','95% CI'))+theme_stata(base_size = 15)+theme(axis.title.y = element_text(margin =margin(0, 10, 0, 0)))
+ggsave(file='../paper/figures/fig_crediteur_CI.pdf',width=9,height=6)
+
+
+
+dtplot2[date %between% c('2012-03-01','2012-09-01')] %>% ggplot(aes(x=date,y=value,colour=variable))+geom_errorbar(aes(ymin=value-1.96*se,ymax=value+1.96*se))+geom_line()+geom_point(size=1)+xlab('')+ylab('bps')+geom_hline(yintercept=0)+ scale_color_discrete('',labels = c('CIP deviations 5yr (implied - actual euro funding rate)','Credit mispricing (EU-US)'))+theme_stata(base_size = 15)+theme(axis.title.y = element_text(margin =margin(0, 10, 0, 0)))
+
 #ggsave(file='../paper/figures/fig3_creditCIPeur.pdf',fig3,width=9,height=6)
 
 # Figure 4 Credit mispring and CIP for JPY
@@ -54,11 +76,11 @@ fig4
 
 # Figure ... : rating
 #fread('rating.csv')
-dtm<-preprocess(bondref,dtl.mo,prl,issfiltertype =1)
+dtm<-preprocess(bondref,dtl.mo,prl,issfiltertype =3)
 ys_hg<-resyldsprdv4(dtm$dtl4[ccy %in% c('usd','eur') & nrating %between% c(1,6)],dtm$prl,regversion=3)
 dtm$dtl4[,.N,date] 
 dtm$dtl4[nrating>6,.N,date] %>% head(10)
-ys_hy<-resyldsprdv4(dtm$dtl4[ccy %in% c('usd','eur') & nrating>6],dtm$prl,regversion=3)
+ys_hy<-resyldsprdv4(dtm$dtl4[ccy %in% c('usd','eur') & nrating>6 & date>'2004-09-01'],dtm$prl,regversion=3)
 fig5<-ys_hg$regcoef[ys_hy$regcoef][,.(date,ccyeur,i.ccyeur)] %>% ggplotw()+xlab('')+ylab('bps')+geom_hline(yintercept=0)+ scale_color_discrete('',labels = c('HG','HY'))+theme_stata(base_size = 12)+theme(axis.title.y = element_text(margin =margin(0, 0, 0, 0)))
 fig5
 
@@ -116,6 +138,7 @@ fig5
 	ys1<-resyldsprdv4(dtmd$dtl4[ccy %in% c('usd','eur')],dtmd$prl,regversion=6,returndt = T)
 	ys2<-resyldsprdv4(dtmd$dtl4[ccy %in% c('usd','eur')],dtmd$prl,regversion=6,returndt = T,adjccybs=T)
 	# save.image('tempdailyts.RData')
+	load('tempdailyts.RData')
 		#CI 
 		ys1$regresult[ccy=='eur'] %>% ggplot(aes(x=date,y=est,colour=ccy))+geom_errorbar(aes(ymin=est-1.96*se,ymax=est+1.96*se),colour='black')+geom_line()+geom_point(size=1)
 		ys1$regresult %>% ggplot(aes(x=date,y=est,colour=ccy))+geom_errorbar(aes(ymin=est-1.96*se,ymax=est+1.96*se))+geom_line()+geom_point(size=1)
@@ -153,7 +176,9 @@ fig5
 	dt.merged[date %between% c('2012-06-01','2012-10-01')] %>% ggplotw(x11. = T)+geom_vline(xintercept = as.numeric(ecbqe))
 
 	# credit crunch
-	dt.merged[date %between% c('2007-09-01','2008-11-01')] %>% ggplotw()+geom_vline(xintercept = as.numeric(c(ymd('2008-03-16'),ymd('2008-09-15'))))
+	setnames(dt.merged,c('eur','eubs5'),c('crd_misprice','cip'))
+	dt.merged[date %between% c('2007-09-01','2008-11-01')] %>% ggplotw()+geom_vline(xintercept = as.numeric(c(ymd('2008-03-16'),ymd('2008-09-15'))))+xlab('')+ylab('bps')+geom_hline(yintercept=0)+ scale_color_discrete('',labels = c('CIP deviations','Credit mispricing (EU-US)'))+theme_stata(base_size = 15)+theme(axis.title.y = element_text(margin =margin(0, 10, 0, 0)))
+	ggsave(file='../paper/figures/meetingwSam160810/eventstudy_creditcrunch.pdf',width=9,height=6)
 
 	# US QE 08-11
 		qe.events<-fread.xls('EventStudy-eventdates.xlsx','QE')
@@ -167,17 +192,22 @@ fig5
 
 
 	# EUR soverign crisis 2011
-	dt.merged[date %between% c('2011-05-01','2012-06-01')] %>% ggplotw(x11.=T)+geom_vline(xintercept = as.numeric(sig.us.qe.dates))	
+	dt.merged[date %between% c('2011-05-01','2012-06-01')] %>% ggplotw(x11.=F)+xlab('')+ylab('bps')+ scale_color_discrete('',labels = c('CIP deviations','Credit mispricing (EU-US)'))+theme_stata(base_size = 15)+theme(axis.title.y = element_text(margin =margin(0, 10, 0, 0)))
+	ggsave(file='../paper/figures/meetingwSam160810/eventstudy_eurocrisis11.pdf',width=9,height=6)
 
 	# ECB around 2012 # Draghi whatever it takes
 	dt.merged[date %between% c('2012-03-01','2012-09-01')] %>% ggplotw()+geom_vline(xintercept = as.numeric(ecbqe))
 	dtmd$prw[,.(date,ussw5,eusw5)][date %between% c('2012-03-01','2012-09-01')] %>% ggplotw(x11. = T)+geom_vline(xintercept = as.numeric(ecbqe))
 
 	# ECB around 2014
-	dt.merged[date %between% c('2014-03-01','2015-07-01')] %>% ggplotw(x11. = T)+geom_vline(xintercept = as.numeric(ecbqe))
-
+	dt.merged[date %between% c('2014-03-01','2015-07-01')] %>% ggplotw(x11. = F)+geom_vline(xintercept = as.numeric(ecbqe))+xlab('')+ylab('bps')+ scale_color_discrete('',labels = c('CIP deviations','Credit mispricing (EU-US)'))+theme_stata(base_size = 15)+theme(axis.title.y = element_text(margin =margin(0, 10, 0, 0)))
+	ggsave(file='../paper/figures/meetingwSam160810/eventstudy_ecb2014.pdf',width=9,height=6)
 	# ECB around 2016
-	dt.merged[date %between% c('2016-01-01','2016-07-26')] %>% ggplotw(x11. = T)+geom_vline(xintercept = as.numeric(ecbqe))
+	dt.merged[date %between% c('2016-01-01','2016-07-26')] %>% ggplotw(x11. = F)+geom_vline(xintercept = as.numeric(ymd(c('2016-06-08','2016-03-10'))))+xlab('')+ylab('bps')+ scale_color_discrete('',labels = c('CIP deviations','Credit mispricing (EU-US)'))+theme_stata(base_size = 15)+theme(axis.title.y = element_text(margin =margin(0, 10, 0, 0)))
+	ggsave(file='../paper/figures/meetingwSam160810/eventstudy_ecb2016.pdf',width=9,height=6)
+
+
+
 
 
 

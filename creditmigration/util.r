@@ -159,7 +159,7 @@ getccyFE2<-function(dfin,fieldstr='OAS_SPREAD_BID',version=2,winsor=.025){
       df2[liq<.5,liq_bucket:=0] # more illiq
       df2[liq>=.5,liq_bucket:=1] # liq
     regfun<-function(dt,ccylist,regversion=1,bylist){
-      tryCatch({
+      tc.ret<-tryCatch({
           if (regversion==1){
             # regversion 1:: run regression directly on data set without taking out bonds that do not have matching pairs
             reg<-lm(eval(exparse(lhs))~ccy+upcusip,data=dt)
@@ -185,9 +185,12 @@ getccyFE2<-function(dfin,fieldstr='OAS_SPREAD_BID',version=2,winsor=.025){
       }, error=function(err){
         print(err)
         print(bylist)
-        reg<-data.table(coefficients=as.numeric(NA))
+        #reg<-data.table(coefficients=as.numeric(NA))
+        return(data.table('ccy'='eur','est'=NA,se=NA))
         browser()
       })
+      #browser()
+      #if(typeof(tc.ret)=='list') return (tc.ret)
         # dtcoef<-data.frame(as.list(reg$coefficients)) %>% select(starts_with('ccy')) %>%  as.data.table()
         # missccy<-ccylist[str_c('ccy',ccylist) %ni% c('ccy1usd',ds(dtcoef,'ccy'))]
         # if (length(missccy)>0){ # if missing ccy on a particular date
@@ -199,7 +202,7 @@ getccyFE2<-function(dfin,fieldstr='OAS_SPREAD_BID',version=2,winsor=.025){
         dtccy<-data.table('ccy'=ccylist);dtccy %>% setkey(ccy)
         dtcoef2 %>% setkey(ccy)
         dtcoef2 <- dtcoef2[dtccy[ccy!='1usd']]
-        # browser()
+         browser()
         dtcoef2
     }
     ccylist<-(df2 %>% distinct(ccy) %>% select(ccy))[[1]]
