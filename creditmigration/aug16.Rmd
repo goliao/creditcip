@@ -20,12 +20,12 @@ source('util.r')
 
 
 ```{r monthlysetup,include=FALSE}
-load('db/dtlmo.RData');load('db/bondref.RData');load('db/prl.RData');load('db/monthenddates.RData');
-dtm<-preprocess(bondref,dtl.mo,prl,issfiltertype =3)
-ys1m<-resyldsprdv4(dtm$dtl4[ccy %in% c('usd','eur')],dtm$prl,regversion=6,returndt=T)
-ys3m<-resyldsprdv4(dtm$dtl4[ccy %in% c('usd','eur','aud','jpy','gbp')],dtm$prl,regversion=6,returndt=T)
-ys2m<-resyldsprdv4(dtm$dtl4[ccy %in% c('usd','eur')],dtm$prl,regversion=6,adjccybs=TRUE);
-save(dtm,ys1m,ys2m,file='tempmots.RData')
+# load('db/dtlmo.RData');load('db/bondref.RData');load('db/prl.RData');load('db/monthenddates.RData');
+# dtm<-preprocess(bondref,dtl.mo,prl,issfiltertype =3)
+# ys1m<-resyldsprdv4(dtm$dtl4[ccy %in% c('usd','eur')],dtm$prl,regversion=6,returndt=T)
+# ys3m<-resyldsprdv4(dtm$dtl4[ccy %in% c('usd','eur','aud','jpy','gbp')],dtm$prl,regversion=6,returndt=T)
+# ys2m<-resyldsprdv4(dtm$dtl4[ccy %in% c('usd','eur')],dtm$prl,regversion=6,adjccybs=TRUE);
+# save(dtm,ys1m,ys2m,file='tempmots.RData')
 load('tempmots.RData')
 ```
 

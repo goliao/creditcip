@@ -775,8 +775,8 @@ resyldsprdv2<-function(dtlin,pricein,regversion=2,globaluponly=1,returndt=0){
     lsout[[1]]
 }
 getccyFE2new<-function(dfin,fieldstr='OAS_SPREAD_BID',version=2,winsor=.01){
-#  Generalized function for calculating FE 
-print(str_c('FE on field: ',fieldstr))
+  #  Generalized function for calculating FE 
+  print(str_c('FE on field: ',fieldstr))
   if ('field' %in% ds(dfin)) { # if dfin is in the long format with a field called 'field'
     df2<-dfin[field==fieldstr]
     lhs<-'value'
@@ -785,8 +785,7 @@ print(str_c('FE on field: ',fieldstr))
     lhs<-fieldstr
   }
   setkey(df2,date,upcusip,ccy)
-
-#winsorize each date
+  #winsorize each date
   if (winsor!=0){
     df2[,pctl:=percent_rank(eval(exparse(lhs))),by=.(date,ccy)]
     df2<-df2[pctl>=winsor & pctl<=(1-winsor)]
@@ -795,10 +794,10 @@ print(str_c('FE on field: ',fieldstr))
     #df2<-df2[date %ni% df2[,.N,by=c('date','ccy')][N==1,date]]
     #df2<-df2[date %ni% df2[,.N,.(date,ccy)][,.N,date][N==1,date]]
 
-# set alphabetical order such that dummies are on foreign ccys
-  df2[ccy=='usd',ccy:='1usd']
-        
-# introduce liquidity measure based on bond age
+  # set alphabetical order such that dummies are on foreign ccys
+    df2[ccy=='usd',ccy:='1usd']
+          
+  # introduce liquidity measure based on bond age
     df2[,liq:=ytm/ytofm]
     df2<-df2[liq %between% c(0,1.1)]
     df2[liq<.5,liq_bucket:=0] # more illiq
@@ -851,13 +850,13 @@ print(str_c('FE on field: ',fieldstr))
 }
 ## OLD; original version used at student presentation; windsorize by date only
 getccyFE2<-function(dfin,fieldstr='OAS_SPREAD_BID',version=2,winsor=.01){
-#  dfin<-dtl2
-print(str_c('FE on field: ',fieldstr))
+  #  dfin<-dtl2
+  print(str_c('FE on field: ',fieldstr))
   # df2<-dfin[field==fieldstr,.(date,ccy,value,upcusip,ytm,rating_bucket)]
   df2<-dfin[field==fieldstr]
   setkey(df2,date,upcusip,ccy)
 
-#winsorize each date
+  #winsorize each date
   if (winsor!=0){
     df2[,pctl:=percent_rank(value),by=date]
     df2<-df2[pctl>=winsor & pctl<=(1-winsor)]
@@ -865,10 +864,10 @@ print(str_c('FE on field: ',fieldstr))
     #get rid of days with only single observation
   df2<-df2[date %ni% df2[,.N,by=c('date','ccy')][N==1,date]]
 
-# set alphabetical order such that dummies are on foreign ccys
+  # set alphabetical order such that dummies are on foreign ccys
   df2[ccy=='usd',ccy:='1usd']
         
-# introduce liquidity measure based on bond age
+  # introduce liquidity measure based on bond age
     df2[,liq:=ytm/ytofm]
     df2<-df2[liq %between% c(0,1.1)]
     df2[liq<.5,liq_bucket:=0] # more illiq
