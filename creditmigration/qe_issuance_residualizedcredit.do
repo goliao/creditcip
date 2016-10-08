@@ -1,8 +1,3 @@
-
-
-
-
-
 cd "C:\Users\gliao\Dropbox\Research\ccy basis\creditmigration"
 cd "\Users\gliao\Dropbox\Research\ccy basis\creditmigration"
 
@@ -35,6 +30,11 @@ drop if nrating==1
 * miscoded & perpetual
 drop if ytofm>=99
 count
+
+* new 160822 
+* drop if issue_type_desc=="Agency, Supranational, Sovereign"
+* drop if issue_type_desc=="Mortgage-backed"
+* drop if issue_type_desc=="Asset-backed"
 
 * br i desc ytofm d settlement2 mat2 amt if year==2016 & month==1 & ccy=="EUR" & modnat=="United States"
 * br i desc ytofm d settlement2 mat2 amt sic2 Euop if year==2016 & month==1 & ccy=="USD" & modnat=="Eurozone"
@@ -85,8 +85,8 @@ gen mofq=1 if month==1 | month==4 | month==7 | month==10
 replace mofq=2 if month==2 | month==5 | month==8 | month==11
 replace mofq=3 if month==3 | month==6 | month==9 | month==12
 
-drop if date>=d(01mar2016)
-drop if date>=d(01oct2015)
+* drop if date>=d(01mar2016)
+* drop if date>=d(01oct2015)
 save regdata_02.dta,replace
 
 
@@ -108,16 +108,60 @@ save residualizedys2.dta,replace
 use regdata_02.dta,clear
 drop _merge
 merge 1:1 monthly using residualizedys2.dta
+br monthly i_net_USDEUR ccyeur_eff
+
 egen i_net_USDEUR_mean_1=mean(i_net_USDEUR) if year>2005 & year<2009 
 egen i_net_USDEUR_mean_2=mean(i_net_USDEUR) if year>=2009 & year<2014 
 egen i_net_USDEUR_mean_3=mean(i_net_USDEUR) if year>=2014 & year<2016
-drop if year>2016
+* drop if year>2016
 
 tsset monthly
 gen ccyeur_eff_6m=(ccyeur_eff+L.ccyeur_eff+L2.ccyeur_eff+L3.ccyeur_eff+L4.ccyeur_eff+L5.ccyeur_eff)/6
 gen ccyjpy_eff_6m=(ccyjpy_eff+L.ccyjpy_eff+L2.ccyjpy_eff+L3.ccyjpy_eff+L4.ccyjpy_eff+L5.ccyjpy_eff)/6
 gen ccygbp_eff_6m=(ccygbp_eff+L.ccygbp_eff+L2.ccygbp_eff+L3.ccygbp_eff+L4.ccygbp_eff+L5.ccygbp_eff)/6
 gen ccyaud_eff_6m=(ccyaud_eff+L.ccyaud_eff+L2.ccyaud_eff+L3.ccyaud_eff+L4.ccyaud_eff+L5.ccyaud_eff)/6
+
+
+
+* reg for draft 160822
+    local filename "Table3_multivariate_EUR"
+    capture rm `filename'.csv
+    local controls "ratediff_euus ussw10 cy30_govtoas eurchg"
+    local A USD
+    local B EUR
+    local crdsource "euus_30"
+    eststo clear
+    eststo: neweymod F.I_net_`A'`B'_6mf Cdif_`crdsource'_eff I_net_`A'`B', lag(6)
+    eststo: neweymod F.I_net_`A'`B'_6mf Cdif_`crdsource'_eff `controls', lag(6)
+    * eststo: neweymod F.I_net_`A'`B' Cdif_`crdsource' I_net_`A'`B' `controls', lag(6)
+    * eststo: neweymod F.I_net_`A'`B' Cdif_`crdsource'_eff I_net_`A'`B' `controls', lag(6)
+    eststo: neweymod F.I_net_`A'`B'_6mf Cdif_`crdsource'_eff I_net_`A'`B' `controls', lag(6)
+    * eststo: neweymod F.i_net_`A'`B' Cdif_`crdsource' i_net_`A'`B' `controls', lag(6)
+    * eststo: neweymod F.i_net_`A'`B' Cdif_`crdsource'_eff i_net_`A'`B' `controls', lag(6)
+    eststo: neweymod F.i_net_`A'`B'_6mf Cdif_`crdsource'_eff i_net_`A'`B' , lag(6)
+    eststo: neweymod F.i_net_`A'`B'_6mf Cdif_`crdsource'_eff `controls', lag(6)
+    eststo: neweymod F.i_net_`A'`B'_6mf Cdif_`crdsource'_eff i_net_`A'`B' `controls', lag(6)
+    esttab using `filename'.csv, title("Multivariate Forecasting'") bracket r2 nostar nogaps nonote addnotes(" ") order(Cdif_`crdsource'_eff ratediff_euus I_net_`A'`B' i_net_`A'`B' ussw10 cy30_govtoas eurchg) append
+
+
+**** 
+ Pool these together and focus on EUR
+ graph why jpy doesnt wokr
+* comparison between the old and new
+local crdsource "euus_30"
+neweymod F.i_net_USDEUR_6mf Cdif_`crdsource'_eff i_net_USDEUR , lag(6)
+neweymod F.i_net_USDEUR_6mf ccyeur_eff i_net_USDEUR , lag(6)
+
+neweymod F.i_net_USDGBP_6mf Cdif_`crdsource'_eff i_net_USDGBP , lag(6)
+neweymod F.i_net_USDGBP_6mf ccyeur_eff i_net_USDGBP , lag(6)
+
+neweymod F.i_net_USDJPY_6mf Cdif_`crdsource'_eff i_net_USDJPY , lag(6)
+neweymod F.i_net_USDJPY_6mf ccyeur_eff i_net_USDJPY , lag(6)
+neweymod F.i_net_USDJPY_6mf ccyeur_eff if year>2008, lag(6)
+
+neweymod F.i_net_USDAUD_6mf Cdif_`crdsource'_eff i_net_USDAUD , lag(6)
+neweymod F.i_net_USDAUD_6mf ccyeur_eff i_net_USDAUD , lag(6)
+
 
 
 * new plot
@@ -129,6 +173,8 @@ neweymod F.i_net_USDEUR ccyeur_eff, lag(6)
 neweymod F.i_net_USDJPY ccyjpy_eff, lag(6)
 neweymod F.i_net_USDGBP ccygbp_eff, lag(6)
 neweymod F.i_net_USDAUD ccyaud_eff, lag(6)
+neweymod F.i_net_USDCHF ccychf_eff, lag(6)
+neweymod F.i_net_USDCAD ccycad_eff, lag(6)
 
 gen i_net_USDEUR_6m=(i_net_USDEUR+L.i_net_USDEUR+L2.i_net_USDEUR+L3.i_net_USDEUR+L4.i_net_USDEUR+L5.i_net_USDEUR)/6
 save plotdata_qe_crd_iss.dta,replace

@@ -60,9 +60,55 @@ load('db/archieve/dtldaily160731.RData')
 
 load('db/dtldaily.RData')
 
+
+# 16/9/7 add new bond downloads from Sept 4th using figi derived bbg ticker, to complete SDC dataset
+	rm(list=ls(all=TRUE))
+	setwd("/Users/gliao/Dropbox/Research/ccy basis/creditmigration")
+	source('util.r')
+	load('db/archive/dtldaily160806.RData')	
+	dtladd.daily<-loadBBGdownload2df('dbin/sdcticker_wossa_daily_160904.RData')	
+	dtladd2.daily<-loadBBGdownload2df('dbin/sdcticker_ssa_daily_160904.RData')	
+	dtl.daily<-update.dtl.mo(dtl.daily,dtladd.daily)
+	dtl.daily<-update.dtl.mo(dtl.daily,dtladd2.daily)
+	dtl.daily %>% setkey(pk,date)
+	dtl.daily<-unique(dtl.daily)
+	#save(dtl.daily,file='db/dtldaily.RData')	
+
+# 16/9/7 replace all pk with tickers 
+	load('db/dtlmo.rdata')
+	load('db/pktickerlookup.RData')		
+	dtl.mo %>% setkey(pk)
+	pk.ticker.lookup %>% setkey(pk)
+		# check which ones are just not there from bondref/sdc; these can be enhanced if I can get BBG information: ccy, mat, rating, firm
+		# load('db/bondrefall.RData')
+		# dtl.mo[,.N,.(pk)]
+		# missing<-dtl.mo[!pk.ticker.lookup][,.N,.(pk)]
+		# missing %>% setkey(pk)
+		# bondrefall %>% setkey(pk)
+		# bondrefall[missing]
+		# bondrefall[missing]
+	dtl.mo[pk.ticker.lookup,pk:=ticker]
+	dtl.mo %>% setkey(pk,date)
+	dtl.mo<-unique(dtl.mo)
+	
+	# dtl.mo[,.N,pk] %>% View
+	#save(dtl.mo,recheck,file='db/dtlmo.rdata')	
+
+# 16/09/27 update daily time series
+	rm(list=ls(all=TRUE));setwd("/Users/gliao/Dropbox/Research/ccy basis/creditmigration"); source('util.r')
+	load('db/archive/dtldaily160907.RData')	
+	dtladd.daily<-loadBBGdownload2df('dbin/daily_cspp_up_160927.RData')	
+	dtladd.daily2<-loadBBGdownload2df('dbin/daily_update_globalonly_160927.RData')	
+	dtl.daily<-update.dtl.mo(dtl.daily,dtladd.daily,overridein = T)
+	dtl.daily<-update.dtl.mo(dtl.daily,dtladd.daily2,overridein = T)
+	dtl.daily %>% setkey(pk,date)
+	dtl.daily<-unique(dtl.daily)
+	#save(dtl.daily,file='db/dtldaily.RData')	
+
+
 ### Diagnostics that's used to get rid of dates with few observations
 # merging with bondref
-	load('db/bondref.RData')
+	load('db/archive/bondref160806.RData')
 	br<-bondref[!is.na(pk),.(ccy,mat2,nrating,upcusip,pk,ytofm,sicfac,sic1)]
 	br[,ccy:=tolower(ccy)]
 	compare.dt(dtl.daily,br,bykey.='pk')

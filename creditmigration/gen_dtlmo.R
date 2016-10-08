@@ -107,6 +107,50 @@ recheck<-rbind(recheck,dtltemp[[2]][[1]][,.N,pk][,.(pk)])
 	dtl.mo<-update.dtl.mo(dtl.mo,dtladd5.monthly)
 	#save(dtl.mo,recheck,file='db/dtlmo.rdata')
 
+# add new bond downloads from Sept 4th using figi derived bbg ticker, to complete SDC dataset
+	load('db/archive/dtlmo160804.rdata')
+	dtladd.mo<-loadBBGdownload2df('dbin/sdcticker_wossa_monthly_160904.RData')	
+	dtladd2.mo<-loadBBGdownload2df('dbin/sdcticker_ssa_monthly_160904.RData')	
+	dtl.mo<-update.dtl.mo(dtl.mo,dtladd.mo)
+	dtl.mo<-update.dtl.mo(dtl.mo,dtladd2.mo)
+	dtl.mo %>% setkey(pk,date)
+	dtl.mo<-unique(dtl.mo)
+	#save(dtl.mo,recheck,file='db/dtlmo.rdata')	
+
+# replace all pk with tickers 
+	load('db/dtlmo.rdata')
+	load('db/pktickerlookup.RData')		
+	dtl.mo %>% setkey(pk)
+	pk.ticker.lookup %>% setkey(pk)
+		# check which ones are just not there from bondref/sdc; these can be enhanced if I can get BBG information: ccy, mat, rating, firm
+		# load('db/bondrefall.RData')
+		# dtl.mo[,.N,.(pk)]
+		# missing<-dtl.mo[!pk.ticker.lookup][,.N,.(pk)]
+		# missing %>% setkey(pk)
+		# bondrefall %>% setkey(pk)
+		# bondrefall[missing]
+		# bondrefall[missing]
+	dtl.mo[pk.ticker.lookup,pk:=ticker]
+	dtl.mo %>% setkey(pk,date)
+	dtl.mo<-unique(dtl.mo)
+	
+	# dtl.mo[,.N,pk] %>% View
+	#save(dtl.mo,recheck,file='db/dtlmo.rdata')	
+
+# add new bond downloads from sept 27 with bonds beloing to ECB CSPP upcusip and globalfirm updte of previous dtl.daily, has not yet updated all bonds
+	load('db/archive/dtlmo160907.rdata')
+	dtladd.mo<-loadBBGdownload2df('dbin/daily_cspp_up_mo_160927.RData')	
+	dtladd2.mo<-loadBBGdownload2df('dbin/monthly_update_globalonly_160927.RData')	
+	dtladd3.mo<-loadBBGdownload2df('dbin/monthly_update_161002.RData')	
+	dtl.mo<-update.dtl.mo(dtl.mo,dtladd.mo,overridein = T)
+	dtl.mo<-update.dtl.mo(dtl.mo,dtladd2.mo,overridein = T)
+	dtl.mo<-update.dtl.mo(dtl.mo,dtladd3.mo,overridein = T)
+	dtl.mo %>% setkey(pk,date)
+	dtl.mo<-unique(dtl.mo)
+	#save(dtl.mo,recheck,file='db/dtlmo.rdata')	
+	
+
+
 
 
 # load again

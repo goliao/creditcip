@@ -1,7 +1,7 @@
 setwd("/Users/gliao/Dropbox/Research/ccy basis/creditmigration")
 # New merge: price with sdc -----------------------------------------------
 rm(list=ls(all=TRUE));load('gldb.RDATA')
-source('util_20160620.r')
+source('old/util_20160620.r')
 br<-bondref[!is.na(pk)] %>% issfilter(.)
 br<- br %>% semi_join(dtl,by='pk') %>% as.data.table()
 
@@ -25,6 +25,8 @@ prw[,`:=`(eusz10=eusw10+eubs10,eusz12=eusw12+eubs12,eusz15=eusw15+eubs15,eusz2=e
 prw[,`:=`(jysz10=jysw10+jybs10,jysz12=jysw12+jybs12,jysz15=jysw15+jybs15,jysz2=jysw2+jybs2,jysz20=jysw20+jybs20,jysz30=jysw30+jybs30,jysz5=jysw5+jybs5,jysz7=jysw7+jybs7,jysz1=jysw1+jybs1)]
 prw[,`:=`(bpsz10=bpsw10+bpbs10,bpsz12=bpsw12+bpbs12,bpsz15=bpsw15+bpbs15,bpsz2=bpsw2+bpbs2,bpsz20=bpsw20+bpbs20,bpsz30=bpsw30+bpbs30,bpsz5=bpsw5+bpbs5,bpsz7=bpsw7+bpbs7,bpsz1=bpsw1+bpbs1)]
 prw[,`:=`(adsz1=adsw1+adbs1,adsz10=adsw10+adbs10,adsz2=adsw2+adbs2,adsz5=adsw5+adbs5,adsz7=adsw7+adbs7,adsz15=adsw15+adbs15,adsz20=adsw20+adbs20,adsz12=adsw12+adbs12,adsz30=adsw30+adbs30)]
+prw[,`:=`(cdsz1=cdsw1+cdbs1,cdsz2=cdsw2+cdbs2,cdsz5=cdsw5+cdbs5,cdsz7=cdsw7+cdbs7,cdsz10=cdsw10+cdbs10,cdsz12=cdsw12+cdbs12,cdsz15=cdsw15+cdbs15,cdsz20=cdsw20+cdbs20,cdsz30=cdsw30+cdbs30)]
+prw[,`:=`(sfsz1=sfsw1+sfbs1,sfsz2=sfsw2+sfbs2,sfsz5=sfsw5+sfbs5,sfsz7=sfsw7+sfbs7,sfsz10=sfsw10+sfbs10,sfsz12=sfsw12+sfbs12,sfsz15=sfsw15+sfbs15,sfsz20=sfsw20+sfbs20,sfsz30=sfsw30+sfbs30)]
 # transform prw back to prl
 prl<-data.table::melt(prw,id.vars='date',variable.name='ticker')[date!='2016-02-25']
 prw<-prw[date!='2016-02-25']
@@ -55,7 +57,7 @@ dtl3[liq>=.5,liq_bucket:=1] # liq
 #ys0<-resyldsprdv2(dtl3,prl,regversion=6) # swap spread only w/o 3s6s adj.
 ys1<-resyldsprdv3(dtl3,prl,regversion=6)
 # ys1nf<-resyldsprdv3(dtl3[sic1!=6],prl,regversion=6)
-# ys2<-resyldsprdv3(dtl3,prl,regversion=6,adjccybs = 1)
+ys2<-resyldsprdv3(dtl3,prl,regversion=6,adjccybs = 1)
 # 
 # ys1 %>% ds()
 # ys1[,.(date,liquid)] %>% ggplotw()
@@ -65,9 +67,11 @@ ys1<-resyldsprdv3(dtl3,prl,regversion=6)
 #ggsave(file='../paper/figures/fig1_cip.pdf',fig1,width=9,height=6)
 rm(list=ls())
 load('dtclean20160725.RData')
-source('util_20160620.r')
+source('old/util_20160620.r')
 ys1<-resyldsprdv3(dtl3,prl,regversion=6)
 ys1new<-resyldsprdv3new(dtl3,prl,regversion=6)
+ys1newb<-resyldsprdv3new(dtl3,prl,regversion=6,adjccybs=1)
+ys1newb %>% write.dta('effresys_160826_retro_0625.dta')
 ys1b<-resyldsprdv3new(dtl3,dtm$prl,regversion=6)
 
 ys1[,.(date,ccyeur,ccygbp,ccyaud,ccyjpy)] %>% ggplotw()

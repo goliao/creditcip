@@ -49,8 +49,9 @@ predict levfac2adj,resid
 label var levfac2adj "lev factor adj normalized"
 label var lnlevnorm2 "Log Leverage normalized"
 keep quarterly year quarter levfac2adj levfac2 lnlevnorm2 lnlev2 lnlev2D lnlev lnlevD bdleverage2 bdleverage
-keep if year>1994
 
+keep if year>1994
+save bdlevq.dta
 expand 3
 sort year quarter
 by year quarter: gen month=_n+(quarter-1)*3

@@ -1,20 +1,13 @@
 # install.packages(c('stringr','tidyr','dplyr','lubridate','ggplot2','sandwich','magrittr','beepr','ggthemes','data.table'))
-# install.packages(c('lfe','RStata','stargazer','ggthemes','sandwich','lmtest','readstata13','lubridate','lmtest','vars'))
 require(lfe)
   require(RStata)
-  if (Sys.info()['sysname'][[1]]=='Windows'){
-    print('windows stata')
-    options("RStata.StataVersion" = 13)
-    options("RStata.StataPath"='"\"C:\\Program Files (x86)\\Stata13\\StataMP-64\""')  
-  } else{
-    options("RStata.StataVersion" = 14)
-    options("RStata.StataPath"='/Applications/Stata/StataMP.app/Contents/MacOS/stata-mp')  
-  }
-  
-require(foreign)
+  options("RStata.StataVersion" = 14)
+  options("RStata.StataPath"='/Applications/Stata/StataMP.app/Contents/MacOS/stata-mp')  
 
+require(foreign)
+require(stringr)
 # require(xts)
-# require(tidyr)
+require(tidyr)
 require(dplyr)
 require('readstata13')
 # require('haven')
@@ -22,22 +15,18 @@ require('readstata13')
 # require('doBy')
 require(lubridate)
 require(ggplot2)
+require(sandwich)
 require(stargazer)
-# require(reshape2)
+require(reshape2)
 # require(sqldf)
 require(magrittr)
-# require(xda)
+require(xda)
 require(beepr)
 require(ggthemes)
 require(lmtest);
 require(data.table)
-require(stringr)
-require(doParallel)
-#options(width=as.integer(Sys.getenv("COLUMNS")))
+
 require(sandwich);require(lmtest)
-
-packages.do.export<-c('data.table','dplyr','stringr','lfe','lubridate','beepr','lmtest','sandwich')
-
 '%ni%' <- Negate('%in%')
 '%nlk%' <- Negate('%like%')
 '%lk%' <- '%like%'
@@ -48,9 +37,6 @@ tocusip6<-function(dtin, field='upcusip'){
   dtin[str_length(cusip6)<6,cusip6:=sprintf("%06d", as.numeric(cusip6))]
 }
 
-wideScreen <- function(howWide=Sys.getenv("COLUMNS")) {
-  options(width=as.integer(Sys.getenv("COLUMNS")))
-}
 
 df2clip<-function(x)(write.table(x, "clipboard.csv", sep=","))
 # df2clip<-function(x)(write.table(x, "clipboard", sep="\t"))
@@ -66,8 +52,8 @@ toc <- function(){
   type <- get(".type", envir=baseenv())
   toc <- proc.time()[type]
   tic <- get(".tic", envir=baseenv())
-  if (!isTRUE(getOption('knitr.in.progress'))) print(toc - tic)
-  # beep()
+  print(toc - tic)
+  beep()
   invisible(toc)
 }
 
@@ -81,27 +67,7 @@ toc <- function(){
   }
 
 
- plot.irf<-function(resirf,v1='credit',v2='cip',v3='i_netflow'){
-    require(latex2exp)
-    labelv1<-'$c$'
-    labelv2<-'$b$'
-    labelv3<-'$\\mu$'
-    dttemp<-list()
-    dttemp[[1]]<-(resirf$irf %>% as.data.frame(keep.rownames=T) %>% as.data.table(keep.rownames=T))[,type:="irf"]
-    dttemp[[2]]<-(resirf$Upper %>% as.data.frame(keep.rownames=T) %>% as.data.table(keep.rownames=T))[,type:="Upper"]
-    dttemp[[3]]<-(resirf$Lower %>% as.data.frame(keep.rownames=T) %>% as.data.table(keep.rownames=T))[,type:="Lower"]
-    dtirf<-(dttemp %>% rbindlist %>% melt(id.vars=c('rn','type')) %>% dcast(rn+variable~type))[,rn:=as.numeric(rn)][order(rn)]  
-    par(ask=F)  
-    require('gridExtra')
-    figirf<-list()
-    figirf[[1]]<-dtirf[variable==str_c(v1,'.',v1)] %>% ggplot(data=.,aes(x=rn,y=irf,group=1))+geom_line()+geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=.3,colour=NA)+ggtitle(TeX(str_c(labelv1,' $\\rightarrow$ ',labelv1)))+xlab('')+ylab('')+geom_hline(yintercept=0,colour='lightblue')+theme_few()+theme(legend.position='none')
-    figirf[[2]]<-dtirf[variable==str_c(v1,'.',v2)] %>% ggplot(data=.,aes(x=rn,y=irf,group=1))+geom_line()+geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=.3,colour=NA)+ggtitle(TeX(str_c(labelv1,' $\\rightarrow$ ',labelv2)))+xlab('')+ylab('')+geom_hline(yintercept=0,colour='lightblue')+theme_few()+theme(legend.position='none')
-    figirf[[3]]<-dtirf[variable==str_c(v1,'.',v3)] %>% ggplot(data=.,aes(x=rn,y=irf,group=1))+geom_line()+geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=.3,colour=NA)+ggtitle(TeX(str_c(labelv1,' $\\rightarrow$ ',labelv3)))+xlab('')+ylab('')+geom_hline(yintercept=0,colour='lightblue')+theme_few()+theme(legend.position='none')
-    figirf[[4]]<-dtirf[variable==str_c(v2,'.',v1)] %>% ggplot(data=.,aes(x=rn,y=irf,group=1))+geom_line()+geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=.3,colour=NA)+ggtitle(TeX(str_c(labelv2,' $\\rightarrow$ ',labelv1)))+xlab('')+ylab('')+geom_hline(yintercept=0,colour='lightblue')+theme_few()+theme(legend.position='none')
-    figirf[[5]]<-dtirf[variable==str_c(v2,'.',v2)] %>% ggplot(data=.,aes(x=rn,y=irf,group=1))+geom_line()+geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=.3,colour=NA)+ggtitle(TeX(str_c(labelv2,' $\\rightarrow$ ',labelv2)))+xlab('')+ylab('')+geom_hline(yintercept=0,colour='lightblue')+theme_few()+theme(legend.position='none')
-    figirf[[6]]<-dtirf[variable==str_c(v2,'.',v3)] %>% ggplot(data=.,aes(x=rn,y=irf,group=1))+geom_line()+geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=.3,colour=NA)+ggtitle(TeX(str_c(labelv2,' $\\rightarrow$ ',labelv3)))+xlab('')+ylab('')+geom_hline(yintercept=0,colour='lightblue')+theme_few()+theme(legend.position='none')
-    figirf.all<-grid.arrange(figirf[[1]],figirf[[2]],figirf[[3]],figirf[[4]],figirf[[5]],figirf[[6]],ncol=3,nrow=2,layout_matrix=rbind(c(1,2,3),c(4,5,6)),heights=c(2.25,2.25))
-  } 
+  
 
 plot.event.study.moiss2<-function(dtin.in=dt.merged,dtiss.in=dtiss,ccy.='eur',date.range=c('2007-01-01','2016-08-01'),event.dates.in=ecbqe,type.in=1,filepathhead='',datetics=10){
     figa <- dtin.in[ccy==ccy.][date %between% date.range] %>% plot.event.study(.,event.dates=event.dates.in,type.=type.in)+scale_x_date(breaks=scales::pretty_breaks(n=datetics))
@@ -117,54 +83,7 @@ plot.event.study.moiss2<-function(dtin.in=dt.merged,dtiss.in=dtiss,ccy.='eur',da
     }
     figab
   }
-get_legend<-function(myggplot){
-  tmp <- ggplot_gtable(ggplot_build(myggplot))
-  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
-  legend <- tmp$grobs[[leg]]
-  return(legend)
-}
-plot.netdev<-function(yseff.result,fileout=''){
-  yseff.result[,cimax:=est+1.96*se][,cimin:=est-1.96*se]
-  require('gridExtra')
-  fig7<-list()
-  fig7[[1]]<-yseff.result[ccy=='eur'] %>% ggplot(data=.,aes(x=date,y=est))+geom_line(colour='blue') +geom_errorbar(aes(ymin=cimin,ymax=cimax),colour='lightgrey',alpha=.5) +xlab('')+ylab('bps')+geom_hline(yintercept=0,colour='lightblue')+ scale_color_discrete('',labels = c('Net deviation (credit diff.- CIP)'))+scale_linetype_discrete('',labels = c('Net deviation (credit diff.- CIP)'))+ ggtitle('EUR')+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=7))+theme(legend.position='none')
-  fig7[[2]]<-yseff.result[ccy=='gbp'] %>% ggplot(data=.,aes(x=date,y=est))+geom_line(colour='blue') +geom_errorbar(aes(ymin=cimin,ymax=cimax),colour='lightgrey',alpha=.5) +xlab('')+ylab('')+geom_hline(yintercept=0,colour='lightblue')+ ggtitle('GBP')+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=7))+theme(legend.position='none')
-  fig7[[3]]<-yseff.result[ccy=='jpy'] %>% ggplot(data=.,aes(x=date,y=est))+geom_line(colour='blue') +geom_errorbar(aes(ymin=cimin,ymax=cimax),colour='lightgrey',alpha=.5) +xlab('')+ylab('')+geom_hline(yintercept=0,colour='lightblue')+ ggtitle('JPY')+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=7))+theme(legend.position='none')
-  fig7[[4]]<-yseff.result[ccy=='aud'] %>% ggplot(data=.,aes(x=date,y=est))+geom_line(colour='blue') +geom_errorbar(aes(ymin=cimin,ymax=cimax),colour='lightgrey',alpha=.5) +xlab('')+ylab('bps')+geom_hline(yintercept=0,colour='lightblue')+ ggtitle('AUD')+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=7))+theme(legend.position='none')
-  fig7[[5]]<-yseff.result[ccy=='chf'] %>% ggplot(data=.,aes(x=date,y=est))+geom_line(colour='blue') +geom_errorbar(aes(ymin=cimin,ymax=cimax),colour='lightgrey',alpha=.5) +xlab('')+ylab('')+geom_hline(yintercept=0,colour='lightblue')+ ggtitle('CHF')+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=7))+theme(legend.position='none')
-  fig7[[6]]<-yseff.result[ccy=='cad'] %>% ggplot(data=.,aes(x=date,y=est))+geom_line(colour='blue') +geom_errorbar(aes(ymin=cimin,ymax=cimax),colour='lightgrey',alpha=.5) +xlab('')+ylab('')+geom_hline(yintercept=0,colour='lightblue')+ ggtitle('CAD')+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=7))+theme(legend.position='none')
-  fig7all<-grid.arrange(fig7[[1]],fig7[[2]],fig7[[3]],fig7[[4]],fig7[[5]],fig7[[6]],ncol=3,nrow=2,layout_matrix=rbind(c(1,2,3),c(4,5,6)),heights=c(2.25,2.25)) 
-  if(fileout!='') ggsave(file=fileout,fig7all,width=10.5,height=6.5)
-}
 
-
-filter.sdc<-function(sdc,type.='6ccy,v2'){
-  # filter the sdc database based on criteria 10/05/2016
-  flds.keep<-c("amt","btypc","c","ccy","country_of_incorp","cu","cusip9","d","deal_no","descr","foreign","glaw","i","isin","issue_type_desc","mat","mat2","mdealtype","mkt","modnat","modupnat","monthly","nat","natccy","nrating","pub","rule144a","secur","settlement2","sicp","supranational","tf_macro_desc","tf_mid_desc","tic","uop","upcusip","upforeign","upnames","upnatccy","upsicp","upsupranational","ytofm")
-  sdc.0<-sdc[,c(flds.keep),with=F] %>% as.data.frame %>% as.data.table %>%  copy()
-  if(type. %like% '6ccy'){
-    print('6 ccy only')
-    sdc.0<-sdc.0[ccy %in% c('usd','eur','gbp','jpy','aud','chf','cad')]
-  } 
-  
-
-  if (type. %like% 'v1'){
-    print('v1')
-    # the version that matches stata filter exactly to generate sdc96_clean
-    dtiss.stata.match<-sdc.0[amt>=50][ytofm>=2][ytofm<99][nrating<=16][nrating!=0][nrating!=1][pub %in% c('Public','Sub.')][mdealtype %ni% c("P","ANPX","M","EP","CEP","TM","PP","R144P")][tf_mid_desc!="Government Sponsored Enterprises"][secur %ni% stringr::str_to_lower(c("Cum Red Pfd Shs", "Non-Cum Pref Sh" ,"Preferred Shs" ,"Pfd Stk,Com Stk"))]
-    sdc.1<-dtiss.stata.match
-    # aa<-read.dta13('sdc96_clean3.dta') %>% as.data.table();
-    #compare.dt(aa,dtiss.stata.match[d>=ymd('1996-01-01') & d<ymd('2016-07-01')],'deal_no') 
-  } else if(type. %like% 'v2'){
-    print('v2')
-    # better version?
-    sdc.1<-sdc.0[amt>=50][ytofm>=2][ytofm<99][nrating<=16][nrating!=0][nrating!=1][pub %in% c('Public','Sub.')][mdealtype %ni% c("P","ANPX","M","EP","CEP","TM","PP","R144P")][tf_mid_desc!="Government Sponsored Enterprises"][secur %nlk% 'fl|mtg|pdf|sh|zero|fr|index|mortg|eqt|pass|islamic|step|pfanbriefe|cont|var|perp|loan|extendible|pik']
-    sdc.1[,acq:=ifelse(str_to_lower(uop) %like% 'acq',1,0)]
-    sdc.1[str_to_lower(i) %like% 'acqs|acquisition',acq:=1]
-    sdc.1<-sdc.1[acq==0]
-  }
-  sdc.1
-}
 issfilter<-function(dtin,type=1,desc=F){
   dtout<-copy(dtin)
   if (desc==T){
@@ -261,7 +180,7 @@ issfilter<-function(dtin,type=1,desc=F){
       setkey(dtregdata3,'date')
       indx<-split(seq(nrow(dtregdata3)),dtregdata3$date)
           registerDoParallel(parallel.core)
-          out_list <- foreach(i = indx, .packages = packages.do.export ) %dopar% {
+          out_list <- foreach(i = indx, .packages = c('data.table') ) %dopar% {
           # i=indx[1][[1]]
             tryCatch({
                 Psubset<-dtregdata3[i,]
@@ -377,7 +296,7 @@ plot.panel.creditrating<-function(dtin, filename='',wide=F){
   } else{
     fig6all<-grid.arrange(fig6[[1]],fig6[[2]],fig6[[3]],fig6[[4]],fig6[[5]],fig6[[6]],legendcommon,ncol=2,nrow=4,layout_matrix=rbind(c(1,2),c(3,4),c(5,6),c(7,7)),heights=c(2,2,2,.25))
   }
-  
+  fig6all 
   if (filename!=''){
     if (wide) ggsave(fig6all,file=filename,fig6all,width=10.5,height=6.5) 
     else ggsave(fig6all,file=filename,fig6all,width=7,height=9)
@@ -462,7 +381,7 @@ preprocess<-function(bondref,dtl,prl,monthlyonly=TRUE,issfiltertype=2,ccyfilter=
       dtl<-dtl[pk_daily]
     }
   }
-  dtl2<-dtl[br[,.(ccy,mat2,nrating,upcusip,cu,pk,ytofm,issue_type_desc,pub,tf_mid_desc,sic1,amt)],nomatch=0]
+  dtl2<-dtl[br[,.(ccy,mat2,nrating,upcusip,cu,pk,ytofm,issue_type_desc,pub,tf_mid_desc)],nomatch=0]
   dtl2[,ytm:=as.numeric((mat2-date)/365)]
   dtl3<-dtl2[ytm >.05]
   dtl3[is.na(nrating),nrating:=0]
@@ -531,7 +450,7 @@ winsorize2<-function(dfin,lhs,bylist,winsor=.01){
 getccyFE2<-function(dfin,fieldstr='OAS_SPREAD_BID',version=2,winsor=.025,parallel.core=1){
   #  Generalized function for calculating FE 
   require(lfe)
-  # print(str_c('FE on field: ',fieldstr))
+  print(str_c('FE on field: ',fieldstr))
     if ('field' %in% ds(dfin)) { # if dfin is in the long format with a field called 'field'
       df2<-dfin[field==fieldstr]
       lhs<-'value'
@@ -558,21 +477,19 @@ getccyFE2<-function(dfin,fieldstr='OAS_SPREAD_BID',version=2,winsor=.025,paralle
       df2<-df2[liq %between% c(0,1.1)]
       df2[liq<.5,liq_bucket:=0] # more illiq
       df2[liq>=.5,liq_bucket:=1] # liq
-
-
     regfun<-function(dt,ccylist='',regversion=4,bylist=''){
       tc.ret<-tryCatch({
           if (regversion==1){
             # regversion 1:: run regression directly on data set without taking out bonds that do not have matching pairs
-            reg<-felm(eval(exparse(lhs))~ccy|upcusip|0|upcusip,data=dt)
+            reg<-felm(eval(exparse(lhs))~ccy|upcusip,data=dt)
           } else if (regversion==3){
             # regversion 3: like regversion 2 but also adds maturity considerations in regression
             # reg<-lm(eval(exparse(lhs))~ccy+upcusip+ytm_bucket,data=dt)
-            reg<-felm(eval(exparse(lhs))~ccy | upcusip+ytm_bucket | 0 | upcusip, data=dt)
+            reg<-felm(eval(exparse(lhs))~ccy | upcusip+ytm_bucket | 0 | 0, data=dt)
           } else if (regversion==4){
             # regversion 4: regversion 3+ 3 rating buckets as dummies
             # reg<-lm(eval(exparse(lhs))~ccy+upcusip+ytm_bucket+rating_bucket,data=dt)
-            reg<-felm(eval(exparse(lhs))~ccy | upcusip+ytm_bucket+rating_bucket | 0 | upcusip, data=dt)
+            reg<-felm(eval(exparse(lhs))~ccy | upcusip+ytm_bucket+rating_bucket | 0 | 0, data=dt)
           } else if (regversion==5){ # makes no sense!!!! deprecated
             # reg<-lm(eval(exparse(lhs))~ccy+upcusip+ytm_bucket+rating_bucket+sicfac,data=dt)
           } else if (regversion==6){
@@ -594,9 +511,9 @@ getccyFE2<-function(dfin,fieldstr='OAS_SPREAD_BID',version=2,winsor=.025,paralle
       })
         if (exists('reg')){
             if (regversion==9){
-            dtcoef2<-(coef(summary(reg)) %>% as.data.table(keep.rownames=T))[rn %like% '^ccy' | rn %like% '^rating'][,.(ccy=rn,est=Estimate,se=`Cluster s.e.`)] 
+            dtcoef2<-(coef(summary(reg)) %>% as.data.table(keep.rownames=T))[rn %like% '^ccy' | rn %like% '^rating'][,.(ccy=rn,est=Estimate,se=`Std. Error`)] 
           } else{
-            dtcoef2<-(coef(summary(reg)) %>% as.data.table(keep.rownames=T))[rn %like% '^ccy',.(ccy=str_sub(rn,4),est=Estimate,se=`Cluster s.e.`)]
+            dtcoef2<-(coef(summary(reg)) %>% as.data.table(keep.rownames=T))[rn %like% '^ccy',.(ccy=str_sub(rn,4),est=Estimate,se=`Std. Error`)]
             dtccy<-data.table('ccy'=ccylist);dtccy %>% setkey(ccy)
             dtcoef2 %>% setkey(ccy)
             dtcoef2 <- dtcoef2[dtccy[ccy!='1usd']]
@@ -614,18 +531,19 @@ getccyFE2<-function(dfin,fieldstr='OAS_SPREAD_BID',version=2,winsor=.025,paralle
       setkey(df2 ,'date')
       indx<-split(seq(nrow(df2)),df2$date)
       registerDoParallel(parallel.core)
-      out_list <- foreach(i = indx, .packages = packages.do.export ) %dopar% {
+      out_list <- foreach(i = indx, .packages = c('data.table') ) %dopar% {
         Psubset<-df2[i,]
         dtsubsetout<-regfun(Psubset,ccylist,version,Psubset[1,.(date)])
         dtsubsetout[,date:=Psubset[1,.(date)]]
         dtsubsetout
       }
       regresult <- rbindlist(out_list,use.names=TRUE) #, fill=TRUE, etc.
+      regresult %>% setkey(date,ccy)
     } else{
       regresult<-df2[,regfun(.SD,ccylist,version,.BY),by='date',.SDcols=c(lhs,'ccy','upcusip','ytm_bucket','rating_bucket','liq_bucket')]
     }
-    regresult %>% setkey(date,ccy)
     regcoef <- regresult %>% dcast.data.table(date~ccy,value.var='est'); 
+
     regcoef %>% setkey(date)
     regse <- regresult %>% dcast.data.table(date~ccy,value.var='se'); regse %>% setkey(date)
     lsout<-list('regcoef'=regcoef,'regse'=regse,'regresult'=regresult,'dtreg'=df2)
@@ -760,7 +678,7 @@ dtl.addswapsprd<-function(dtl,prl){
       registerDoParallel(cores)
       setkey(dtin ,date,ccy)
       indx<-split(seq(nrow(dtin)),dtin[,.(date,ccy)])
-      out_list <- foreach(i = indx, .packages = packages.do.export ) %dopar% {
+      out_list <- foreach(i = indx, .packages = c('data.table') ) %dopar% {
         Psubset<-dtin[i,]
         dtsubsetout<-data.table('swapyld'=intrwrap(Psubset,swappricesl,Psubset[1,.(date,ccy)],interprule=1))
         dtsubsetout
@@ -769,11 +687,12 @@ dtl.addswapsprd<-function(dtl,prl){
       dtout[swapyld==0,swapyld:=NA]
       dtl.<-cbind(dtin,dtout)
 
+
       cores=4
       registerDoParallel(cores)
       setkey(dtin ,date,ccy)
       indx<-split(seq(nrow(dtin)),dtin[,.(date,ccy)])
-      out_list <- foreach(i = indx, .packages = packages.do.export) %dopar% {
+      out_list <- foreach(i = indx, .packages = c('data.table') ) %dopar% {
         Psubset<-dtin[i,]
         dtsubsetout<-data.table('swapyldadj'=intrwrap(Psubset,swappricesladj,Psubset[1,.(date,ccy)],interprule=1))
         dtsubsetout
@@ -844,7 +763,6 @@ dtl.addswapsprd<-function(dtl,prl){
     # newer version of collapsing 
     # todo: construct and use modupccy
     #ccyA="eur";dtin.<-dtin
-    require(doParallel)
     if (ccyA=='eur') natA<-'eurozone'
     else if (ccyA=='gbp') natA<-'united kingdom'
     else if (ccyA=='jpy') natA<-'japan'
@@ -860,7 +778,7 @@ dtl.addswapsprd<-function(dtl,prl){
       dtin.<-dtin.[ccy %in% c(ccyA,'usd','1usd')][!is.na(eval(exparse(str_c('earlist.',ccyA)))) & !is.na(earlist.usd)]
     }
 
-    #print(str_c('collapsing using: ', ccyA, ' ',natA))
+    print(str_c('collapsing using: ', ccyA, ' ',natA))
     dtin<-copy(dtin.[d>=ymd('2002-01-01')])
     dtin[,ccy:=str_to_lower(ccy)]
     dtin[,modnat:=str_to_lower(modnat)]
@@ -891,10 +809,6 @@ dtl.addswapsprd<-function(dtl,prl){
     # Calculations based on earlier summations: net flow are net Yankee flow
     dtout[,I_netflow:=I_fUSD-I_usF][,i_netflow:=I_netflow/I_both*100][,mu:=I_usd_tot/I_both]
     
-    # cacluate a smooth version
-    dtout[,I_both_12m.L.avg:=rowMeans(dtout[,shift(I_both,n=0:11,type='lag')])]
-    dtout[,i_netflow.smooth:=I_netflow/I_both_12m.L.avg*100] 
-
     # check to make sure there's no dates missing in case there is a month without any issuance at all!
     dtout<-dtout %>% expandfulldates(.,freq=collapse.freq) %>% as.data.table()
     # if(nrow(dtout)!=dtout_check) {print('missing issuance in certain months, set to 0');browser()}
@@ -1582,7 +1496,6 @@ filterglobaluponly<-function(dtlin){
 bucketrating<-function(dtlin){
   # creates new column called rating bucket as factor with 4 levels 
   #dtlout<-dtlin
-  #fread('rating.csv') %>% dt2clip
   dtlin[nrating %between% c(1,4),rating_bucket:=3]
   dtlin[nrating %between% c(5,10),rating_bucket:=2]
   dtlin[nrating>10,rating_bucket:=1]
@@ -1600,16 +1513,6 @@ bucketytm<-function(dtlin){
   dtlin[,ytm_bucket:=factor(ytm_bucket)]
   dtlin
 }
-bucketytofm<-function(dtlin){
-  dtlin<-dtlin[!is.na(ytofm)]
-  dtlin[ytofm %between% c(0,3),ytofm_bucket:=1]
-  dtlin[ytofm %between% c(3,7),ytofm_bucket:=2]
-  dtlin[ytofm %between% c(7,10),ytofm_bucket:=3]
-  dtlin[ytofm >10,ytofm_bucket:=4]
-  #dtlin[,ytofm_bucket:=factor(ytofm_bucket)]
-  dtlin
-}
-
 
 downloadbbg<-function(tickers,filestr=str_c('bbg_',today(),'.RData'),startdt=ymd('1996-01-01'),periodstr='MONTHLY',fieldstr='PX_LAST',splitN=1){
   require(Rblpapi); require(data.table); require(lubridate); require(dplyr)
@@ -1968,7 +1871,7 @@ cleanup.sdc.by.col<-function(dtsdc){
     if(dtclass[rowN==k,classtype=='character']){
       cname<-dtclass[rowN==k,columnname]
       dtsdc[,eval(exparse(cname)):=str_trim(eval(exparse(cname)))]
-      dtsdc[eval(exparse(cname)) %in% c('','-','N/A','TBA','NA','na','n/a'),eval(exparse(cname)):=NA]
+      dtsdc[eval(exparse(cname)) %in% c('','-','N/A','TBA','NA'),eval(exparse(cname)):=NA]
     }
   }
   dtsdc
@@ -1990,7 +1893,7 @@ CUSIPcheck <- function(x){
   if(i%%2==0){v[i]<-v[i]*2}
   out <- out + v[i]%/%10 + v[i]%%10
   }
-  (10-(out%%10))%%10  
+  (10-(out%%10))%%10
 }
 
   checkcusipdt<-function(cusipin.){
@@ -2183,15 +2086,3 @@ regoutz<-function(regres.,statname='z value'){
     }
     mat_out
   }
-table.summary<-function(dtin.sum){
-  summarylist<-list()
-  summarylist[[length(summarylist)+1]] <- dtin.sum[,.(nbonds=.N,notional=sum(na.omit(amt))/1000)][,.(field='all',cat='',nbonds,notional)]
-  summarylist[[length(summarylist)+1]] <- dtin.sum[,.(nbonds=.N,notional=sum(na.omit(amt))/1000),ccy][,.(field='ccy',cat=ccy,nbonds,notional)][order(-notional)]
-  summarylist[[length(summarylist)+1]] <- dtin.sum[,.(nbonds=.N,notional=sum(na.omit(amt))/1000),rating_bucket][order(-rating_bucket)][,.(field='rating',cat=rating_bucket,nbonds,notional)]
-  summarylist[[length(summarylist)+1]] <- dtin.sum[,.(nbonds=.N,notional=sum(na.omit(amt))/1000),ytofm_bucket][order(ytofm_bucket)][,.(field='maturity',cat=ytofm_bucket,nbonds,notional)]
-  summarylist[[length(summarylist)+1]] <- dtin.sum[,.(nbonds=.N,notional=sum(na.omit(amt))/1000),sicind][order(sicind)][,.(field='ind',cat=sicind,nbonds,notional)]
-  sum2<-rbindlist(summarylist)
-  sum2 
-}
-
-require(data.table)

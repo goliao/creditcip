@@ -181,10 +181,36 @@ dedupe.by.pk2<-function(dtbondref){
 
 	# save(bondref,readme,file='db/bondref.RData')
 
+	
+	
+	
+# 9/7/2016 improved using bondrefall; replace all pk by ticker 
+	rm(list=ls(all=TRUE));
+	source('util.r')
+	load('db/bondrefall.RData')
+	bondref<-copy(bondrefall)
+		pk.ticker.lookup<-bondrefall[!is.na(ticker) & !is.na(pk),.(pk,ticker=str_c(tolower(ticker), ' corp'))]
+		pk.ticker.lookup  %>% setkey(ticker)
+		pk.ticker.lookup<-unique(pk.ticker.lookup)
+		readme='unique mapping of pk to ticker from figi dataset, generated from gen_bondref.R'
+		save(pk.ticker.lookup,readme,file='db/pktickerlookup.RData')
+	bondref[!is.na(ticker),pk:=str_c(tolower(ticker), ' corp')]
+	bondref<-bondref[!is.na(pk)]
+	# bondref %>% issfilter(4) %>% showdups('pk') #%>% dt2clip()
+	bondref<-bondref %>% dedupe.by.pk2()
+	readme<-'bondref generated from sdc data, unique in pk which is actually ticker from figi dataset, deal_no; deduped by various conflict resolvation with bbg and finally deduping by ascending deal_no'
+	save(bondref,readme,file='db/bondref.RData')
 
 
-
-
+#9/27/2016 # load newest bonds (not yet complete)
+	rm(list=ls(all=TRUE));
+	source('util.r')
+	load('db/archive/bondrefall160806.RData')
+	
+	bondrefall
+	
+	
+	
 # because dedup.these has 0 rows, there fore we don't really care, and so we can quickly dedupe; but we don't even have to dedupe
 	# A quick way of setting unique
 	# setorder(bondref,-main_tranche,-deal_no)

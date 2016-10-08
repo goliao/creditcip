@@ -1,14 +1,79 @@
+
 setwd("/Users/gliao/Dropbox/Research/ccy basis/creditmigration")
 rm(list=ls(all=TRUE));
 load('db/dtlmo.RData');load('db/bondref.RData');load('db/prl.RData');load('db/monthenddates.RData');
 source('util.r')
-load('dtclean160624.RData')
+# load('dtclean160624.RData')
 
-load('tempmots.RData')
+# load('tempmots.RData')
 dtm<-preprocess(bondref,dtl.mo,prl,issfiltertype =3)
+ys1m<-resyldsprdv4(dtm$dtl4[ccy %in% c('usd','eur','gbp','aud','jpy','cad','chf')],dtm$prl,regversion=6,returndt=T)
+ys1m$regcoef[,.(date,eur)] %>% ggplotw()
+
+
+dtm<-preprocess(bondref,dtl.mo,prl,issfiltertype =2)
+ys1m<-resyldsprdv4(dtm$dtl4[ccy %in% c('usd','eur','gbp','aud','jpy','cad','chf')],dtm$prl,regversion=6,returndt=T)
+ys1m$regcoef[,.(date,eur)] %>% ggplotw()
+
+# type 1
+dtm_1<-preprocess(bondref,dtl.mo,prl,issfiltertype =1)
+ys1m_1<-resyldsprdv4(dtm_1$dtl4[ccy %in% c('usd','eur','gbp','aud','jpy','cad','chf')],dtm_1$prl,regversion=6,returndt=T)
+ys1m_1$regcoef[,.(date,eur)] %>% ggplotw()
+
+source('util.r')
+dtm_4<-preprocess(bondref,dtl.mo,prl,issfiltertype =4)
+ys1m_4<-resyldsprdv4(dtm_4$dtl4[ccy %in% c('usd','eur','gbp','aud','jpy','cad','chf')],dtm_4$prl,regversion=6,returndt=T)
+ys1m_4$regcoef[,.(date,eur)] %>% ggplotw()
+ys1<-ys1m_4$regcoef
+prw<-dtm_4$prw
+
+
 ys1m<-resyldsprdv4(dtm$dtl4[ccy %in% c('usd','eur','gbp','aud','jpy')],dtm$prl,regversion=6,returndt=T)
+ys1mallccy<-resyldsprdv4(dtm$dtl4,dtm$prl,regversion=6,returndt=T)
+ys1m$regcoef %>% write.dta('dta/resys_160825.dta')
 ys2m<-resyldsprdv4(dtm$dtl4[ccy %in% c('usd','eur','gbp','aud','jpy')],dtm$prl,regversion=6,adjccybs=TRUE);
-# save(dtm,ys1m,ys2m,file='tempmots.RData')
+ys2mallccy<-resyldsprdv4(dtm$dtl4,dtm$prl,regversion=6,returndt=T,adjccybs=TRUE)
+ys2m$regcoef %>% write.dta('dta/effresys_160825.dta')
+ys2mallccy$regcoef %>% write.dta('dta/effresys_160825b.dta')
+# save(dtm,ys1m,ys2m, ys1mallccy,ys2mallccy,file='tempmots.RData')
+
+ys1<-ys1mallccy$regcoef
+prw<-dtm$prw
+
+# Graphing CIP and credit mispriing overlay
+	require('gridExtra')
+	fig6<-list()
+	X11(width=7,height=9)
+	ys1.prw<-ys1[prw,nomatch=0][date>='2004-01-01']
+
+	fig6[[1]]<-ys1.prw[,.(date,c=eur,b=eubs5)] %>% tidyr::gather(.,'type','value',-date) %>% ggplot(data=.,aes(x=date,y=value))+geom_line(aes(linetype=type,colour=type))+xlab('')+ylab('')+geom_hline(yintercept=0,colour='grey')+ scale_color_discrete('',labels = c('CIP deviations','Credit mispricing'))+scale_linetype_discrete('',labels = c('CIP deviations','Credit mispricing'))+ggtitle('EUR')+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=7))+theme(legend.position='bottom')+theme(axis.text.x = element_text(angle = 30, hjust = 1))
+	legendcommon<-get_legend(fig6[[1]])
+	fig6[[1]]<-fig6[[1]]+theme(legend.position='none')
+	fig6[[2]]<-ys1.prw[,.(date,c=gbp,b=bpbs5)] %>% tidyr::gather(.,'type','value',-date) %>% ggplot(data=.,aes(x=date,y=value))+geom_line(aes(linetype=type,colour=type))+xlab('')+ylab('')+geom_hline(yintercept=0,colour='grey')+ggtitle('GBP')+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=7))+theme(legend.position='none')+theme(axis.text.x = element_text(angle = 30, hjust = 1))
+	fig6[[3]]<-ys1.prw[,.(date,c=jpy,b=jybs5)] %>% tidyr::gather(.,'type','value',-date) %>% ggplot(data=.,aes(x=date,y=value))+geom_line(aes(linetype=type,colour=type))+xlab('')+ylab('')+geom_hline(yintercept=0,colour='grey')+theme(legend.position='none')+ggtitle('JPY')+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=7))+theme(legend.position='none')+theme(axis.text.x = element_text(angle = 30, hjust = 1))
+	fig6[[4]]<-ys1.prw[,.(date,c=aud,b=adbs5)] %>% tidyr::gather(.,'type','value',-date) %>% ggplot(data=.,aes(x=date,y=value))+geom_line(aes(linetype=type,colour=type))+xlab('')+ylab('')+geom_hline(yintercept=0,colour='grey')+theme(legend.position='none')+ggtitle('AUD')+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=7))+theme(legend.position='none')+theme(axis.text.x = element_text(angle = 30, hjust = 1))
+	fig6[[5]]<-ys1.prw[,.(date,c=chf,b=sfbs5)] %>% tidyr::gather(.,'type','value',-date) %>% ggplot(data=.,aes(x=date,y=value))+geom_line(aes(linetype=type,colour=type))+xlab('')+ylab('')+geom_hline(yintercept=0,colour='grey')+theme(legend.position='none')+ggtitle('CHF')+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=7))+theme(legend.position='none')+theme(axis.text.x = element_text(angle = 30, hjust = 1))
+	fig6[[6]]<-ys1.prw[,.(date,c=cad,b=cdbs5)] %>% tidyr::gather(.,'type','value',-date) %>% ggplot(data=.,aes(x=date,y=value))+geom_line(aes(linetype=type,colour=type))+xlab('')+ylab('')+geom_hline(yintercept=0,colour='grey')+theme(legend.position='none')+ggtitle('CAD')+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=7))+theme(legend.position='none')+theme(axis.text.x = element_text(angle = 30, hjust = 1))
+	fig6all<-grid.arrange(fig6[[1]],fig6[[2]],fig6[[3]],fig6[[4]],fig6[[5]],fig6[[6]],legendcommon,ncol=2,nrow=4,layout_matrix=rbind(c(1,2),c(3,4),c(5,6),c(7,7)),heights=c(2,2,2,.25))
+ggsave(file='../paper/figures/creditcipwithSSA160831.pdf',fig6all,width=7,height=9)
+	#ggsave(file='../paper/figures/creditcipmispricings160825.pdf',fig6all,width=7,height=9)
+	ys1.prw %>% write.dta('dta/cbmispricings160825.dta')
+
+
+	ys1l<-ys1[,.(date,eur,gbp,jpy,aud,chf,cad)] %>% melt(id.vars='date')
+	setnames(ys1l,c('variable','value'),c('ccy','credit'))
+	setkey(ys1l,date,ccy)
+	cip<-prw[date>'2004-01-01',.(date,eubs5,bpbs5,jybs5,adbs5,sfbs5,cdbs5)] %>% melt(id.vars='date')
+	setnames(cip,c('variable','value'),c('ccy','cip'))
+	cip[ccy=='eubs5',ccy:='eur'][ccy=='jybs5',ccy:='jpy'][ccy=='bpbs5',ccy:='gbp'][ccy=='adbs5',ccy:='aud'][ccy=='cdbs5',ccy:='cad'][ccy=='sfbs5',ccy:='chf']
+	cip<-cip[!is.na(cip)]
+	setkey(cip,date,ccy)
+	dt.panel<-ys1l[cip,nomatch=0]
+	#write.dta(dt.panel,file='dta/mispricings_long_160825.dta')
+
+
+
+
 
 	dt.merged2<-dtm$prw[,.(date,eubs5,ussw5,eusa5,eusw5)][ys1m,nomatch=0][ys2m,nomatch=0]
 	dt.merged2[,cipadj:=ccyeur-ccyeuradj]
@@ -134,9 +199,10 @@ fig5
 
 	nmdates<-nonmarket.dates(dtl.daily,bondref)
 	dtl.daily<-dtl.daily[!nmdates][date<'2016-07-26']
-	dtmd<-preprocess(bondref,dtl.daily,prl,issfiltertype =3,monthlyonly = FALSE)
+	dtmd<-preprocess(bondref,dtl.daily,prl,issfiltertype =4,monthlyonly = FALSE)
 	ys1<-resyldsprdv4(dtmd$dtl4[ccy %in% c('usd','eur')],dtmd$prl,regversion=6,returndt = T)
 	ys2<-resyldsprdv4(dtmd$dtl4[ccy %in% c('usd','eur')],dtmd$prl,regversion=6,returndt = T,adjccybs=T)
+	
 	# save.image('tempdailyts.RData')
 	load('tempdailyts.RData')
 		#CI 
@@ -153,7 +219,10 @@ fig5
 		# dtregbr<-compare.dt(ys1$dtreg,bondref,'pk',mask=F)
 		# dtregbr$AB[,sum(amt),ccy]
 	ys1$regcoef %>% ggplotw()
+
 	dt.merged<-dtmd$prw[,.(date,eubs5)][ys1$regcoef,nomatch=0]
+
+
 	dt.merged2<-dtmd$prw[,.(date,eubs5,ussw5,eusa5,eusw5)][ys1$regcoef,nomatch=0][ys2$regcoef,nomatch=0]
 		setnames(dt.merged2,'i.ccyeur','ccyeuradj')
 		dt.merged2[,yyyymmdd:=str_replace_all(as.character,'-','')]
@@ -177,8 +246,8 @@ fig5
 
 	# credit crunch
 	setnames(dt.merged,c('eur','eubs5'),c('crd_misprice','cip'))
-	dt.merged[date %between% c('2007-09-01','2008-11-01')] %>% ggplotw()+geom_vline(xintercept = as.numeric(c(ymd('2008-03-16'),ymd('2008-09-15'))))+xlab('')+ylab('bps')+geom_hline(yintercept=0)+ scale_color_discrete('',labels = c('CIP deviations','Credit mispricing (EU-US)'))+theme_stata(base_size = 15)+theme(axis.title.y = element_text(margin =margin(0, 10, 0, 0)))
-	ggsave(file='../paper/figures/meetingwSam160810/eventstudy_creditcrunch.pdf',width=9,height=6)
+	dt.merged[date %between% c('2007-09-01','2008-09-01')] %>% ggplotw()+geom_vline(xintercept = as.numeric(c(ymd('2008-03-16'),ymd('2008-09-15'))))+xlab('')+ylab('bps')+geom_hline(yintercept=0)+ scale_color_discrete('',labels = c('CIP deviations','Credit mispricing (EU-US)'))+theme_stata(base_size = 15)+theme(axis.title.y = element_text(margin =margin(0, 10, 0, 0)))
+	# ggsave(file='../paper/figures/meetingwSam160810/eventstudy_creditcrunch.pdf',width=9,height=6)
 
 	# US QE 08-11
 		qe.events<-fread.xls('EventStudy-eventdates.xlsx','QE')
