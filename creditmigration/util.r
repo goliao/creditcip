@@ -388,9 +388,13 @@ plot.panel.creditrating<-function(dtin, filename='',wide=F){
 }
 
   
-add.earlist.iss.in.ccy <- function(dtin,bondrefall){
+add.earlist.iss.in.ccy <- function(dtin,bondrefall.=FALSE){
   # this function finds the earliest issuance date for each upcusip in each currency and adds it to dtin, it relies on the bigger bondrefall to get the complete set of bonds issued by each upcusip
-    refdt<-rbind(bondrefall,dtin,fill=T)
+    if(!bondrefall.){
+      refdt<-dtin
+    } else{
+      refdt<-rbind(bondrefall.,dtin,fill=T)
+    }
     dtearlistforeign<-refdt[order(d)][,first(d),.(upcusip,ccy)] %>% dcast(upcusip~ccy,value.var='V1') #%>% melt(id.vars='upcusip',variable.name='ccy',value.name='earliest.iss.in.ccy')
     dtearlistforeign %>% setnames(c('aud','cad','chf','eur','gbp','jpy','usd'),str_c('earlist.',c('aud','cad','chf','eur','gbp','jpy','usd')))
     dtearlistforeign %>% setkey(upcusip)

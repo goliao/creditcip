@@ -5,18 +5,18 @@
 #' ---
 #+ setup, include=FALSE
 library(knitr)
-opts_chunk$set(echo=FALSE,include=TRUE,cache=TRUE)
+opts_chunk$set(echo=FALSE,include=TRUE,cache=FALSE)
 #setwd("/Users/gliao/Dropbox/Research/ccy basis/creditmigration")
 source('util.r')
 if (Sys.info()['sysname'][[1]]=='Windows') mcore=1 else mcore=4
 #' Options -----------------------------------------------------------------
-gl <- list('run.var'=FALSE, 
-           'run.stata'=FALSE,
+gl <- list('run.var'=TRUE, 
+           'run.stata'=TRUE,
            'show.credit.cip'=FALSE, # graph credit cip, run regressoin
            'individual.resid'=FALSE,# individually generated residualized spread or generated together
            'sdc.filter'='6ccyv3',# set iss filter options: bondrefall, 6ccyv1 6ccyv2 # this is first step filter
-           'sdc.filter.var'=list('restrict.to.dtl'=TRUE,'collapse.filter'=1),
-           'sdc.filter.iss.reg'=list('restrict.to.dtl'=TRUE,'collapse.filter'=1),
+           'sdc.filter.var'=list('restrict.to.dtl'=TRUE,'collapse.filter'=1), # issfiltertype:# collapse filter = 0,1,2  for upcusips that might/mightnot issued in ccy before or after, isssued in 2nd ccy previously, or issued in 2nd ccy anytime before or after current issuance
+           'sdc.filter.iss.reg'=list('restrict.to.dtl'=FALSE,'collapse.filter'=1),
            'sdc.filter.iv.reg'=list('restrict.to.dtl'=TRUE,'collapse.filter'=1),
            'firmlevel'='upcusip',
            'mcore'= mcore,
@@ -24,21 +24,13 @@ gl <- list('run.var'=FALSE,
            )
 options(gl=gl)
 #+ warning=FALSE
-(getOption('gl') %>% as.data.table())[,rn:=1] %>% melt('rn')
 
+(getOption('gl') %>% as.data.table())[,rn:=(1:2)] %>% melt('rn') %>% distinct(variable,value)
 # getOption('gl')$sdc.filter.var[[1]]
-
 # use original bond data or current expanded
-
 # set firm level to either upcusip or cu
 firmlevel <- getOption('gl')$firmlevel
-
 # individually constructing pairwise credit spread or construct all at the same time
-
-# issfiltertype
-
-# collapse filter = 0,1,2  for upcusips that might/mightnot issued in ccy before or after, isssued in 2nd ccy previously, or issued in 2nd ccy anytime before or after current issuance
-
 # taking quarterly credit/cip to be last date, or average of 3 end of month, or first month
 #last
 
@@ -150,7 +142,6 @@ if (FALSE) {
   aa[,.N,securityType]
   aa %>% ds
   aa[,.N,.(rule144a)][order(-N)] %T>% dt2clip()
-  
   sdc[,.N,.(rule144a)]
   sdc[str_to_lower(ccy) %in% c('usd','eur','gbp','jpy','aud','chf','cad')][!is.na(isin) | !is.na(cu)][!is.na(amt)][,.N]
 }
@@ -161,11 +152,12 @@ if (getOption('gl')$sdc.filter=='bondrefall'){
 } else{
   dtissraw<-sdc %>% filter.sdc()
 }
+dtissraw<-dtissraw[ccy %in% c('usd','eur','gbp','jpy','aud','chf','cad')][,monthly:=floor_date(d,'month')]
+dtissraw<-(dtissraw %>% tocusip6(field=firmlevel))[,upcusip:=cusip6] %>% add.earlist.iss.in.ccy(.,dtissraw)
 #'
 # VAR  ---------------------------------------------------------
 #+ VAR calc, include=FALSE,eval=getOption('gl')$run.var
-  dtissraw<-dtissraw[ccy %in% c('usd','eur','gbp','jpy','aud','chf','cad')][,monthly:=floor_date(d,'month')]
-  dtissraw<-(dtissraw %>% tocusip6(field=firmlevel))[,upcusip:=cusip6]
+  
   version.var.data<-'pairwise,exact'
   if (version.var.data=='original'){
     dtcreditcip.m<-copy(credit.cip.exact)[order(date)][,date:=lubridate::floor_date(date,'month')][,.SD[1],.(date,ccy)]
@@ -183,13 +175,12 @@ if (getOption('gl')$sdc.filter=='bondrefall'){
     dtcreditcip.m<-copy(creditsingle)[order(date)][,date:=lubridate::floor_date(date,'month')][,.SD[1],.(date,ccy)]
   }
   
-  # limiting to relevent bonds: sol1: just merge with with ys1m$dtreg
-  # dtin2<-dtin2 %>% semi_join(ys1m$dtreg[,.N,upcusip],by='upcusip') %>% as.data.table()
-  registerDoParallel(1)#,'gbp','jpy','aud','chf','cad'
+  if (getOption('gl')$sdc.filter.var$restrict.to.dtl){ # limiting to relevent bonds: sol1: just merge with with ys1m$dtreg
+    dtiss.in<-dtissraw %>% semi_join(ys1m$dtreg[,.N,upcusip],by='upcusip') %>% as.data.table()
+  } else {dtiss.in<-dtissraw}
   dtiss.collapse.m <- foreach(iccy=c('eur')) %do% {
-    dtin2 %>% icollapse4(iccy,collapse.freq = 'month',filter=1)
-  } %>% rbindlist()
-  dtiss.collapse.m %>% setkey(date,ccy)
+    dtiss.in %>% icollapse4(iccy,collapse.freq = 'month',filter=getOption('gl')$sdc.filter.var$collapse.filter)
+  } %>% rbindlist() %>% setkey(date,ccy)
   dtcreditcip.m %>% setkey(date,ccy); dtiss.collapse.m %>% setkey(date,ccy)
   dtreg.m<-dtcreditcip.m[dtiss.collapse.m,nomatch=0]; # dtreg.m  %>% write.dta('vardatain_1007.dta')
 #' ### VAR using R: Flow Credit CIP
@@ -286,7 +277,7 @@ print('EUR OIRF order: Issuance Net deviation (credit-cip)')
 include_graphics('../paper/figures/VAR_oirfeur_netdeviss.png')
 
 
-
+#' **Summary of bond data**
 # #'## Data summary ------------------------------------------------------------
 dtl.bonds<-dtl[,.SD[1],pk]
 dtl.bonds.global<-(dtl %>% filterglobaluponly())[,.SD[1],pk]
@@ -296,7 +287,6 @@ lefthalf<-dtl.bonds %>% table.summary()
 invisible({dtl.bonds.global[sic1!=9 | sic1!=6,sicind:=1];dtl.bonds.global[sic1==6,sicind:=6];dtl.bonds.global[sic1==9,sicind:=9]})
 dtl.bonds.global<-dtl.bonds.global %>% bucketytofm()
 righthalf <- dtl.bonds.global %>% table.summary()
-#' **Summary of bond data**
 cbind(lefthalf,righthalf)
 
 
@@ -382,7 +372,6 @@ regtable1b
 #' ### quarterly diff
 #+ eval=getOption('gl')$show.credit.cip
 credit.cip.q<-copy(creditcip.result$dt.credit.cip)[order(date,ccy)][,date.qrt:=floor_date(date,'quarter')][,`:=`(cip.q=first(cip),credit.q=first(credit)),.(ccy,date.qrt)][,.(date.qrt,ccy,cip.q,credit.q)] %>% unique()
-#+ include=F
 credit.cip.q[,D.cip:=cip.q-shift(cip.q,n=1,type='lag'),ccy]
 credit.cip.q[,D.credit:=credit.q-shift(credit.q,n=1,type='lag'),ccy]
 #' panel
@@ -417,32 +406,28 @@ dtcreditcip.m<-copy(dtcreditcip)[order(date)][,date:=lubridate::floor_date(date,
 dtcreditcip.q<-copy(dtcreditcip)[order(date)][,date:=lubridate::floor_date(date,'quarter')][,.SD[3],.(date,ccy)]
 
 #issuance calc
-dtin2<-dtissraw %>% add.earlist.iss.in.ccy(dtissraw)
-dtin2 %>% setkey(upcusip,ccy)
-
-# limiting to relevent bonds: sol1: just merge with with ys1m$dtreg
-# dtin2<-dtin2 %>% semi_join(ys1m$dtreg[,.N,upcusip],by='upcusip') %>% as.data.table()
-
+  if (getOption('gl')$sdc.filter.iss.reg$restrict.to.dtl){ # limiting to relevent bonds: sol1: just merge with with ys1m$dtreg
+    dtiss.in<-dtissraw %>% semi_join(ys1m$dtreg[,.N,upcusip],by='upcusip') %>% as.data.table()
+  } else {dtiss.in<-dtissraw}
 #+ Monthly issuance calc,include=F
-registerDoParallel(1)
 dtiss.collapse.m <- foreach(iccy=c('eur','gbp','jpy','aud','chf','cad')) %do% {
-  dtin2 %>% icollapse4(iccy,collapse.freq = 'month',filter=1)
-} %>% rbindlist()
-dtiss.collapse.m %>% setkey(date,ccy)
+  dtiss.in %>% icollapse4(iccy,collapse.freq = 'month',filter=getOption('gl')$sdc.filter.iss.reg$collapse.filter)
+} %>% rbindlist() %>% setkey(date,ccy)
 dtcreditcip.m %>% setkey(date,ccy); dtiss.collapse.m %>% setkey(date,ccy)
 dtreg.m<-dtcreditcip.m[dtiss.collapse.m,nomatch=0]
 dtreg.m[,F.i_netflow:=shift(i_netflow,n=1,type='lead'),ccy]
 dtreg.m[,i_netflow6mf:=(shift(i_netflow,n=1,type='lead')+shift(i_netflow,n=2,type='lead')+shift(i_netflow,n=3,type='lead')+shift(i_netflow,n=4,type='lead')+shift(i_netflow,n=5,type='lead')+shift(i_netflow,n=6,type='lead'))/6,ccy]
+dtreg.m[,F.i_netflow.smooth:=shift(i_netflow.smooth,n=1,type='lead'),ccy]
+dtreg.m[,i_netflow.smooth6mf:=(shift(i_netflow.smooth,n=1,type='lead')+shift(i_netflow.smooth,n=2,type='lead')+shift(i_netflow.smooth,n=3,type='lead')+shift(i_netflow.smooth,n=4,type='lead')+shift(i_netflow.smooth,n=5,type='lead')+shift(i_netflow.smooth,n=6,type='lead'))/6,ccy]
 dtreg.m[,D.credit:=credit-shift(credit,n=1,type='lag'),.(ccy)]
 dtreg.m[,D3.credit:=credit-shift(credit,n=3,type='lag'),.(ccy)]
 dtreg.m<-swap.rate.m[dtreg.m] # add swap rate
 #+ Quarterly issunace calc,include=F
 #Issuance quarterly collapsing each ccy pair
-registerDoParallel(1)
 dtiss.collapse.q <- foreach(iccy=c('eur','gbp','jpy','aud','chf','cad')) %do% {
-  dtin2 %>% icollapse4(.,iccy,collapse.freq = 'quarter',filter=1)
-} %>% rbindlist()
-dtcreditcip.q %>% setkey(date,ccy); dtiss.collapse.q %>% setkey(date,ccy)
+  dtiss.in %>% icollapse4(.,iccy,collapse.freq = 'quarter',filter=getOption('gl')$sdc.filter.iss.reg$collapse.filter)
+} %>% rbindlist() %>% setkey(date,ccy)
+dtcreditcip.q %>% setkey(date,ccy);
 dtreg.q<-dtcreditcip.q[dtiss.collapse.q,nomatch=0]
 
 ## make issuance lead by one period
@@ -459,10 +444,11 @@ dtreg.q<-swap.rate.q[dtreg.q] # add swap rate
 #+ echo=T,include=T
 dtreg.m %>% reg.newey.all(i_netflow6mf~netmisp)
 dtreg.m %>% reg.newey.all(i_netflow6mf~netmisp+swapraterel)
+dtreg.m %>% reg.newey.all(i_netflow.smooth6mf~netmisp)
+dtreg.m %>% reg.newey.all(i_netflow.smooth6mf~netmisp+swapraterel)
 dtreg.m %>% reg.newey.all(i_netflow6mf~credit+cip)
 dtreg.m %>% reg.newey.all(i_netflow6mf~credit+cip+swapraterel)
-dtreg.m %>% reg.newey.all(i_netflow6mf~credit)
-dtreg.m %>% reg.newey.all(i_netflow6mf~credit+swapraterel)
+
 
 
 #' ### regression of issuance on chg in credit
@@ -475,41 +461,25 @@ reg.credit.chg[[length(reg.credit.chg)+1]]<-dtreg.m %>% felm(i_netflow6mf~D.cred
 reg.credit.chg[[length(reg.credit.chg)+1]]<-dtreg.m %>% felm(I_netflow~D.credit|ccy|0|0,.)
 stargazer::stargazer(reg.credit.chg,report='vct*',type='text')
 
-reg.credit.chg<-list()
-reg.credit.chg[[length(reg.credit.chg)+1]]<-dtreg.m %>% felm(i_netflow~D.credit|ccy|0|0,.)
-reg.credit.chg[[length(reg.credit.chg)+1]]<-dtreg.m %>% felm(F.i_netflow~D.credit|ccy|0|0,.)
-reg.credit.chg[[length(reg.credit.chg)+1]]<-dtreg.m %>% felm(i_netflow.smooth~D.credit|ccy|0|0,.)
-reg.credit.chg[[length(reg.credit.chg)+1]]<-dtreg.m %>% felm(i_netflow6mf~D.credit|ccy|0|0,.)
-reg.credit.chg[[length(reg.credit.chg)+1]]<-dtreg.m %>% felm(I_netflow~D.credit|ccy|0|0,.)
-stargazer(reg.credit.chg,report='vct*',type='text')
 
-#' ## Monthly regressions of issuance on deviations
+#' ## Quarterly regressions of issuance on deviations
 #+ echo=T,include=T
 dtreg.q %>% reg.newey.all(F.i_netflow~netmisp)
 dtreg.q %>% reg.newey.all(F.i_netflow~netmisp+swapraterel)
 dtreg.q %>% reg.newey.all(F.i_netflow~credit+cip)
 dtreg.q %>% reg.newey.all(F.i_netflow~credit+cip+swapraterel)
-dtreg.q %>% reg.newey.all(F.i_netflow~credit)
-dtreg.q %>% reg.newey.all(F.i_netflow~credit+swapraterel)
 dtreg.q %>% reg.newey.all(F.I_netflow~netmisp)
 dtreg.q %>% reg.newey.all(F.I_netflow~netmisp+swapraterel)
 dtreg.q %>% reg.newey.all(F.I_netflow~credit+cip)
 dtreg.q %>% reg.newey.all(F.I_netflow~credit+cip+swapraterel)
-dtreg.q %>% reg.newey.all(F.I_netflow~credit)
-dtreg.q %>% reg.newey.all(F.I_netflow~credit+swapraterel)
 dtreg.q %>% reg.newey.all(i_netflow~netmisp)
 dtreg.q %>% reg.newey.all(i_netflow~netmisp+swapraterel)
-dtreg.q %>% reg.newey.all(i_netflow~credit+cip)
-dtreg.q %>% reg.newey.all(i_netflow~credit+cip+swapraterel)
-dtreg.q %>% reg.newey.all(i_netflow~credit)
-dtreg.q %>% reg.newey.all(i_netflow~credit+swapraterel)
 
 #' #### reg flow on credit chg alone
+#+ echo=T,include=T
 reg.credit.chg<-list()
 reg.credit.chg[[length(reg.credit.chg)+1]]<-dtreg.q %>% felm(i_netflow~D.credit|ccy|0|0,.)
 reg.credit.chg[[length(reg.credit.chg)+1]]<-dtreg.q %>% felm(F.i_netflow~D.credit|ccy|0|0,.)
-reg.credit.chg[[length(reg.credit.chg)+1]]<-dtreg.q %>% felm(mu~D.credit|ccy|0|0,.)
-reg.credit.chg[[length(reg.credit.chg)+1]]<-dtreg.q %>% felm(F.mu~D.credit|ccy|0|0,.)
 reg.credit.chg[[length(reg.credit.chg)+1]]<-dtreg.q %>% felm(D.mu~D.credit|ccy|0|0,.)
 reg.credit.chg[[length(reg.credit.chg)+1]]<-dtreg.q %>% felm(I_netflow~D.credit|ccy|0|0,.)
 reg.credit.chg[[length(reg.credit.chg)+1]]<-dtreg.q %>% felm(F.I_netflow~D.credit|ccy|0|0,.)
@@ -519,16 +489,14 @@ stargazer::stargazer(reg.credit.chg,report='vct*',type='text')
 ## abs net dev and D, all iss ----------------------------------------------
 #' ## abs net dev and D, all iss ----------------------------------------------
 #+ collapse each,include=F
-dtin2<-dtissraw %>% add.earlist.iss.in.ccy(dtissraw)
-dtin2 %>% setkey(upcusip,ccy)
-# limiting to relevent bonds: sol1: just merge with with ys1m$dtreg
-dtin2<-dtin2 %>% semi_join(ys1m$dtreg[,.N,upcusip],by='upcusip') %>% as.data.table()
+if (getOption('gl')$sdc.filter.iv.reg$restrict.to.dtl){ # limiting to relevent bonds: sol1: just merge with with ys1m$dtreg
+    dtiss.in<-dtissraw %>% semi_join(ys1m$dtreg[,.N,upcusip],by='upcusip') %>% as.data.table()
+  } else {dtiss.in<-dtissraw}
 # Monthly
 registerDoParallel(1)
 dtiss.collapse.m <- foreach(iccy=c('eur','gbp','jpy','aud','chf','cad')) %do% {
-  dtin2 %>% icollapse4(iccy,collapse.freq = 'month',filter=1)
-} %>% rbindlist()
-dtiss.collapse.m %>% setkey(date,ccy)
+  dtiss.in %>% icollapse4(iccy,collapse.freq = 'month',filter=getOption('gl')$sdc.filter.iv.reg$collapse.filter)
+} %>% rbindlist() %>% setkey(date,ccy)
 
 #+ merging issuance,include=F
 dtcreditcip.m<-copy(dtcreditcip)[order(date)][,date:=lubridate::floor_date(date,'month')][,.SD[1],.(date,ccy)]
@@ -548,9 +516,8 @@ dtreg.m[,D.abs.netmisp:=abs(netmisp)-abs(shift(netmisp,n=1,type='lag')),.(ccy)]
 #+ Monthly agg, include=F
 registerDoParallel(1)
 dtmat.collapse.m <- foreach(iccy=c('eur','gbp','jpy','aud','chf','cad')) %do% {
-  dtin2 %>% icollapse4.mature(iccy,collapse.freq = 'month',filter=1)
-} %>% rbindlist()
-dtmat.collapse.m %>% setkey(date,ccy)
+  dtiss.in %>% icollapse4.mature(iccy,collapse.freq = 'month',filter=getOption('gl')$sdc.filter.iv.reg$collapse.filter)
+} %>% rbindlist() %>% setkey(date,ccy)
 #+ merging matured with credit cip,include=F
 dtcreditcip.m<-copy(dtcreditcip)[order(date)][,date:=lubridate::floor_date(date,'month')][,.SD[1],.(date,ccy)]
 dtcreditcip.m %>% setkey(date,ccy); dtmat.collapse.m %>% setkey(date,ccy)
