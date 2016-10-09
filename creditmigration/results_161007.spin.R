@@ -10,23 +10,19 @@ opts_chunk$set(echo=FALSE,include=TRUE,cache=TRUE)
 source('util.r')
 if (Sys.info()['sysname'][[1]]=='Windows') mcore=1 else mcore=4
 #' Options -----------------------------------------------------------------
-gl <- list('run.var'=FALSE, 
-           'run.stata'=FALSE,
+gl <- list('run.var'=TRUE, 
+           'run.stata'=TRUE,
            'show.credit.cip'=FALSE, # graph credit cip, run regressoin
            'individual.resid'=FALSE,# individually generated residualized spread or generated together
-           'sdc.filter'='6ccyv3',# set iss filter options: bondrefall, 6ccyv1 6ccyv2 # this is first step filter
-           'sdc.filter.var'=list('restrict.to.dtl'=TRUE,'collapse.filter'=1),
-           'sdc.filter.iss.reg'=list('restrict.to.dtl'=TRUE,'collapse.filter'=1),
-           'sdc.filter.iv.reg'=list('restrict.to.dtl'=TRUE,'collapse.filter'=1),
+           'sdc.filter'='6ccyv3',# set iss filter options: bondrefall, 6ccyv1 6ccyv2
            'firmlevel'='upcusip',
            'mcore'= mcore,
            'quickstart'=TRUE # to use previously saved results in the begining
            )
 options(gl=gl)
-#+ warning=FALSE
 (getOption('gl') %>% as.data.table())[,rn:=1] %>% melt('rn')
 
-# getOption('gl')$sdc.filter.var[[1]]
+# getOption('gl')$mcore
 
 # use original bond data or current expanded
 
@@ -90,7 +86,7 @@ if(getOption('gl')$quickstart){
     creditcip.result<-plot.panel.creditcip(dtm$prw,ys2m.res,filename='',yrstr.='5',wide=T) #../paper/figures/slides_panel2dev.pdf
     dtcreditcip<-dtcreditcip2
   }
-  save(dtm,dtl,ys1m,ys1meff,dtcreditcip,credit.cip.exact,file='preprocessedtemp.RData')
+  save(bondref,bondrefall,dtm,dtl,ys1m,ys1meff,dtcreditcip,credit.cip.exact,file='preprocessedtemp.RData')
 }
 
 # try out new things ------------------------------------------------------
@@ -182,7 +178,8 @@ if (getOption('gl')$sdc.filter=='bondrefall'){
     if (version.var.data %like% 'exact') creditsingle[,cip:=credit-netmisp]
     dtcreditcip.m<-copy(creditsingle)[order(date)][,date:=lubridate::floor_date(date,'month')][,.SD[1],.(date,ccy)]
   }
-  
+  dtin2<-dtissraw %>% add.earlist.iss.in.ccy(dtissraw)
+  dtin2 %>% setkey(upcusip,ccy)
   # limiting to relevent bonds: sol1: just merge with with ys1m$dtreg
   # dtin2<-dtin2 %>% semi_join(ys1m$dtreg[,.N,upcusip],by='upcusip') %>% as.data.table()
   registerDoParallel(1)#,'gbp','jpy','aud','chf','cad'
@@ -402,28 +399,13 @@ regtable1b
 
 # issuance flow and net dev -----------------------------------------------
 #' ## issuance flow and net dev
-#+ swaprate calc m & q, include=F
-swap.rate<-prl[monthend==1 & date>=ymd('2004-01-01')][ticker %like% '^\\w\\wsw5$' | ticker %like% '^eusa5$',.(date,ticker,value=value*100)]
-swap.rate[,ccy:=stringr::str_sub(ticker,1,2)][ccy=='eu',ccy:='eur'][ccy=='us',ccy:='usd'][ccy=='bp',ccy:='gbp'][ccy=='jy',ccy:='jpy'][ccy=='ad',ccy:='aud'][ccy=='cd',ccy:='cad'][ccy=='sf',ccy:='chf']
-swap.rate<-swap.rate[ccy %in% c('eur','gbp','jpy','aud','chf','cad','usd'),.(date,ccy,swaprate=value)][order(date)]
-swap.rate[,swapraterel:=swaprate-.SD[ccy=='usd',swaprate],date] #define relative swap rate
-swap.rate.q<-swap.rate[ccy!='usd'][,date:=floor_date(date,'quarter')][,.SD[3],.(date,ccy)][,.(date,ccy,swapraterel)] %>% setkey(date,ccy)
-swap.rate.m<-swap.rate[ccy!='usd'][,date:=floor_date(date,'month')][,.(date,ccy,swapraterel)] %>% setkey(date,ccy)
-
-
-# set date to beginning of month/quarter
 dtcreditcip.m<-copy(dtcreditcip)[order(date)][,date:=lubridate::floor_date(date,'month')][,.SD[1],.(date,ccy)]
-# construct quarterly using creditcip monthly data, picking the last of the month
-dtcreditcip.q<-copy(dtcreditcip)[order(date)][,date:=lubridate::floor_date(date,'quarter')][,.SD[3],.(date,ccy)]
-
-#issuance calc
 dtin2<-dtissraw %>% add.earlist.iss.in.ccy(dtissraw)
 dtin2 %>% setkey(upcusip,ccy)
-
 # limiting to relevent bonds: sol1: just merge with with ys1m$dtreg
 # dtin2<-dtin2 %>% semi_join(ys1m$dtreg[,.N,upcusip],by='upcusip') %>% as.data.table()
 
-#+ Monthly issuance calc,include=F
+#+ Monthly 6 month avg forward,include=F
 registerDoParallel(1)
 dtiss.collapse.m <- foreach(iccy=c('eur','gbp','jpy','aud','chf','cad')) %do% {
   dtin2 %>% icollapse4(iccy,collapse.freq = 'month',filter=1)
@@ -431,91 +413,65 @@ dtiss.collapse.m <- foreach(iccy=c('eur','gbp','jpy','aud','chf','cad')) %do% {
 dtiss.collapse.m %>% setkey(date,ccy)
 dtcreditcip.m %>% setkey(date,ccy); dtiss.collapse.m %>% setkey(date,ccy)
 dtreg.m<-dtcreditcip.m[dtiss.collapse.m,nomatch=0]
+# make issuance lead by one period
 dtreg.m[,F.i_netflow:=shift(i_netflow,n=1,type='lead'),ccy]
 dtreg.m[,i_netflow6mf:=(shift(i_netflow,n=1,type='lead')+shift(i_netflow,n=2,type='lead')+shift(i_netflow,n=3,type='lead')+shift(i_netflow,n=4,type='lead')+shift(i_netflow,n=5,type='lead')+shift(i_netflow,n=6,type='lead'))/6,ccy]
-dtreg.m[,D.credit:=credit-shift(credit,n=1,type='lag'),.(ccy)]
-dtreg.m[,D3.credit:=credit-shift(credit,n=3,type='lag'),.(ccy)]
-dtreg.m<-swap.rate.m[dtreg.m] # add swap rate
-#+ Quarterly issunace calc,include=F
-#Issuance quarterly collapsing each ccy pair
+
+#' ### Monthly regression with 6 month forwards
+reg_issnetdev<-list()
+for (iccy in c('eur','gbp','jpy','aud','chf','cad')){
+  reg_issnetdev[[length(reg_issnetdev)+1]]<-dtreg.m[ccy==iccy] %>% neweymod(i_netflow6mf~netmisp,value.name=iccy)
+}
+reg_issnetdev<-(rbindlist(reg_issnetdev) %>% dcast(order+rn+variable~varname))[order(order,rn,variable)][,!c('order','variable'),with=F]
+reg_issnetdev[,.(rn,eur,gbp,jpy,aud,chf,cad)] #%T>% dt2clip
+
+
+#+ Baseline 6m fwd with swap rate control,include=F
+swap.rate<-prl[monthend==1 & date>=ymd('2004-01-01')][ticker %like% '^\\w\\wsw5$' | ticker %like% '^eusa5$',.(date,ticker,value=value*100)]
+swap.rate[,ccy:=stringr::str_sub(ticker,1,2)][ccy=='eu',ccy:='eur'][ccy=='us',ccy:='usd'][ccy=='bp',ccy:='gbp'][ccy=='jy',ccy:='jpy'][ccy=='ad',ccy:='aud'][ccy=='cd',ccy:='cad'][ccy=='sf',ccy:='chf']
+swap.rate<-swap.rate[ccy %in% c('eur','gbp','jpy','aud','chf','cad','usd'),.(date,ccy,swaprate=value)]
+swap.rate[,swapraterel:=swaprate-.SD[ccy=='usd',swaprate],date]
+swap.rate<-swap.rate[ccy!='usd'][,date:=floor_date(date,'month')][,.(date,ccy,swapraterel)] %>% setkey(date,ccy)
+dtreg.m<-swap.rate[dtreg.m]
+reg_issnetdev<-list()
+for (iccy in c('eur','gbp','jpy','aud','chf','cad')){
+  reg_issnetdev[[length(reg_issnetdev)+1]]<-dtreg.m[ccy==iccy] %>% neweymod(i_netflow6mf~netmisp+swapraterel,value.name=iccy)
+}
+reg_issnetdev<-(rbindlist(reg_issnetdev) %>% dcast(order+rn+variable~varname))[order(order,rn,variable)][,!c('order','variable'),with=F]
+#' #### reg iss on net dev with swap control
+reg_issnetdev[,.(rn,eur,gbp,jpy,aud,chf,cad)] #%T>% dt2clip
+
+#+ Quarterlycalc,include=F
+# collapsing each ccy pair
 registerDoParallel(1)
 dtiss.collapse.q <- foreach(iccy=c('eur','gbp','jpy','aud','chf','cad')) %do% {
   dtin2 %>% icollapse4(.,iccy,collapse.freq = 'quarter',filter=1)
 } %>% rbindlist()
+dtiss.collapse.q %>% setkey(date,ccy)
+
+## merging issuance
+# construct quarterly using creditcip from begining of the month, merge with quarterly issuance
+#dtcreditcip.q<-copy(dtcreditcip)[order(date)][,date:=lubridate::floor_date(date,'quarter')][,.SD[1],.(date,ccy)]
+dtcreditcip.q<-copy(dtcreditcip)[order(date)][,date:=lubridate::floor_date(date,'quarter')][,.SD[3],.(date,ccy)]
+# dtcreditcip.q<-copy(dtcreditcip)[order(date)][,date:=lubridate::floor_date(date,'quarter')][,lapply(.SD,mean),.(date,ccy)]
 dtcreditcip.q %>% setkey(date,ccy); dtiss.collapse.q %>% setkey(date,ccy)
 dtreg.q<-dtcreditcip.q[dtiss.collapse.q,nomatch=0]
 
 ## make issuance lead by one period
-dtreg.q[,F.I_netflow:=shift(i_netflow,n=1,type='lead'),ccy]
 dtreg.q[,F.i_netflow:=shift(i_netflow,n=1,type='lead'),ccy]
 dtreg.q[,F.mu:=shift(mu,n=1,type='lead'),ccy]
 dtreg.q[,D.mu:=mu-shift(mu,n=1,type='lag'),ccy]
 dtreg.q[,D.netmisp:=netmisp-shift(netmisp,n=1,type='lag'),ccy]
-dtreg.q[,D.credit:=credit-shift(credit,n=1,type='lag'),ccy]
-dtreg.q[,D.cip:=cip-shift(cip,n=1,type='lag'),ccy]
-dtreg.q<-swap.rate.q[dtreg.q] # add swap rate
-###################################################################################################################################################
-#' ## Monthly regressions of issuance on deviations
-#+ echo=T,include=T
-dtreg.m %>% reg.newey.all(i_netflow6mf~netmisp)
-dtreg.m %>% reg.newey.all(i_netflow6mf~netmisp+swapraterel)
-dtreg.m %>% reg.newey.all(i_netflow6mf~credit+cip)
-dtreg.m %>% reg.newey.all(i_netflow6mf~credit+cip+swapraterel)
-dtreg.m %>% reg.newey.all(i_netflow6mf~credit)
-dtreg.m %>% reg.newey.all(i_netflow6mf~credit+swapraterel)
+
+#' #### reg F.issflow (next Qrt) netmisp: need at add rates control
+reg_issnetdev<-list()
+for (iccy in c('eur','gbp','jpy','aud','chf','cad')){
+  reg_issnetdev[[length(reg_issnetdev)+1]]<-dtreg.q[ccy==iccy] %>% neweymod(F.i_netflow~netmisp,value.name=iccy)
+}
+reg_issnetdev<-(rbindlist(reg_issnetdev) %>% dcast(order+rn+variable~varname))[order(order,rn,variable)][,!c('order','variable'),with=F]
+reg_issnetdev #%T>% dt2clip
 
 
-#' ### regression of issuance on chg in credit
-#+ include=T, echo=T
-reg.credit.chg<-list()
-reg.credit.chg[[length(reg.credit.chg)+1]]<-dtreg.m %>% felm(i_netflow~D.credit|ccy|0|0,.)
-reg.credit.chg[[length(reg.credit.chg)+1]]<-dtreg.m %>% felm(F.i_netflow~D.credit|ccy|0|0,.)
-reg.credit.chg[[length(reg.credit.chg)+1]]<-dtreg.m %>% felm(i_netflow.smooth~D.credit|ccy|0|0,.)
-reg.credit.chg[[length(reg.credit.chg)+1]]<-dtreg.m %>% felm(i_netflow6mf~D.credit|ccy|0|0,.)
-reg.credit.chg[[length(reg.credit.chg)+1]]<-dtreg.m %>% felm(I_netflow~D.credit|ccy|0|0,.)
-stargazer::stargazer(reg.credit.chg,report='vct*',type='text')
-
-reg.credit.chg<-list()
-reg.credit.chg[[length(reg.credit.chg)+1]]<-dtreg.m %>% felm(i_netflow~D.credit|ccy|0|0,.)
-reg.credit.chg[[length(reg.credit.chg)+1]]<-dtreg.m %>% felm(F.i_netflow~D.credit|ccy|0|0,.)
-reg.credit.chg[[length(reg.credit.chg)+1]]<-dtreg.m %>% felm(i_netflow.smooth~D.credit|ccy|0|0,.)
-reg.credit.chg[[length(reg.credit.chg)+1]]<-dtreg.m %>% felm(i_netflow6mf~D.credit|ccy|0|0,.)
-reg.credit.chg[[length(reg.credit.chg)+1]]<-dtreg.m %>% felm(I_netflow~D.credit|ccy|0|0,.)
-stargazer(reg.credit.chg,report='vct*',type='text')
-
-#' ## Monthly regressions of issuance on deviations
-#+ echo=T,include=T
-dtreg.q %>% reg.newey.all(F.i_netflow~netmisp)
-dtreg.q %>% reg.newey.all(F.i_netflow~netmisp+swapraterel)
-dtreg.q %>% reg.newey.all(F.i_netflow~credit+cip)
-dtreg.q %>% reg.newey.all(F.i_netflow~credit+cip+swapraterel)
-dtreg.q %>% reg.newey.all(F.i_netflow~credit)
-dtreg.q %>% reg.newey.all(F.i_netflow~credit+swapraterel)
-dtreg.q %>% reg.newey.all(F.I_netflow~netmisp)
-dtreg.q %>% reg.newey.all(F.I_netflow~netmisp+swapraterel)
-dtreg.q %>% reg.newey.all(F.I_netflow~credit+cip)
-dtreg.q %>% reg.newey.all(F.I_netflow~credit+cip+swapraterel)
-dtreg.q %>% reg.newey.all(F.I_netflow~credit)
-dtreg.q %>% reg.newey.all(F.I_netflow~credit+swapraterel)
-dtreg.q %>% reg.newey.all(i_netflow~netmisp)
-dtreg.q %>% reg.newey.all(i_netflow~netmisp+swapraterel)
-dtreg.q %>% reg.newey.all(i_netflow~credit+cip)
-dtreg.q %>% reg.newey.all(i_netflow~credit+cip+swapraterel)
-dtreg.q %>% reg.newey.all(i_netflow~credit)
-dtreg.q %>% reg.newey.all(i_netflow~credit+swapraterel)
-
-#' #### reg flow on credit chg alone
-reg.credit.chg<-list()
-reg.credit.chg[[length(reg.credit.chg)+1]]<-dtreg.q %>% felm(i_netflow~D.credit|ccy|0|0,.)
-reg.credit.chg[[length(reg.credit.chg)+1]]<-dtreg.q %>% felm(F.i_netflow~D.credit|ccy|0|0,.)
-reg.credit.chg[[length(reg.credit.chg)+1]]<-dtreg.q %>% felm(mu~D.credit|ccy|0|0,.)
-reg.credit.chg[[length(reg.credit.chg)+1]]<-dtreg.q %>% felm(F.mu~D.credit|ccy|0|0,.)
-reg.credit.chg[[length(reg.credit.chg)+1]]<-dtreg.q %>% felm(D.mu~D.credit|ccy|0|0,.)
-reg.credit.chg[[length(reg.credit.chg)+1]]<-dtreg.q %>% felm(I_netflow~D.credit|ccy|0|0,.)
-reg.credit.chg[[length(reg.credit.chg)+1]]<-dtreg.q %>% felm(F.I_netflow~D.credit|ccy|0|0,.)
-stargazer::stargazer(reg.credit.chg,report='vct*',type='text')
-
-####################################################################################################################################
 ## abs net dev and D, all iss ----------------------------------------------
 #' ## abs net dev and D, all iss ----------------------------------------------
 #+ collapse each,include=F

@@ -68,7 +68,12 @@ stata(src)
 #' ![](../paper/figures/VAR_irfeur_A.png)
   
 #rmarkdown::render('test.R',output_format='html_document')
-
+setwd("/Users/gliao/Dropbox/Research/ccy basis/creditmigration")
+rmarkdown::render('results_161007.R',output_format='all',output_dir = '/Users/gliao/Documents',intermediates_dir='/Users/gliao/Documents')
 rmarkdown::render('results_161007.R',output_format='all',output_dir = 'C:/Users/gliao/Documents',intermediates_dir='C:/Users/gliao/Documents')
 #rmarkdown::render('results_161007.R',output_format='html_document')
 #rmarkdown::render('results_161007.R',output_format='pdf_document',output_dir = 'C:/Users/gliao/Documents',intermediates_dir='C:/Users/gliao/Documents')
+
+
+
+rmarkdown::render('test.R',output_format='all',output_dir = '/Users/gliao/Documents',intermediates_dir='/Users/gliao/Documents')

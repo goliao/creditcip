@@ -9,7 +9,7 @@ load('db/sdc.RData')
 
 # Options -----------------------------------------------------------------
 # set dtissraw to bondrefall %>% issfilter()
-
+opt.filter.sdc='6ccy,v2'
 # use original bond data or current expanded
 
 # set firm level to either upcusip or cu
@@ -81,15 +81,16 @@ if (bool.ind.resid){
   dtcreditcip<-dtcreditcip2
 }
   
-  # aa<-(dtl[ccy %in% c('eur','usd','1usd')] %>% resyldsprdv4(.,dtm$prl,regversion=4,returndt=T,parallel.core. = 8,globaluponly=0))$regresult
-  # aa  
-  # bb<-create.dev.long2(prwin = dtm$prw,creditmispin = aa,netmispin = ys2meff.res)
-  # bb[,.(date,cip,credit)] %>% ggplotw()
 
+# filter iss --------------------------------------------------------------
+
+  if (opt.filter.sdc=='bondrefall'){
+    dtissraw<-bondrefall %>% issfilter(type=6) 
+  } else{
+    dtissraw<-sdc %>% filter.sdc(opt.filter.sdc)
+  }
   
 # VAR data export ---------------------------------------------------------
-  dtissraw<-sdc %>% filter.sdc('6ccy,v2')
-  # dtissraw<-bondrefall %>% issfilter(type=6) 
   dtissraw[,ccy:=str_to_lower(ccy)]
   dtissraw<-dtissraw[ccy %in% c('usd','eur','gbp','jpy','aud','chf','cad')][,monthly:=floor_date(d,'month')]
   dtissraw<-(dtissraw %>% tocusip6(field=firmlevel))[,upcusip:=cusip6]

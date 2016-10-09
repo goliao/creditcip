@@ -138,7 +138,7 @@ plot.netdev<-function(yseff.result,fileout=''){
 }
 
 
-filter.sdc<-function(sdc,type.='6ccy,v2'){
+filter.sdc<-function(sdc,type.=getOption('gl')$sdc.filter){
   # filter the sdc database based on criteria 10/05/2016
   flds.keep<-c("amt","btypc","c","ccy","country_of_incorp","cu","cusip9","d","deal_no","descr","foreign","glaw","i","isin","issue_type_desc","mat","mat2","mdealtype","mkt","modnat","modupnat","monthly","nat","natccy","nrating","pub","rule144a","secur","settlement2","sicp","supranational","tf_macro_desc","tf_mid_desc","tic","uop","upcusip","upforeign","upnames","upnatccy","upsicp","upsupranational","ytofm")
   sdc.0<-sdc[,c(flds.keep),with=F] %>% as.data.frame %>% as.data.table %>%  copy()
@@ -146,8 +146,6 @@ filter.sdc<-function(sdc,type.='6ccy,v2'){
     print('6 ccy only')
     sdc.0<-sdc.0[ccy %in% c('usd','eur','gbp','jpy','aud','chf','cad')]
   } 
-  
-
   if (type. %like% 'v1'){
     print('v1')
     # the version that matches stata filter exactly to generate sdc96_clean
@@ -157,11 +155,15 @@ filter.sdc<-function(sdc,type.='6ccy,v2'){
     #compare.dt(aa,dtiss.stata.match[d>=ymd('1996-01-01') & d<ymd('2016-07-01')],'deal_no') 
   } else if(type. %like% 'v2'){
     print('v2')
-    # better version?
+    # better version? NO, worse
     sdc.1<-sdc.0[amt>=50][ytofm>=2][ytofm<99][nrating<=16][nrating!=0][nrating!=1][pub %in% c('Public','Sub.')][mdealtype %ni% c("P","ANPX","M","EP","CEP","TM","PP","R144P")][tf_mid_desc!="Government Sponsored Enterprises"][secur %nlk% 'fl|mtg|pdf|sh|zero|fr|index|mortg|eqt|pass|islamic|step|pfanbriefe|cont|var|perp|loan|extendible|pik']
     sdc.1[,acq:=ifelse(str_to_lower(uop) %like% 'acq',1,0)]
     sdc.1[str_to_lower(i) %like% 'acqs|acquisition',acq:=1]
     sdc.1<-sdc.1[acq==0]
+  } else if(type. %like% 'v3'){
+    print('v3')
+    # more generous, include floating, gov sectors, etc
+    sdc.1<-sdc.0[amt>=50][ytofm>=1][ytofm<99][nrating<=16][nrating!=0][nrating!=0][mdealtype %ni% c("P","ANPX","M","EP","CEP","TM","PP","R144P")][str_to_lower(tf_mid_desc) %nlk% "govern"][secur %nlk% 'mtg|pdf|sh|mortg|eqt|pass|islamic|step|pfanbriefe|cont|perp|loan|extendible|pik']
   }
   sdc.1
 }
@@ -2126,6 +2128,14 @@ neweymod<-function(dtin,formula,outformat=0,value.name=''){
       list('res'=coefout,'lag'=nlag,'model'=model)
     }
   }
+reg.newey.all<-function(dtreg.,formula.){
+  result<-list()
+  for (iccy in c('eur','gbp','jpy','aud','chf','cad')){
+    result[[length(result)+1]]<-dtreg.[ccy==iccy] %>% neweymod(formula.,value.name=iccy)
+  }
+  result<-(rbindlist(result) %>% dcast(order+rn+variable~varname))[order(order,rn,variable)][,!c('order','variable'),with=F]
+  result[,.(rn,eur,gbp,jpy,aud,chf,cad)] #%T>% dt2clip
+}
 
 regformat<-function(dtin,formula,value.name='',setype='HC0',regtype='felm'){
   # generic regression format
