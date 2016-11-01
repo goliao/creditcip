@@ -88,6 +88,17 @@ this is used as an alternative to isin for mapping SDC to bloomberg bond prices
 	# setkey(rid,figi)
 	# cusip.figi<-cusip.figi[!rid]
 
+'pktickerlookup.RData'
+	unique mapping of pk to ticker from figi dataset, generated from gen_bondref.R'
+	# rm(list=ls(all=TRUE));
+	# source('util.r')
+	# load('db/bondrefall.RData')
+	# bondref<-copy(bondrefall)
+	# 	pk.ticker.lookup<-bondrefall[!is.na(ticker) & !is.na(pk),.(pk,ticker=str_c(tolower(ticker), ' corp'))]
+	# 	pk.ticker.lookup  %>% setkey(ticker)
+	# 	pk.ticker.lookup<-unique(pk.ticker.lookup)
+	# 	readme='unique mapping of pk to ticker from figi dataset, generated from gen_bondref.R'
+	# 	save(pk.ticker.lookup,readme,file='db/pktickerlookup.RData')
 
 
 'sdc_raw.RData'
@@ -118,9 +129,16 @@ bondref generated from sdc data, unique in pk, deal_no;
 deduped by various conflict resolvation with bbg and finally deduping by ascending deal_no
 # generated using 'gen_bondref.R'
 
+'db/bondref.RData'
+bondref generated from sdc data, unique in pk, deal_no; 
+deduped by various conflict resolvation with bbg and finally deduping by ascending deal_no
+# generated using 'gen_bondref.R'
+pk is actually ticker from sdc dataset
+
 
 'bondrefall.RData'  
 this has the undedubed version of bondref even when tehre are no pks
+here pk is actually parsekeyable, and ticker is from figi
 
 
 

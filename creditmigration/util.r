@@ -81,7 +81,7 @@ toc <- function(){
   }
 
 
- plot.irf<-function(resirf,v1='credit',v2='cip',v3='i_netflow'){
+ plot.irf<-function(resirf,v1='credit',v2='cip',v3='i_netflow',filename=''){
     require(latex2exp)
     labelv1<-'$c$'
     labelv2<-'$b$'
@@ -101,7 +101,57 @@ toc <- function(){
     figirf[[5]]<-dtirf[variable==str_c(v2,'.',v2)] %>% ggplot(data=.,aes(x=rn,y=irf,group=1))+geom_line()+geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=.3,colour=NA)+ggtitle(TeX(str_c(labelv2,' $\\rightarrow$ ',labelv2)))+xlab('')+ylab('')+geom_hline(yintercept=0,colour='lightblue')+theme_few()+theme(legend.position='none')
     figirf[[6]]<-dtirf[variable==str_c(v2,'.',v3)] %>% ggplot(data=.,aes(x=rn,y=irf,group=1))+geom_line()+geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=.3,colour=NA)+ggtitle(TeX(str_c(labelv2,' $\\rightarrow$ ',labelv3)))+xlab('')+ylab('')+geom_hline(yintercept=0,colour='lightblue')+theme_few()+theme(legend.position='none')
     figirf.all<-grid.arrange(figirf[[1]],figirf[[2]],figirf[[3]],figirf[[4]],figirf[[5]],figirf[[6]],ncol=3,nrow=2,layout_matrix=rbind(c(1,2,3),c(4,5,6)),heights=c(2.25,2.25))
+    #if(filename!='') ggsave(file=filename,figirf.all,width=8,height=5)
+    figirf.all
   } 
+plot.irf.panel<-function(fname=str_c(params$figfile,'panelvar.dta'),v1='credit',v2='cip',v3='i_netflow',filename=''){
+  require(latex2exp)
+  labelv1<-'$c$'
+  labelv2<-'$b$'
+  labelv3<-'$\\mu$'
+  pvar<-read.dta13(fname) %>% as.data.table()
+  pvarl<-(pvar %>% melt.data.table(id.vars='step'))[variable %nlk% 'FEVD']
+  pvarl[variable %like% '^p',prefix:='p']
+  pvarl[variable %like% '^n',prefix:='n']
+  pvarl[variable %like% 'll',postfix:='ll']
+  pvarl[variable %like% 'ul',postfix:='ul']
+  pvarl[,series:=as.numeric(str_extract_all(variable,'\\d+'))]
+  pvarl[is.na(prefix),prefix:='est']
+  pvarl[is.na(postfix),postfix:='est']
+  pvar2<-(pvarl[prefix %in% c('est','n')] %>% dcast(step+series~postfix))[order(series,step)]
+  par(ask=F)  
+  require('gridExtra')
+  figirf<-list()
+  figirf <- list()
+  # figirf[[length(figirf)+1]]<-pvar2[series==1] %>% ggplot(aes(step,est))+geom_line()+geom_ribbon(aes(ymin=ll,ymax=ul),alpha=.3,colour=NA)+xlab('')+ylab('')+theme_few()+geom_hline(yintercept=0,colour='lightblue')+ggtitle(TeX(str_c(labelv3,' $\\rightarrow$ ',labelv3)))
+  # figirf[[length(figirf)+1]]<-pvar2[series==2] %>% ggplot(aes(step,est))+geom_line()+geom_ribbon(aes(ymin=ll,ymax=ul),alpha=.3,colour=NA)+xlab('')+ylab('')+theme_few()+geom_hline(yintercept=0,colour='lightblue')+ggtitle(TeX(str_c(labelv3,' $\\rightarrow$ ',labelv1)))
+  # figirf[[length(figirf)+1]]<-pvar2[series==3] %>% ggplot(aes(step,est))+geom_line()+geom_ribbon(aes(ymin=ll,ymax=ul),alpha=.3,colour=NA)+xlab('')+ylab('')+theme_few()+geom_hline(yintercept=0,colour='lightblue')+ggtitle(TeX(str_c(labelv3,' $\\rightarrow$ ',labelv2)))
+  figirf[[length(figirf)+1]]<-pvar2[series==5] %>% ggplot(aes(step,est))+geom_line()+geom_ribbon(aes(ymin=ll,ymax=ul),alpha=.3,colour=NA)+xlab('')+ylab('')+theme_few()+geom_hline(yintercept=0,colour='lightblue')+ggtitle(TeX(str_c(labelv1,' $\\rightarrow$ ',labelv1)))
+  figirf[[length(figirf)+1]]<-pvar2[series==6] %>% ggplot(aes(step,est))+geom_line()+geom_ribbon(aes(ymin=ll,ymax=ul),alpha=.3,colour=NA)+xlab('')+ylab('')+theme_few()+geom_hline(yintercept=0,colour='lightblue')+ggtitle(TeX(str_c(labelv1,' $\\rightarrow$ ',labelv2)))
+  figirf[[length(figirf)+1]]<-pvar2[series==4] %>% ggplot(aes(step,est))+geom_line()+geom_ribbon(aes(ymin=ll,ymax=ul),alpha=.3,colour=NA)+xlab('')+ylab('')+theme_few()+geom_hline(yintercept=0,colour='lightblue')+ggtitle(TeX(str_c(labelv1,' $\\rightarrow$ ',labelv3)))
+  figirf[[length(figirf)+1]]<-pvar2[series==8] %>% ggplot(aes(step,est))+geom_line()+geom_ribbon(aes(ymin=ll,ymax=ul),alpha=.3,colour=NA)+xlab('')+ylab('')+theme_few()+geom_hline(yintercept=0,colour='lightblue')+ggtitle(TeX(str_c(labelv2,' $\\rightarrow$ ',labelv1)))
+  figirf[[length(figirf)+1]]<-pvar2[series==9] %>% ggplot(aes(step,est))+geom_line()+geom_ribbon(aes(ymin=ll,ymax=ul),alpha=.3,colour=NA)+xlab('')+ylab('')+theme_few()+geom_hline(yintercept=0,colour='lightblue')+ggtitle(TeX(str_c(labelv2,' $\\rightarrow$ ',labelv2)))
+  figirf[[length(figirf)+1]]<-pvar2[series==7] %>% ggplot(aes(step,est))+geom_line()+geom_ribbon(aes(ymin=ll,ymax=ul),alpha=.3,colour=NA)+xlab('')+ylab('')+theme_few()+geom_hline(yintercept=0,colour='lightblue')+ggtitle(TeX(str_c(labelv2,' $\\rightarrow$ ',labelv3)))
+  figirf.all<-grid.arrange(figirf[[1]],figirf[[2]],figirf[[3]],figirf[[4]],figirf[[5]],figirf[[6]],ncol=3,nrow=2,layout_matrix=rbind(c(1,2,3),c(4,5,6)),heights=c(2.25,2.25))
+  if(filename!='') ggsave(file=filename,figirf.all,width=8,height=5)
+  figirf.all
+} 
+
+  plot.irf.single<-function(resirf,v1='netmsip',v2='i_netflow'){
+    require(latex2exp)
+    labelv1<-'$(c-b)$'
+    labelv2<-'$\\mu$'
+    dttemp<-list()
+    dttemp[[1]]<-(resirf$irf %>% as.data.frame(keep.rownames=T) %>% as.data.table(keep.rownames=T))[,type:="irf"]
+    dttemp[[2]]<-(resirf$Upper %>% as.data.frame(keep.rownames=T) %>% as.data.table(keep.rownames=T))[,type:="Upper"]
+    dttemp[[3]]<-(resirf$Lower %>% as.data.frame(keep.rownames=T) %>% as.data.table(keep.rownames=T))[,type:="Lower"]
+    dtirf<-(dttemp %>% rbindlist %>% melt(id.vars=c('rn','type')) %>% dcast(rn+variable~type))[,rn:=as.numeric(rn)][order(rn)]  
+    par(ask=F)      
+    outplot<-dtirf %>% ggplot(data=.,aes(x=rn,y=irf,group=1))+geom_line()+geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=.3,colour=NA)+ggtitle(TeX(str_c(labelv1,' $\\rightarrow$ ',labelv2)))+xlab('')+ylab('')+geom_hline(yintercept=0,colour='lightblue')+theme_few()+theme(legend.position='none')
+    outplot
+  } 
+  
+ 
 
 plot.event.study.moiss2<-function(dtin.in=dt.merged,dtiss.in=dtiss,ccy.='eur',date.range=c('2007-01-01','2016-08-01'),event.dates.in=ecbqe,type.in=1,filepathhead='',datetics=10){
     figa <- dtin.in[ccy==ccy.][date %between% date.range] %>% plot.event.study(.,event.dates=event.dates.in,type.=type.in)+scale_x_date(breaks=scales::pretty_breaks(n=datetics))
@@ -138,7 +188,7 @@ plot.netdev<-function(yseff.result,fileout=''){
 }
 
 
-filter.sdc<-function(sdc,type.=getOption('gl')$sdc.filter){
+filter.sdc<-function(sdc,type.=1){
   # filter the sdc database based on criteria 10/05/2016
   flds.keep<-c("amt","btypc","c","ccy","country_of_incorp","cu","cusip9","d","deal_no","descr","foreign","glaw","i","isin","issue_type_desc","mat","mat2","mdealtype","mkt","modnat","modupnat","monthly","nat","natccy","nrating","pub","rule144a","secur","settlement2","sicp","supranational","tf_macro_desc","tf_mid_desc","tic","uop","upcusip","upforeign","upnames","upnatccy","upsicp","upsupranational","ytofm")
   sdc.0<-sdc[,c(flds.keep),with=F] %>% as.data.frame %>% as.data.table %>%  copy()
@@ -332,7 +382,6 @@ plot.panel.creditcip<-function(prw=dtm$prw,rys=ys1m$regresult, filename='',x11.=
   require('gridExtra')
   fig6<-list()
   if (x11.) X11(width=7,height=9)
-  
   fig6[[1]]<-dtcreditcip.plot[ccy=='eur'] %>% ggplot(data=.,aes(x=date,y=value))+geom_line(aes(linetype=variable,colour=variable)) +geom_errorbar(aes(ymin=cimin,ymax=cimax),colour='lightgrey',alpha=.5) +xlab('')+ylab('basis points')+geom_hline(yintercept=0,colour='lightblue')+ scale_color_discrete('',labels = c('CIP','Credit Spread Diff.'))+scale_linetype_discrete('',labels = c('CIP','Credit Spread Diff.'))+ggtitle('EUR')+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=7))+theme(legend.position='bottom')+annotate('text',x=ymd('2015-06-01'),y=10,label=str_c('cor=',as.character(round(dt.corr.ccy[ccy=='eur',corr],2))))
   legendcommon<-get_legend(fig6[[1]])
   fig6[[1]]<-fig6[[1]]+theme(legend.position='none')
@@ -353,7 +402,38 @@ plot.panel.creditcip<-function(prw=dtm$prw,rys=ys1m$regresult, filename='',x11.=
   }
   list('dt.credit.cip'=dt.merged,'dt.credit.cip.l'=dtcreditcip.plot,'dt.corr'=dt.corr.ccy)  
 }
-
+plot.panel.creditcip.any.ccy<-function(ys,yseff, filename='',wide=F){
+  # ys<-ys.eur;yseff<-ys.eur.eff;
+  credit.cip.exact.ccy<-(ys$regresult[yseff$regresult,on=c('date','ccy')] %>% setnames(c('est','i.est'),c('credit','crediteff')))[,cip:=credit-crediteff]
+  invisible(credit.cip.exact.ccy[,cimax:=credit+1.96*se][,cimin:=credit-1.96*se])
+  
+  dtcreditcip.plot<-credit.cip.exact.ccy %>% melt(.,id.vars=c('date','ccy','se','cimin','cimax'),measure.vars=c('cip','credit'))   
+  
+  #dtcreditcip.plot[ccy=='usd'] %>% ggplot(data=.,aes(x=date,y=value))+geom_line(aes(linetype=variable,colour=variable)) +geom_errorbar(aes(ymin=cimin,ymax=cimax),colour='lightgrey',alpha=.5) +xlab('')+ylab('bps')+geom_hline(yintercept=0,colour='lightblue')+ scale_color_discrete('',labels = c('CIP','Credit Spread Diff.'))+scale_linetype_discrete('',labels = c('CIP','Credit Spread Diff.'))+theme_classic()+theme(legend.position='bottom')
+  
+  dt.corr.ccy<-credit.cip.exact.ccy[,.(corr=cor(cip,credit)),ccy]
+  print(str_c('corr:',credit.cip.exact.ccy[,.(corr=cor(cip,credit))]))
+  
+  require('gridExtra')
+  fig<-list()
+  for (iccy in credit.cip.exact.ccy[,.N,ccy]$ccy){
+    fig[[length(fig)+1]]<-dtcreditcip.plot[ccy==iccy] %>% ggplot(data=.,aes(x=date,y=value))+geom_line(aes(linetype=variable,colour=variable)) +geom_errorbar(aes(ymin=cimin,ymax=cimax),colour='lightgrey',alpha=.5) +xlab('')+ylab('')+geom_hline(yintercept=0,colour='lightblue')+ scale_color_discrete('',labels = c('CIP','Credit Spread Diff.'))+scale_linetype_discrete('',labels = c('CIP','Credit Spread Diff.'))+ggtitle(str_to_upper(iccy))+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=7))+theme(legend.position='none')+annotate('text',x=ymd('2015-06-01'),y=10,label=str_c('cor=',as.character(round(dt.corr.ccy[ccy==iccy,corr],2))))+theme(axis.title.y=element_blank())  
+  }
+  
+  legendcommon<-get_legend(fig[[1]]+theme(legend.position='bottom'))
+  if (length(fig)==5) fig[[6]]<-fig[[5]]
+  if (wide){
+    figall<-grid.arrange(fig[[1]],fig[[2]],fig[[3]],fig[[4]],fig[[5]],fig[[6]],legendcommon,ncol=3,nrow=3,layout_matrix=rbind(c(1,2,3),c(4,5,6),c(7,7,7)),heights=c(2.25,2.25,.25))
+  } else{
+    figall<-grid.arrange(fig[[1]],fig[[2]],fig[[3]],fig[[4]],fig[[5]],fig[[6]],legendcommon,ncol=2,nrow=4,layout_matrix=rbind(c(1,2),c(3,4),c(5,6),c(7,7)),heights=c(2,2,2,.25))
+  }
+  #figall 
+  if (filename!=''){
+    if (wide) ggsave(file=filename,figall,width=10.5,height=6.5) 
+    else ggsave(file=filename,figall,width=7,height=9)
+  }
+  list('dt.credit.cip'=credit.cip.exact.ccy,'dt.credit.cip.l'=dtcreditcip.plot,'dt.corr'=dt.corr.ccy)  
+}
 
 
 plot.panel.creditrating<-function(dtin, filename='',wide=F){
@@ -395,9 +475,25 @@ add.earlist.iss.in.ccy <- function(dtin,bondrefall.=FALSE){
     } else{
       refdt<-rbind(bondrefall.,dtin,fill=T)
     }
+    allccys <- c('aud','cad','chf','eur','gbp','jpy','usd')
     dtearlistforeign<-refdt[order(d)][,first(d),.(upcusip,ccy)] %>% dcast(upcusip~ccy,value.var='V1') #%>% melt(id.vars='upcusip',variable.name='ccy',value.name='earliest.iss.in.ccy')
-    dtearlistforeign %>% setnames(c('aud','cad','chf','eur','gbp','jpy','usd'),str_c('earlist.',c('aud','cad','chf','eur','gbp','jpy','usd')))
+    dtearlistforeign %>% setnames(allccys,str_c('earlist.',allccys))
     dtearlistforeign %>% setkey(upcusip)
+
+    # upcusip.commonccy<-dtin[,.(upcusip,upnatccy)] %>% setkey(upcusip)
+    # upcusip.commonccy<-dtin[,.N,.(ccy,upcusip)][order(upcusip,-N)][,.(mainccy=.SD[1,ccy]),upcusip]
+    # dtin %>% ds('ccy')
+
+    # dtearlistforeign<-upcusip.commonccy[dtearlistforeign]
+    
+    # min.row<-function(x){
+    #   upnatccy<-x[1,upnatccy]
+    #   print(x[1,str_c('earlist.',allccys[allccys %nlk% upnatccy]),with=F] %>% as.numeric %>% na.omit %>% min %>% as.Date())
+    #   browser()
+    # }
+
+    # dtearlistforeign[,earliest.foreign:=min.row(.SD),upcusip]
+
     dtin %>% setkey(upcusip)
     dtin<-dtearlistforeign[dtin]
     dtin  
@@ -468,7 +564,19 @@ preprocess<-function(bondref,dtl,prl,monthlyonly=TRUE,issfiltertype=2,ccyfilter=
       dtl<-dtl[pk_daily]
     }
   }
-  dtl2<-dtl[br[,.(ccy,mat2,nrating,upcusip,cu,pk,ytofm,issue_type_desc,pub,tf_mid_desc,sic1,amt)],nomatch=0]
+
+  br[DEBT_SENR_CD=='SU',senior:='SU']
+  br[DEBT_SENR_CD=='SS',senior:='SS']
+  br[DEBT_SENR_CD %in% c('SB','SR') ,senior:='SB']
+  br[is.na(senior),senior:='UN']
+
+  br[is.na(amt) & !is.na(FACE_US_AMNT),amt:=FACE_US_AMNT]
+  br[,amt_bucket:=as.numeric(NA)]
+  br[amt>=100,amt_bucket:=ntile(amt,4)]
+  br[amt<100,amt_bucket:=0]
+  br[is.na(amt),amt_bucket:=-1]
+  
+  dtl2<-dtl[br[,.(ccy,mat2,nrating,upcusip,cu,pk,ytofm,issue_type_desc,pub,tf_mid_desc,sic1,amt,amt_bucket,DEBT_CLASS_CD,MKT_TYP_CD,senior)],nomatch=0]
   dtl2[,ytm:=as.numeric((mat2-date)/365)]
   dtl3<-dtl2[ytm >.05]
   dtl3[is.na(nrating),nrating:=0]
@@ -480,12 +588,12 @@ preprocess<-function(bondref,dtl,prl,monthlyonly=TRUE,issfiltertype=2,ccyfilter=
   dtl3<-dtl3[date>'2004-01-01']
   dtl3[,liq:=ytm/ytofm]
   dtl3<-dtl3[liq %between% c(0.05,1.0)]
-  dtl3[liq<.5,liq_bucket:=0] # more illiq
-  dtl3[liq>=.5,liq_bucket:=1] # liq
-  
-  # gen eusw=eusa-eubsv
-  # gen eusz=eusw+eubs
-  
+  dtl3[liq<.25,liq_bucket:=0] # more illiq
+  dtl3[liq>=.25 & liq<.5,liq_bucket:=1] # more illiq
+  dtl3[liq>=.5 & liq<.75,liq_bucket:=2] # liq
+  dtl3[liq>=.75 & liq<=1,liq_bucket:=3] # liq
+
+
   prw[,`:=`(eusw1=eusa1-eubsv1,eusw10=eusa10-eubsv10,eusw12=eusa12-eubsv12,eusw15=eusa15-eubsv15,eusw2=eusa2-eubsv2,eusw20=eusa20-eubsv20,eusw30=eusa30-eubsv30,eusw5=eusa5-eubsv5,eusw7=eusa7-eubsv7)]
   prw[,`:=`(eusz10=eusw10+eubs10,eusz12=eusw12+eubs12,eusz15=eusw15+eubs15,eusz2=eusw2+eubs2,eusz20=eusw20+eubs20,eusz30=eusw30+eubs30,eusz5=eusw5+eubs5,eusz7=eusw7+eubs7,eusz1=eusw1+eubs1)]
   prw[,`:=`(jysz10=jysw10+jybs10,jysz12=jysw12+jybs12,jysz15=jysw15+jybs15,jysz2=jysw2+jybs2,jysz20=jysw20+jybs20,jysz30=jysw30+jybs30,jysz5=jysw5+jybs5,jysz7=jysw7+jybs7,jysz1=jysw1+jybs1)]
@@ -505,7 +613,7 @@ preprocess<-function(bondref,dtl,prl,monthlyonly=TRUE,issfiltertype=2,ccyfilter=
    toc()
   list('prw'=prw,'prl'=prl,'dtl4'=dtl4,'br'=br)
 }
-resyldsprdv4<-function(dtlin,pricein,regversion=2,globaluponly=1,returndt=T,adjccybs=0,winsor.=.025,parallel.core.=1){
+resyldsprdv4<-function(dtlin,pricein,regversion=2,globaluponly=1,returndt=T,adjccybs=0,winsor.=.025,parallel.core.=1,mainccyin='usd'){
   # a wrapper for FE regression
   tic()
   dtl<-copy(dtlin)
@@ -517,12 +625,11 @@ resyldsprdv4<-function(dtlin,pricein,regversion=2,globaluponly=1,returndt=T,adjc
     dtl<-filterglobaluponly(dtl)
   }
   if (adjccybs==1)
-    lsout<-getccyFE2(dtl,fieldstr='swapsprdadj',version=regversion,winsor=winsor.,parallel.core=parallel.core.)
+    lsout<-getccyFE2(dtl,fieldstr='swapsprdadj',version=regversion,winsor=winsor.,parallel.core=parallel.core.,mainccy=mainccyin)
   else
-    lsout<-getccyFE2(dtl,fieldstr='swapsprd',version=regversion,winsor=winsor.,parallel.core=parallel.core.)
-  
+    lsout<-getccyFE2(dtl,fieldstr='swapsprd',version=regversion,winsor=winsor.,parallel.core=parallel.core.,mainccy=mainccyin)
   toc()
-  if (returndt==1)
+  if (returndt)
     lsout
   else
     lsout$regcoef
@@ -534,7 +641,57 @@ winsorize2<-function(dfin,lhs,bylist,winsor=.01){
   df2
 }
 
-getccyFE2<-function(dfin,fieldstr='OAS_SPREAD_BID',version=2,winsor=.025,parallel.core=1){
+#testing 
+# dtreg<-filterglobaluponly(dtl)
+# mainccy='usd'
+# winsor=.025
+# dtreg[,pctl:=percent_rank(swapsprd),by=.(date,ccy)]
+# dtreg<-dtreg[pctl>=winsor & pctl<=(1-winsor)]
+# dtreg[date==ymd('2004-01-30')] %>% felm(swapsprd~ccy+liq+amt | upcusip+ytm_bucket+rating_bucket+senior| 0 | upcusip, data=.) %>% summary
+
+regfun<-function(dt,ccylist='',regversion=4,bylist='',lhs.,mainccy.){
+  tc.ret<-tryCatch({
+    if (regversion==1){
+      reg<-felm(eval(exparse(lhs.))~ccy |upcusip |0 | upcusip,data=dt)
+    } else if (regversion==3){
+      reg<-felm(eval(exparse(lhs.))~ccy | upcusip+ytm_bucket | 0 | upcusip, data=dt)
+    } else if (regversion==-4){
+      reg<-felm(eval(exparse(lhs.))~0 | upcusip+ytm_bucket+rating_bucket | 0 | upcusip, data=dt)
+    } else if (regversion==4){
+      reg<-felm(eval(exparse(lhs.))~ccy | upcusip+ytm_bucket+rating_bucket | 0 | upcusip, data=dt)
+    } else if (regversion==4.5){
+      reg<-felm(eval(exparse(lhs.))~ccy+ytm | upcusip+rating_bucket | 0 | upcusip, data=dt)
+    } else if (regversion==5){
+      reg<-felm(eval(exparse(lhs.))~ccy +liq+amt| upcusip+ytm_bucket+rating_bucket+senior | 0 | upcusip, data=dt)
+    } else if (regversion==5.5){
+      reg<-felm(eval(exparse(lhs.))~ccy +liq+amt+ytm| upcusip+rating_bucket+senior | 0 | upcusip, data=dt)
+    } else if (regversion==6){
+      reg<-felm(eval(exparse(lhs.))~ccy | upcusip+ytm_bucket+rating_bucket+senior+liq_bucket+amt_bucket | 0 | upcusip, data=dt)
+    } else if (regversion==7){
+      reg<-felm(eval(exparse(lhs.))~ccy | upcusip+ytm_bucket+rating_bucket+liq_bucket|0|upcusip,data=dt)
+    } else if (regversion==8){
+      reg<-lm(eval(exparse(lhs.))~ccy | upcusip+ytm_bucket+liq_bucket|0|upcusip,data=dt)
+    } else if (regversion==9){
+      reg<-lm(eval(exparse(lhs.))~ccy | upcusip+ytm_bucket+ccy*rating_bucket| 0 | upcusip,data=dt)
+    }
+  }, error=function(err){
+    print(err);print(bylist)
+  })
+  if (exists('reg')){
+    if (regversion==9){dtcoef2<-(coef(summary(reg)) %>% as.data.table(keep.rownames=T))[rn %like% '^ccy' | rn %like% '^rating'][,.(ccy=rn,est=Estimate,se=`Cluster s.e.`)]} else{
+      dtcoef2<-(coef(summary(reg)) %>% as.data.table(keep.rownames=T))[rn %like% '^ccy',.(ccy=str_sub(rn,4),est=Estimate,se=`Cluster s.e.`)]
+      dtcoef2 <- cbind(dtcoef2,data.table('N'=reg$N,'rsq'=summary(reg)$r2adj))
+      dtccy<-data.table('ccy'=ccylist);dtccy %>% setkey(ccy)
+      dtcoef2 %>% setkey(ccy)
+      dtcoef2 <- dtcoef2[dtccy[ccy!=str_c(1,mainccy.)]]
+    } 
+    dtcoef2
+  } else {
+    browser('error in regfun')
+    return(data.table('ccy'='eur','est'=as.numeric(NA),se=as.numeric(NA)))
+  }
+}
+getccyFE2<-function(dfin,fieldstr='OAS_SPREAD_BID',version=2,winsor=.025,parallel.core=1,mainccy='usd'){
   #  Generalized function for calculating FE 
   require(lfe)
   # print(str_c('FE on field: ',fieldstr))
@@ -546,93 +703,35 @@ getccyFE2<-function(dfin,fieldstr='OAS_SPREAD_BID',version=2,winsor=.025,paralle
       lhs<-fieldstr
     }
     setkey(df2,date,upcusip,ccy)
-
   #winsorize each date
     if (winsor!=0){
       df2[,pctl:=percent_rank(eval(exparse(lhs))),by=.(date,ccy)]
       df2<-df2[pctl>=winsor & pctl<=(1-winsor)]
     }
-      #get rid of days with only single observation and ones with only one ccy
-      #df2<-df2[date %ni% df2[,.N,by=c('date','ccy')][N==1,date]]
-      #df2<-df2[date %ni% df2[,.N,.(date,ccy)][,.N,date][N==1,date]]
-
   # set alphabetical order such that dummies are on foreign ccys
-    df2[ccy=='usd',ccy:='1usd']
-          
+    df2[ccy==mainccy,ccy:=str_c(1,mainccy)]
+    
   # introduce liquidity measure based on bond age
       df2[,liq:=ytm/ytofm]
       df2<-df2[liq %between% c(0,1.1)]
       df2[liq<.5,liq_bucket:=0] # more illiq
       df2[liq>=.5,liq_bucket:=1] # liq
-
-
-    regfun<-function(dt,ccylist='',regversion=4,bylist=''){
-      tc.ret<-tryCatch({
-          if (regversion==1){
-            # regversion 1:: run regression directly on data set without taking out bonds that do not have matching pairs
-            reg<-felm(eval(exparse(lhs))~ccy|upcusip|0|upcusip,data=dt)
-          } else if (regversion==3){
-            # regversion 3: like regversion 2 but also adds maturity considerations in regression
-            # reg<-lm(eval(exparse(lhs))~ccy+upcusip+ytm_bucket,data=dt)
-            reg<-felm(eval(exparse(lhs))~ccy | upcusip+ytm_bucket | 0 | upcusip, data=dt)
-          } else if (regversion==4){
-            # regversion 4: regversion 3+ 3 rating buckets as dummies
-            # reg<-lm(eval(exparse(lhs))~ccy+upcusip+ytm_bucket+rating_bucket,data=dt)
-            reg<-felm(eval(exparse(lhs))~ccy | upcusip+ytm_bucket+rating_bucket | 0 | upcusip, data=dt)
-          } else if (regversion==5){ # makes no sense!!!! deprecated
-            # reg<-lm(eval(exparse(lhs))~ccy+upcusip+ytm_bucket+rating_bucket+sicfac,data=dt)
-          } else if (regversion==6){
-            # reg<-lm(eval(exparse(lhs))~ccy+upcusip+ytm_bucket+rating_bucket+sicfac+liq_bucket,data=dt)
-          } else if (regversion==7){
-           # regversion 7, like 6 but w/o sicfac
-            reg<-lm(eval(exparse(lhs))~ccy+upcusip+ytm_bucket+rating_bucket+liq_bucket,data=dt)
-          } else if (regversion==8){
-           # regversion 8, like 7 but only focus on liq
-            reg<-lm(eval(exparse(lhs))~ccy+upcusip+ytm_bucket+liq_bucket,data=dt)
-          } else if (regversion==9){
-            reg<-lm(eval(exparse(lhs))~ccy+upcusip+ytm_bucket+ccy*rating_bucket,data=dt)
-          }
-      }, error=function(err){
-        print(err)
-        print(bylist)
-        #reg<-data.table(coefficients=as.numeric(NA))
-        # return(data.table('ccy'='eur','est'=NA,se=NA))
-      })
-        if (exists('reg')){
-            if (regversion==9){
-            dtcoef2<-(coef(summary(reg)) %>% as.data.table(keep.rownames=T))[rn %like% '^ccy' | rn %like% '^rating'][,.(ccy=rn,est=Estimate,se=`Cluster s.e.`)] 
-          } else{
-            dtcoef2<-(coef(summary(reg)) %>% as.data.table(keep.rownames=T))[rn %like% '^ccy',.(ccy=str_sub(rn,4),est=Estimate,se=`Cluster s.e.`)]
-            dtccy<-data.table('ccy'=ccylist);dtccy %>% setkey(ccy)
-            dtcoef2 %>% setkey(ccy)
-            dtcoef2 <- dtcoef2[dtccy[ccy!='1usd']]
-          }
-          dtcoef2
-
-        } else {
-          return(data.table('ccy'='eur','est'=as.numeric(NA),se=as.numeric(NA)))
-        }
-        
-    }
-    ccylist<-(df2 %>% distinct(ccy) %>% select(ccy))[[1]]
+      ccylist<-(df2 %>% distinct(ccy) %>% select(ccy))[[1]]
     if (parallel.core>1){     
       require(doParallel) 
-      setkey(df2 ,'date')
-      indx<-split(seq(nrow(df2)),df2$date)
-      registerDoParallel(parallel.core)
-      out_list <- foreach(i = indx, .packages = packages.do.export ) %dopar% {
+      setkey(df2 ,'date'); indx<-split(seq(nrow(df2)),df2$date); registerDoParallel(parallel.core)
+      out_list <- foreach(i = indx, .packages = packages.do.export,.export=c('regfun')) %dopar% {
         Psubset<-df2[i,]
-        dtsubsetout<-regfun(Psubset,ccylist,version,Psubset[1,.(date)])
+        dtsubsetout<-regfun(Psubset,ccylist,version,Psubset[1,.(date)],lhs,mainccy.=mainccy)
         dtsubsetout[,date:=Psubset[1,.(date)]]
         dtsubsetout
       }
       regresult <- rbindlist(out_list,use.names=TRUE) #, fill=TRUE, etc.
-    } else{
-      regresult<-df2[,regfun(.SD,ccylist,version,.BY),by='date',.SDcols=c(lhs,'ccy','upcusip','ytm_bucket','rating_bucket','liq_bucket')]
+    } else{ #non parallel version
+      regresult<-df2[,regfun(.SD,ccylist,version,.BY,lhs,mainccy.=mainccy),by='date'] #,.SDcols=c(lhs,'ccy','upcusip','ytm_bucket','rating_bucket','liq_bucket','amt','amt_bucket','senior','liq')
     }
     regresult %>% setkey(date,ccy)
-    regcoef <- regresult %>% dcast.data.table(date~ccy,value.var='est'); 
-    regcoef %>% setkey(date)
+    regcoef <- regresult %>% dcast.data.table(date~ccy,value.var='est') %>% setkey(date)
     regse <- regresult %>% dcast.data.table(date~ccy,value.var='se'); regse %>% setkey(date)
     lsout<-list('regcoef'=regcoef,'regse'=regse,'regresult'=regresult,'dtreg'=df2)
     lsout
@@ -804,173 +903,210 @@ dtl.addswapsprd<-function(dtl,prl){
   dtl
 }
 
+icollapse.againstall<-function(dtin.,ccyA='eur',collapse.freq='month',filter=0){
+  # newer version of collapsing against all ccy in calculating mu
+  #ccyA="eur";dtin.<-dtiss.in
+  
+  if (ccyA=='eur'){ 
+    natA<-'eurozone'
+  } else if(ccyA=='gbp'){
+    natA<-'united kingdom'
+  } else if(ccyA=='jpy'){
+    natA<-'japan'
+  } else if(ccyA=='aud'){
+    natA<-'australia'
+  } else if(ccyA=='chf'){
+    natA<-'switzerland'
+  } else if(ccyA=='cad'){
+    natA<-'canada'
+  } else if(ccyA=='usd'){
+    natA<-'united states'
+  } else {stop(str_c('no ccy country match: ',ccyA))}
+  
+  # allccys <- dtin.[,.N,ccy]$ccy
+  #   otherccys <-allccys[allccys %nlk% ccyA] 
 
-  icollapse3<-function(dtin.,ccyA=dtin.[str_to_lower(ccy) %nlk% 'usd'][1,str_to_lower(ccy)]){
-    # newer version of collapsing 
-    # todo: construct and use modupccy
-    #ccyA="eur";natA="Eurozone"
-     
+  #   dtin.
+  #   dtin.2 <- dtin. %>% add.earlist.iss.in.ccy()
     
-    if (ccyA=='eur') natA<-'eurozone'
-    else if (ccyA=='gbp') natA<-'united kingdom'
-    else if (ccyA=='jpy') natA<-'japan'
-    else if (ccyA=='aud') natA<-'australia'
-    else if (ccyA=='chf') natA<-'switzerland'
-    else if (ccyA=='cad') natA<-'canada'
-    else if (ccyA=='usd') return(data.table(NA))
-    else stop(str_c('no ccy country match: ',ccyA))
-
-    print(str_c('collapsing using: ', ccyA, ' ',natA))
-    dtin<-copy(dtin.[d>=ymd('2002-01-01')])
-    dtin[,ccy:=str_to_lower(ccy)]
-    dtin[,modnat:=str_to_lower(modnat)]
-    dtin<-dtin[modnat %in% c(natA,'united states') & ccy %in% c('usd','1usd',natA)]
-    natA=str_to_lower(natA)
-    dtin[,yrmo:=as.numeric(format(d,'%Y%m'))]
-    # Yankee isuance
-    df_fUSD<-dtin[modnat==str_to_lower(natA) & ccy %like% 'usd|1usd',.(I_fUSD=sum(amt)/1000),by=yrmo]
-    # reverse yankee
-    df_usF<-dtin[modnat=='united states' & ccy==ccyA,.(I_usF=sum(amt)/1000),by=yrmo]
-    # issuance from both countries in either currencies
-    df_both<-dtin[modnat %in% c(natA,'united states') & ccy %in% c(ccyA,'usd'),.(I_both=sum(amt)/1000),by=yrmo]
-
-    setkey(df_fUSD,yrmo)
-    setkey(df_usF,yrmo)
-    setkey(df_both,yrmo)
-    df_all<-df_both %>% merge(df_fUSD,by='yrmo',all=TRUE) %>% merge(df_usF,by='yrmo',all=TRUE)
-    df_all[is.na(I_fUSD),I_fUSD:=0][is.na(I_usF),I_usF:=0][,date:=as.Date(str_c(yrmo,"01"),format="%Y%m%d")]
-    # net flow are net Yankee flow
-    df_all[,I_netflow:=I_fUSD-I_usF][,i_netflow:=I_netflow/I_both*100]
-    dtout<-df_all %>% expandfulldates(.) %>% as.data.table()
-    dtout[,ccy:=ccyA]
-    dtout %>% setkey(date,ccy)
-    dtout
-  }
-  icollapse4<-function(dtin.,ccyA=dtin.[str_to_lower(ccy) %nlk% 'usd'][1,str_to_lower(ccy)],collapse.freq='month',filter=0){
-    # newer version of collapsing 
-    # todo: construct and use modupccy
-    #ccyA="eur";dtin.<-dtin
-    require(doParallel)
-    if (ccyA=='eur') natA<-'eurozone'
-    else if (ccyA=='gbp') natA<-'united kingdom'
-    else if (ccyA=='jpy') natA<-'japan'
-    else if (ccyA=='aud') natA<-'australia'
-    else if (ccyA=='chf') natA<-'switzerland'
-    else if (ccyA=='cad') natA<-'canada'
-    else if (ccyA=='usd') return(data.table(NA))
-    else stop(str_c('no ccy country match: ',ccyA))
-
-    if (filter==1){ # issued in both ccy before
-      dtin.<-dtin.[ccy %in% c(ccyA,'usd','1usd')][!is.na(eval(exparse(str_c('earlist.',ccyA)))) & !is.na(earlist.usd)][d>=earlist.usd & d>=eval(exparse(str_c('earlist.',ccyA)))]
-    } else if (filter==2){ # issued in both ccy ever (before and after)
-      dtin.<-dtin.[ccy %in% c(ccyA,'usd','1usd')][!is.na(eval(exparse(str_c('earlist.',ccyA)))) & !is.na(earlist.usd)]
-    }
-
+  #   if (filter==1){ # issued in both ccy before
+  #     dtin.<-dtin.[ccy %in% c(ccyA,'usd','1usd')][!is.na(eval(exparse(str_c('earlist.',ccyA)))) & !is.na(earlist.usd)][d>=earlist.usd & d>=eval(exparse(str_c('earlist.',ccyA)))]
+  #   } else if (filter==2){ # issued in both ccy ever (before and after)
+  #     dtin.<-dtin.[ccy %in% c(ccyA,'usd','1usd')][!is.na(eval(exparse(str_c('earlist.',ccyA)))) & !is.na(earlist.usd)]
+  #   }
+    
     #print(str_c('collapsing using: ', ccyA, ' ',natA))
     dtin<-copy(dtin.[d>=ymd('2002-01-01')])
     dtin[,ccy:=str_to_lower(ccy)]
     dtin[,modnat:=str_to_lower(modnat)]
-    dtin<-dtin[modnat %in% c(natA,'united states') & ccy %in% c('usd','1usd',ccyA)]
-    natA=str_to_lower(natA)
+    dtin<-dtin[modnat %in% c(natA)]
+    
     dtin[,date:=floor_date(d,collapse.freq)]
     
     # basic summation in this section: cannot yet do add/subract/divid/multiple since rows are different
-    # Yankee isuance
-    dtin[modnat==natA & ccy %like% 'usd|1usd',I_fUSD:=sum(na.omit(amt))/1000,by=date]
-    # reverse yankee
-    dtin[modnat=='united states' & ccy==ccyA,I_usF:=sum(na.omit(amt))/1000,by=date]
-    # issuance from both countries in either currencies
-    dtin[,I_both:=sum(na.omit(amt))/1000,by=date]
-    # mu: issuance only in usd/total issuance
-    dtin[ccy %like% 'usd|1usd',I_usd_tot:=sum(na.omit(amt))/1000,by=date]
-    
-    
+    # domestic issuance
+    dtin[ccy==ccyA,I_domestic:=sum(na.omit(amt))/1000,by=date]
+    # foreign
+    dtin[ccy!=ccyA,I_foreign:=sum(na.omit(amt))/1000,by=date]
+    # total 
+    dtin[,I_total:=sum(na.omit(amt))/1000,by=date]
 
     # first collapse into unique values by all columns, but each of the variables appear on a different row
-    dt2<-dtin[,.(date,I_fUSD,I_usF,I_both,I_usd_tot)] %>% unique()    
+    dt2<-dtin[,.(date,I_domestic,I_foreign,I_total)] %>% unique()    
     # get rid of NAs by combining rows of identical yrmo, first melt into long, get rid of NAs, then cast back to wide
     dtout<-(dt2[order(date)] %>% melt(id.vars=c('date')))[!is.na(value)] %>% dcast.data.table(date~variable,fun=function(x) {if(length(unique(x))>1) {print('error with collapsing'); browser()}; first(x)})
     
-    # when there are no flow for a certain month, use zero
-    dtout[is.na(I_fUSD),I_fUSD:=0][is.na(I_usF),I_usF:=0][is.na(I_usd_tot),I_usd_tot:=0]
-
-    # Calculations based on earlier summations: net flow are net Yankee flow
-    dtout[,I_netflow:=I_fUSD-I_usF][,i_netflow:=I_netflow/I_both*100][,mu:=I_usd_tot/I_both]
+    # when there are no issuance for a certain month, use zero
+    dtout[is.na(I_domestic),I_domestic:=0][is.na(I_foreign),I_foreign:=0][is.na(I_total),I_usd_total:=0]
     
-    # cacluate a smooth version
-    dtout[,I_both_12m.L.avg:=rowMeans(dtout[,shift(I_both,n=0:11,type='lag')])]
-    dtout[,i_netflow.smooth:=I_netflow/I_both_12m.L.avg*100] 
-
+    # Calculations based on earlier summations: mu
+    dtout[,mu:=I_domestic/I_total*100]
+    
     # check to make sure there's no dates missing in case there is a month without any issuance at all!
     dtout<-dtout %>% expandfulldates(.,freq=collapse.freq) %>% as.data.table()
+    
+    # # cacluate a smooth version: this is actually less smooth
+    # if (collapse.freq=='month'){
+    #   navg=11  
+    # }else if (collapse.freq=='quarter'){
+    #   navg=3
+    # }else if (collapse.freq=='year'){
+    #   navg=1
+    # }
+    # dtout[,I_total_L.avg:=rowMeans(dtout[,shift(I_total,n=0:navg,type='lag')])]
+    # dtout[,mu.smooth:=I_domestic/I_total_L.avg*100] 
+    # 
     # if(nrow(dtout)!=dtout_check) {print('missing issuance in certain months, set to 0');browser()}
     dtout[,ccy:=ccyA]
     dtout %>% setkey(date,ccy)
     dtout
   }
 
-  
-  icollapse4.mature<-function(dtin.,ccyA=dtin.[str_to_lower(ccy) %nlk% 'usd'][1,str_to_lower(ccy)],collapse.freq='month',filter=2){
-    # newer version of collapsing 
-    # todo: construct and use modupccy
-    #ccyA="eur";dtin.<-dtin
-    #dtin.=dtin2;  ccyA='eur';  freq='month';  filter=0;
-    if (ccyA=='eur') natA<-'eurozone'
-    else if (ccyA=='gbp') natA<-'united kingdom'
-    else if (ccyA=='jpy') natA<-'japan'
-    else if (ccyA=='aud') natA<-'australia'
-    else if (ccyA=='chf') natA<-'switzerland'
-    else if (ccyA=='cad') natA<-'canada'
-    else if (ccyA=='usd') return(data.table(NA))
-    else stop(str_c('no ccy country match: ',ccyA))
-    natA=str_to_lower(natA)
-    
-    if (filter==1){ # issued in both ccy before
-      dtin.<-dtin.[ccy %in% c(ccyA,'usd','1usd')][!is.na(eval(exparse(str_c('earlist.',ccyA)))) & !is.na(earlist.usd)][mat2>=earlist.usd & mat2>=eval(exparse(str_c('earlist.',ccyA)))]
-    } else if (filter==2){ # issued in both ccy ever (before and after)
-      dtin.<-dtin.[ccy %in% c(ccyA,'usd','1usd')][!is.na(eval(exparse(str_c('earlist.',ccyA)))) & !is.na(earlist.usd)]
-    } else{
-      dtin.<-dtin.[ccy %in% c(ccyA,'usd','1usd')]
+    icollapse4<-function(dtin.,ccyA=dtin.[str_to_lower(ccy) %nlk% 'usd'][1,str_to_lower(ccy)],collapse.freq='month',filter=0){
+      # newer version of collapsing 
+      # todo: construct and use modupccy
+      #ccyA="eur";dtin.<-dtin
+      require(doParallel)
+      if (ccyA=='eur') natA<-'eurozone'
+      else if (ccyA=='gbp') natA<-'united kingdom'
+      else if (ccyA=='jpy') natA<-'japan'
+      else if (ccyA=='aud') natA<-'australia'
+      else if (ccyA=='chf') natA<-'switzerland'
+      else if (ccyA=='cad') natA<-'canada'
+      else if (ccyA=='usd') return(data.table(NA))
+      else stop(str_c('no ccy country match: ',ccyA))
+
+      if (filter==1){ # issued in both ccy before
+        dtin.<-dtin.[ccy %in% c(ccyA,'usd','1usd')][!is.na(eval(exparse(str_c('earlist.',ccyA)))) & !is.na(earlist.usd)][d>=earlist.usd & d>=eval(exparse(str_c('earlist.',ccyA)))]
+      } else if (filter==2){ # issued in both ccy ever (before and after)
+        dtin.<-dtin.[ccy %in% c(ccyA,'usd','1usd')][!is.na(eval(exparse(str_c('earlist.',ccyA)))) & !is.na(earlist.usd)]
+      }
+
+      #print(str_c('collapsing using: ', ccyA, ' ',natA))
+      dtin<-copy(dtin.[d>=ymd('2002-01-01')])
+      dtin[,ccy:=str_to_lower(ccy)]
+      dtin[,modnat:=str_to_lower(modnat)]
+      dtin<-dtin[modnat %in% c(natA,'united states') & ccy %in% c('usd','1usd',ccyA)]
+      natA=str_to_lower(natA)
+      dtin[,date:=floor_date(d,collapse.freq)]
+      
+      # basic summation in this section: cannot yet do add/subract/divid/multiple since rows are different
+      # Yankee isuance
+      dtin[modnat==natA & ccy %like% 'usd|1usd',I_fUSD:=sum(na.omit(amt))/1000,by=date]
+      # reverse yankee
+      dtin[modnat=='united states' & ccy==ccyA,I_usF:=sum(na.omit(amt))/1000,by=date]
+      # issuance from both countries in either currencies
+      dtin[,I_both:=sum(na.omit(amt))/1000,by=date]
+      # mu: issuance only in usd/total issuance
+      dtin[ccy %like% 'usd|1usd',I_usd_tot:=sum(na.omit(amt))/1000,by=date]
+      
+      
+
+      # first collapse into unique values by all columns, but each of the variables appear on a different row
+      dt2<-dtin[,.(date,I_fUSD,I_usF,I_both,I_usd_tot)] %>% unique()    
+      # get rid of NAs by combining rows of identical yrmo, first melt into long, get rid of NAs, then cast back to wide
+      dtout<-(dt2[order(date)] %>% melt(id.vars=c('date')))[!is.na(value)] %>% dcast.data.table(date~variable,fun=function(x) {if(length(unique(x))>1) {print('error with collapsing'); browser()}; first(x)})
+      
+      # when there are no flow for a certain month, use zero
+      dtout[is.na(I_fUSD),I_fUSD:=0][is.na(I_usF),I_usF:=0][is.na(I_usd_tot),I_usd_tot:=0]
+
+      # Calculations based on earlier summations: net flow are net Yankee flow
+      dtout[,I_netflow:=I_fUSD-I_usF][,i_netflow:=I_netflow/I_both*100][,mu:=I_usd_tot/I_both]
+      
+      # cacluate a smooth version
+      dtout[,I_both_12m.L.avg:=rowMeans(dtout[,shift(I_both,n=0:11,type='lag')])]
+      dtout[,i_netflow.smooth:=I_netflow/I_both_12m.L.avg*100] 
+
+      # check to make sure there's no dates missing in case there is a month without any issuance at all!
+      dtout<-dtout %>% expandfulldates(.,freq=collapse.freq) %>% as.data.table()
+      # if(nrow(dtout)!=dtout_check) {print('missing issuance in certain months, set to 0');browser()}
+      dtout[,ccy:=ccyA]
+      dtout %>% setkey(date,ccy)
+      dtout
     }
+
     
-    print(str_c('collapsing using: ', ccyA, ' ',natA))
-    dtin<-copy(dtin.[d>=ymd('2002-01-01')])
-    dtin[,ccy:=str_to_lower(ccy)]
-    dtin[,modnat:=str_to_lower(modnat)]
-    dtin<-dtin[modnat %in% c(natA,'united states') & ccy %in% c('usd','1usd',ccyA)]
-    dtin[,date:=floor_date(mat2,collapse.freq)]
-    dtin <- dtin[!is.na(date)]
-    
-    # basic summation in this section: cannot yet do add/subract/divid/multiple since rows are different
-    # Yankee isuance
-    dtin[modnat==natA & ccy %like% 'usd|1usd',I_fUSD:=sum(na.omit(amt))/1000,by=date]
-    
-    # reverse yankee
-    dtin[modnat=='united states' & ccy==ccyA,I_usF:=sum(na.omit(amt))/1000,by=date]
-    # issuance from both countries in either currencies
-    dtin[,I_both:=sum(na.omit(amt))/1000,by=date]
-    # mu: issuance only in usd/total issuance
-    dtin[ccy %like% 'usd|1usd',I_usd_tot:=sum(na.omit(amt))/1000,by=date]
-     
-    
-    # first collapse into unique values by all columns, but each of the variables appear on a different row
-    dt2<-dtin[,.(date,I_fUSD,I_usF,I_both,I_usd_tot)] %>% unique()    
-    # get rid of NAs by combining rows of identical yrmo, first melt into long, get rid of NAs, then cast back to wide
-    dtout<-(dt2[order(date)] %>% melt(id.vars=c('date')))[!is.na(value)] %>% dcast.data.table(date~variable,fun=function(x) {if(length(unique(x))>1) {print('error with collapsing'); browser()}; first(x)})
-    
-    # when there are no flow for a certain month, use zero
-    dtout[is.na(I_fUSD),I_fUSD:=0][is.na(I_usF),I_usF:=0][is.na(I_usd_tot),I_usd_tot:=0]
-    
-    # Calculations based on earlier summations: net flow are net Yankee flow
-    dtout[,I_netflow:=I_fUSD-I_usF][,i_netflow:=I_netflow/I_both*100][,mu:=I_usd_tot/I_both]
-    
-    # check to make sure there's no dates missing in case there is a month without any issuance at all!
-    dtout<-dtout %>% expandfulldates(.,freq=collapse.freq) %>% as.data.table()
-    #if(nrow(dtout)!=dtout_check) {print('missing issuance in certain months, set to 0');}
-    dtout[,ccy:=ccyA]
-    dtout %>% setkey(date,ccy)
-    dtout 
-  } 
+    icollapse4.mature<-function(dtin.,ccyA=dtin.[str_to_lower(ccy) %nlk% 'usd'][1,str_to_lower(ccy)],collapse.freq='month',filter=2){
+      # newer version of collapsing 
+      # todo: construct and use modupccy
+      #ccyA="eur";dtin.<-dtin
+      #dtin.=dtin2;  ccyA='eur';  freq='month';  filter=0;
+      if (ccyA=='eur') natA<-'eurozone'
+      else if (ccyA=='gbp') natA<-'united kingdom'
+      else if (ccyA=='jpy') natA<-'japan'
+      else if (ccyA=='aud') natA<-'australia'
+      else if (ccyA=='chf') natA<-'switzerland'
+      else if (ccyA=='cad') natA<-'canada'
+      else if (ccyA=='usd') return(data.table(NA))
+      else stop(str_c('no ccy country match: ',ccyA))
+      natA=str_to_lower(natA)
+      
+      if (filter==1){ # issued in both ccy before
+        dtin.<-dtin.[ccy %in% c(ccyA,'usd','1usd')][!is.na(eval(exparse(str_c('earlist.',ccyA)))) & !is.na(earlist.usd)][mat2>=earlist.usd & mat2>=eval(exparse(str_c('earlist.',ccyA)))]
+      } else if (filter==2){ # issued in both ccy ever (before and after)
+        dtin.<-dtin.[ccy %in% c(ccyA,'usd','1usd')][!is.na(eval(exparse(str_c('earlist.',ccyA)))) & !is.na(earlist.usd)]
+      } else{
+        dtin.<-dtin.[ccy %in% c(ccyA,'usd','1usd')]
+      }
+      
+      print(str_c('collapsing using: ', ccyA, ' ',natA))
+      dtin<-copy(dtin.[d>=ymd('2002-01-01')])
+      dtin[,ccy:=str_to_lower(ccy)]
+      dtin[,modnat:=str_to_lower(modnat)]
+      dtin<-dtin[modnat %in% c(natA,'united states') & ccy %in% c('usd','1usd',ccyA)]
+      dtin[,date:=floor_date(mat2,collapse.freq)]
+      dtin <- dtin[!is.na(date)]
+      
+      # basic summation in this section: cannot yet do add/subract/divid/multiple since rows are different
+      # Yankee isuance
+      dtin[modnat==natA & ccy %like% 'usd|1usd',I_fUSD:=sum(na.omit(amt))/1000,by=date]
+      
+      # reverse yankee
+      dtin[modnat=='united states' & ccy==ccyA,I_usF:=sum(na.omit(amt))/1000,by=date]
+      # issuance from both countries in either currencies
+      dtin[,I_both:=sum(na.omit(amt))/1000,by=date]
+      # mu: issuance only in usd/total issuance
+      dtin[ccy %like% 'usd|1usd',I_usd_tot:=sum(na.omit(amt))/1000,by=date]
+       
+      
+      # first collapse into unique values by all columns, but each of the variables appear on a different row
+      dt2<-dtin[,.(date,I_fUSD,I_usF,I_both,I_usd_tot)] %>% unique()    
+      # get rid of NAs by combining rows of identical yrmo, first melt into long, get rid of NAs, then cast back to wide
+      dtout<-(dt2[order(date)] %>% melt(id.vars=c('date')))[!is.na(value)] %>% dcast.data.table(date~variable,fun=function(x) {if(length(unique(x))>1) {print('error with collapsing'); browser()}; first(x)})
+      
+      # when there are no flow for a certain month, use zero
+      dtout[is.na(I_fUSD),I_fUSD:=0][is.na(I_usF),I_usF:=0][is.na(I_usd_tot),I_usd_tot:=0]
+      
+      # Calculations based on earlier summations: net flow are net Yankee flow
+      dtout[,I_netflow:=I_fUSD-I_usF][,i_netflow:=I_netflow/I_both*100][,mu:=I_usd_tot/I_both]
+      
+      # check to make sure there's no dates missing in case there is a month without any issuance at all!
+      dtout<-dtout %>% expandfulldates(.,freq=collapse.freq) %>% as.data.table()
+      #if(nrow(dtout)!=dtout_check) {print('missing issuance in certain months, set to 0');}
+      dtout[,ccy:=ccyA]
+      dtout %>% setkey(date,ccy)
+      dtout 
+    } 
   
 expandfulldates<-function(dfin,freq='month'){
     #dfin<-dtout;freq='month'
@@ -1934,7 +2070,7 @@ ggplotw.comp<-function(dtin){
   X11(width=15,height = 9)
   print(dtin[,.(date,eur,i.eur)] %>% ggplotw())
   dev.flush();flush.console();Sys.sleep(1)
-  keyPressed = readkeygraph("[press any key to continue]")
+  keyPressed = readkeygraph("[press any key to continue]") 
   print(dtin[,.(date,gbp,i.gbp)] %>% ggplotw())
   dev.flush();flush.console();Sys.sleep(1)
   keyPressed = readkeygraph("[press any key to continue]")
@@ -1949,6 +2085,20 @@ ggplotw.comp<-function(dtin){
   keyPressed = readkeygraph("[press any key to continue]")
   print(dtin[,.(date,cad,i.cad)] %>% ggplotw())
   dev.flush();flush.console();Sys.sleep(1)
+}
+ggplotw.comp2<-function(dtA,dtB,labout=c('Main Result','Additional Controls')){
+  require(gridExtra)
+  dtp<-dtA[dtB]   
+  fig<-list()
+  fig[[length(fig)+1]]<- dtp[,.(date,eur,i.eur)] %>% melt(id.vars='date') %>% ggplot(aes(date,value))+geom_line(aes(linetype=variable,colour=variable))+geom_hline(yintercept=0,colour='lightblue')+ggtitle('eur')+theme_few()+theme(legend.position='none')+xlab('')+ylab('')+scale_x_date(breaks=scales::pretty_breaks(n=7))+scale_color_discrete('',labels = labout)+scale_linetype_discrete('',labels = labout)
+  fig[[length(fig)+1]]<- dtp[,.(date,gbp,i.gbp)] %>% melt(id.vars='date') %>% ggplot(aes(date,value))+geom_line(aes(linetype=variable,colour=variable))+geom_hline(yintercept=0,colour='lightblue')+ggtitle('gbp')+theme_few()+theme(legend.position='none')+xlab('')+ylab('')+scale_x_date(breaks=scales::pretty_breaks(n=7))
+  fig[[length(fig)+1]]<- dtp[,.(date,jpy,i.jpy)] %>% melt(id.vars='date') %>% ggplot(aes(date,value))+geom_line(aes(linetype=variable,colour=variable))+geom_hline(yintercept=0,colour='lightblue')+ggtitle('jpy')+theme_few()+theme(legend.position='none')+xlab('')+ylab('')+scale_x_date(breaks=scales::pretty_breaks(n=7))
+  fig[[length(fig)+1]]<- dtp[,.(date,aud,i.aud)] %>% melt(id.vars='date') %>% ggplot(aes(date,value))+geom_line(aes(linetype=variable,colour=variable))+geom_hline(yintercept=0,colour='lightblue')+ggtitle('aud')+theme_few()+theme(legend.position='none')+xlab('')+ylab('')+scale_x_date(breaks=scales::pretty_breaks(n=7))
+  fig[[length(fig)+1]]<- dtp[,.(date,chf,i.chf)] %>% melt(id.vars='date') %>% ggplot(aes(date,value))+geom_line(aes(linetype=variable,colour=variable))+geom_hline(yintercept=0,colour='lightblue')+ggtitle('chf')+theme_few()+theme(legend.position='none')+xlab('')+ylab('')+scale_x_date(breaks=scales::pretty_breaks(n=7))
+  fig[[length(fig)+1]]<- dtp[,.(date,cad,i.cad)] %>% melt(id.vars='date') %>% ggplot(aes(date,value))+geom_line(aes(linetype=variable,colour=variable))+geom_hline(yintercept=0,colour='lightblue')+ggtitle('cad')+theme_few()+theme(legend.position='none')+xlab('')+ylab('')+scale_x_date(breaks=scales::pretty_breaks(n=7))
+  legendcommon<-get_legend(fig[[1]]+theme(legend.position='bottom'))
+  fig.all<-grid.arrange(fig[[1]],fig[[2]],fig[[3]],fig[[4]],fig[[5]],fig[[6]],legendcommon,ncol=3,nrow=3,layout_matrix=rbind(c(1,2,3),c(4,5,6),c(7,7,7)),heights=c(2.25,2.25,.25))
+  fig.all
 }
 
 dt2clip = function(x,sep="\t",col.names=T,...) { 
@@ -2140,6 +2290,15 @@ reg.newey.all<-function(dtreg.,formula.){
   result<-(rbindlist(result) %>% dcast(order+rn+variable~varname))[order(order,rn,variable)][,!c('order','variable'),with=F]
   result[,.(rn,eur,gbp,jpy,aud,chf,cad)] #%T>% dt2clip
 }
+reg.newey.all2<-function(dtreg.,formula.){
+  result<-list()
+  for (iccy in dtreg.[,.N,ccy]$ccy){
+    result[[length(result)+1]]<-dtreg.[ccy==iccy] %>% neweymod(formula.,value.name=iccy)
+  }
+  result<-(rbindlist(result) %>% dcast(order+rn+variable~varname))[order(order,rn,variable)][,!c('order','variable'),with=F]
+  result[] #%T>% dt2clip
+}
+
 
 regformat<-function(dtin,formula,value.name='',setype='HC0',regtype='felm'){
   # generic regression format

@@ -1,3 +1,28 @@
+rm(list=ls())
+setwd("/Users/gliao/Dropbox/Research/ccy basis/creditmigration")
+rmarkdown::render('results_161018.R',clean=F)
+
+
+rmarkdown::render('results_161007.R',output_format='all',output_dir = '/Users/gliao/Documents',intermediates_dir='/Users/gliao/Documents',clean=F)
+rmarkdown::render('results_161007.R',output_format='all',output_dir = 'C:/Users/gliao/Documents',intermediates_dir='C:/Users/gliao/Documents',clean=F)
+#rmarkdown::render('results_161007.R',output_format='html_document')
+#rmarkdown::render('results_161007.R',output_format='pdf_document',output_dir = 'C:/Users/gliao/Documents',intermediates_dir='C:/Users/gliao/Documents')
+
+
+
+rmarkdown::render('test.R',params='ask',output_format='all',output_dir = '/Users/gliao/Documents',intermediates_dir='/Users/gliao/Documents')
+
+
+
+#rmarkdown::render('test.R',output_format='html_document')
+
+
+
+
+
+
+
+
 #' ---
 #' title: "test"
 #' date: "Oct 07,2016"
@@ -41,7 +66,7 @@ RStata::stata('di "test"
 #' 
 #+ test name of, include=TRUE 
 src='
-  clear matrix
+clear matrix
 set more off
 set matsize 10000
 use tempvar
@@ -66,14 +91,3 @@ graph export "../paper/figures/VAR_irfeur_A.png",replace
 
 stata(src)
 #' ![](../paper/figures/VAR_irfeur_A.png)
-  
-#rmarkdown::render('test.R',output_format='html_document')
-setwd("/Users/gliao/Dropbox/Research/ccy basis/creditmigration")
-rmarkdown::render('results_161007.R',output_format='all',output_dir = '/Users/gliao/Documents',intermediates_dir='/Users/gliao/Documents')
-rmarkdown::render('results_161007.R',output_format='all',output_dir = 'C:/Users/gliao/Documents',intermediates_dir='C:/Users/gliao/Documents')
-#rmarkdown::render('results_161007.R',output_format='html_document')
-#rmarkdown::render('results_161007.R',output_format='pdf_document',output_dir = 'C:/Users/gliao/Documents',intermediates_dir='C:/Users/gliao/Documents')
-
-
-
-rmarkdown::render('test.R',output_format='all',output_dir = '/Users/gliao/Documents',intermediates_dir='/Users/gliao/Documents')

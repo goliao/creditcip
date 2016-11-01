@@ -498,7 +498,7 @@ resyldsprd<-function(dtlin,pricein,regversion=2){
 }
 getccyFE<-function(dfin,fieldstr='OAS_SPREAD_BID',version=2,winsor=.01){
 #  dfin<-dtl2
-print(str_c('FE on field: ',fieldstr))
+  print(str_c('FE on field: ',fieldstr))
   # df2<-dfin[field==fieldstr,.(date,ccy,value,upcusip,ytm,rating_bucket)]
   df2<-dfin[field==fieldstr]
   setkey(df2,date,upcusip,ccy)
@@ -593,7 +593,7 @@ preprocess<-function(bondref,dtl,prl,monthlyonly=TRUE,issfiltertype=2){
     setkey(pk_daily,pk)
     dtl<-dtl[pk_daily]
   }
-  dtl2<-dtl[br[,.(ccy,mat2,nrating,upcusip,pk,ytofm,sicfac,sic1)],nomatch=0]
+  dtl2<-dtl[br[,.(ccy,mat2,nrating,upcusip,pk,ytofm,sicfac,sic1,amt)],nomatch=0]
   dtl2[,ytm:=as.numeric((mat2-date)/365)]
   dtl3<-dtl2[ytm >.05]
   dtl3[is.na(nrating),nrating:=0]
@@ -628,6 +628,7 @@ preprocess<-function(bondref,dtl,prl,monthlyonly=TRUE,issfiltertype=2){
   toc()
   list('prw'=prw,'prl'=prl,'dtl4'=dtl4,'br'=br)
 }
+#new: windsorize by date and ccy
 resyldsprdv3new<-function(dtlin,pricein,regversion=2,globaluponly=1,returndt=0,approxrule=1,adjccybs=0){
   # v3 improvement: using swap data
   # Residualize yld sprd ----------------------------------------------------
@@ -650,13 +651,13 @@ resyldsprdv3new<-function(dtlin,pricein,regversion=2,globaluponly=1,returndt=0,a
   
   if (adjccybs==1){
     message('adj. for ccy basis')
-    swappricesl<-pricein[ticker %like% '^ussw' | ticker %like% '^eusz' | ticker %like% '^bpsz' | ticker %like% '^jysz' | ticker %like% '^adsz',.(date,ticker,value)] 
+    swappricesl<-pricein[ticker %like% '^ussw' | ticker %like% '^eusz' | ticker %like% '^bpsz' | ticker %like% '^jysz' | ticker %like% '^adsz' | ticker %like% '^cdsz\\d+' | ticker %like% '^sfsz\\d+',.(date,ticker,value)] 
   } else{ # just getting swap spread
-    swappricesl<-pricein[ticker %like% '^\\w\\wsw\\d+'][ticker %like% '^ussw' | ticker %like% '^eusw' | ticker %like% '^bpsw' | ticker %like% '^jysw' | ticker %like% '^adsw',.(date,ticker,value)]   
+    swappricesl<-pricein[ticker %like% '^\\w\\wsw\\d+'][ticker %like% '^ussw' | ticker %like% '^eusw' | ticker %like% '^bpsw' | ticker %like% '^jysw' | ticker %like% '^adsw' | ticker %like% '^cdsw\\d+' | ticker %like% '^sfsw\\d+',.(date,ticker,value)]   
   }
   swappricesl<-swappricesl[ticker!='euswec' & ticker!='bpswsc'] # get rid of 3 month
   setnames(swappricesl,'ticker','field')
-  swappricesl[,ccy:=stringr::str_sub(field,1,2)][ccy=='eu',ccy:='eur'][ccy=='us',ccy:='usd'][ccy=='bp',ccy:='gbp'][ccy=='jy',ccy:='jpy'][ccy=='ad',ccy:='aud'][,tenor:=as.numeric(str_extract(field,regex('\\d+')))]
+  swappricesl[,ccy:=stringr::str_sub(field,1,2)][ccy=='eu',ccy:='eur'][ccy=='us',ccy:='usd'][ccy=='bp',ccy:='gbp'][ccy=='jy',ccy:='jpy'][ccy=='ad',ccy:='aud'][ccy=='cd',ccy:='cad'][ccy=='sf',ccy:='chf'][,tenor:=as.numeric(str_extract(field,regex('\\d+')))]
   #swappricesl[,.N,ticker][,.(field,tictenor=str_sub(ticker,5))] 
   if (swappricesl[is.na(tenor),.N]!=0) warning('swappricesl has tenor not parsed')
   setkey(swappricesl,date,ccy,tenor,field)
@@ -713,13 +714,13 @@ resyldsprdv3<-function(dtlin,pricein,regversion=2,globaluponly=1,returndt=0,appr
   
   if (adjccybs==1){
     message('adj. for ccy basis')
-    swappricesl<-pricein[ticker %like% '^ussw' | ticker %like% '^eusz' | ticker %like% '^bpsz' | ticker %like% '^jysz' | ticker %like% '^adsz',.(date,ticker,value)] 
+    swappricesl<-pricein[ticker %like% '^ussw' | ticker %like% '^eusz' | ticker %like% '^bpsz' | ticker %like% '^jysz' | ticker %like% '^adsz' | ticker %like% '^cdsz\\d+' | ticker %like% '^sfsz\\d+',.(date,ticker,value)] 
   } else{ # just getting swap spread
-    swappricesl<-pricein[ticker %like% '^\\w\\wsw\\d+'][ticker %like% '^ussw' | ticker %like% '^eusw' | ticker %like% '^bpsw' | ticker %like% '^jysw' | ticker %like% '^adsw',.(date,ticker,value)]   
+    swappricesl<-pricein[ticker %like% '^\\w\\wsw\\d+'][ticker %like% '^ussw' | ticker %like% '^eusw' | ticker %like% '^bpsw' | ticker %like% '^jysw' | ticker %like% '^adsw' | ticker %like% '^cdsw\\d+' | ticker %like% '^sfsw\\d+',.(date,ticker,value)]   
   }
   swappricesl<-swappricesl[ticker!='euswec' & ticker!='bpswsc'] # get rid of 3 month
   setnames(swappricesl,'ticker','field')
-  swappricesl[,ccy:=stringr::str_sub(field,1,2)][ccy=='eu',ccy:='eur'][ccy=='us',ccy:='usd'][ccy=='bp',ccy:='gbp'][ccy=='jy',ccy:='jpy'][ccy=='ad',ccy:='aud'][,tenor:=as.numeric(str_extract(field,regex('\\d+')))]
+  swappricesl[,ccy:=stringr::str_sub(field,1,2)][ccy=='eu',ccy:='eur'][ccy=='us',ccy:='usd'][ccy=='bp',ccy:='gbp'][ccy=='jy',ccy:='jpy'][ccy=='ad',ccy:='aud'][ccy=='cd',ccy:='cad'][ccy=='sf',ccy:='chf'][,tenor:=as.numeric(str_extract(field,regex('\\d+')))]
   #swappricesl[,.N,ticker][,.(field,tictenor=str_sub(ticker,5))] 
   if (swappricesl[is.na(tenor),.N]!=0) warning('swappricesl has tenor not parsed')
   setkey(swappricesl,date,ccy,tenor,field)
@@ -896,11 +897,19 @@ getccyFE2<-function(dfin,fieldstr='OAS_SPREAD_BID',version=2,winsor=.01){
         reg<-lm(value~ccy+upcusip+ytm_bucket+liq_bucket,data=dt)
       }
 
-      data.table(ccyeur=reg$coefficients['ccyeur'],
+      if (nrow(dt[ccy=='chf'])>0){
+        data.table(ccyeur=reg$coefficients['ccyeur'],
         ccygbp=reg$coefficients['ccygbp'],
         ccyjpy=reg$coefficients['ccyjpy'],
         ccyaud=reg$coefficients['ccyaud'],
-        liquid=reg$coefficients['liq_bucket'])
+        ccychf=reg$coefficients['ccychf'],
+        ccycad=reg$coefficients['ccycad'])
+      } else{
+        data.table(ccyeur=reg$coefficients['ccyeur'],
+        ccygbp=reg$coefficients['ccygbp'],
+        ccyjpy=reg$coefficients['ccyjpy'],
+        ccyaud=reg$coefficients['ccyaud'])
+      }
   }
 
   regcoef<-df2[,regfun(.SD,version),by='date']
@@ -933,21 +942,21 @@ bucketytm<-function(dtlin){
 
 
 issfilter<-function(dtin){
-dtout<-dtin
-dtout %<>% filter(
-   amt >= 50,
-   ytofm >= 1,
-   ytofm <= 99999,
-   mdealtype %ni% c("P", "ANPX", "M", "EP", "CEP", "TM", "PP"),
-   secur %ni% c(
-     "Cum Red Pfd Shs",
-     "Non-Cum Pref Sh" ,
-     "Preferred Shs" ,
-     "Pfd Stk,Com Stk"
-   ),
-   !grepl('Government Sponsored Enterprises',tf_mid_desc),!grepl('Flt', secur),!grepl('Zero Cpn', secur),!grepl('Float', secur),!grepl('Fl', descr),
-   !grepl('Zero Cpn', descr),!grepl('Mortgage-backed', issue_type_desc),!grepl('Asset-backed', issue_type_desc),!grepl('Federal Credit Agency', issue_type_desc),!grepl('Loan', descr)
- ) 
+  dtout<-dtin
+  dtout %<>% filter(
+     amt >= 50,
+     ytofm >= 1,
+     ytofm <= 99999,
+     mdealtype %ni% c("P", "ANPX", "M", "EP", "CEP", "TM", "PP"),
+     secur %ni% c(
+       "Cum Red Pfd Shs",
+       "Non-Cum Pref Sh" ,
+       "Preferred Shs" ,
+       "Pfd Stk,Com Stk"
+     ),
+     !grepl('Government Sponsored Enterprises',tf_mid_desc),!grepl('Flt', secur),!grepl('Zero Cpn', secur),!grepl('Float', secur),!grepl('Fl', descr),
+     !grepl('Zero Cpn', descr),!grepl('Mortgage-backed', issue_type_desc),!grepl('Asset-backed', issue_type_desc),!grepl('Federal Credit Agency', issue_type_desc),!grepl('Loan', descr)
+   ) 
 dtout %>% as.data.table()
 }
 

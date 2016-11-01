@@ -4,7 +4,7 @@ set matsize 10000
 
 * use vardatain_1006.dta,clear
 * use vartemp.dta,clear
-use vardatain_1007.dta,clear
+use vardatain_1019.dta,clear
 
 format date %tm
   gen year=year(date)
@@ -44,6 +44,14 @@ drop if date>=date("20160901","YMD")
 
 local graphopt "title("") subtitle("") note("") legend(off) xtitle(month) graphregion(color(white)) bgcolor(white)"
 
+
+var i_netflow credit cip if strccy=="eur", lags(1) 
+  irf create eur_irf, set(irf1,replace) step(10) 
+  irf describe eur_irf
+  irf cgraph  (eur_irf credit credit irf,`graphopt')  (eur_irf credit cip irf,`graphopt')  (eur_irf credit i_netflow irf,`graphopt') (eur_irf cip credit irf,`graphopt') (eur_irf cip cip irf,`graphopt')  (eur_irf cip i_netflow irf,`graphopt') , cols(3) graphregion(color(white)) bgcolor(white)
+  graph export "../paper/figures/VAR_irfeur_A.png",replace
+  
+
 * eur only: with issuance
 	*  ordering is default to the order specified by var function
 	var i_netflow credit cip if strccy=="eur", lags(1) 
@@ -53,6 +61,7 @@ local graphopt "title("") subtitle("") note("") legend(off) xtitle(month) graphr
 	* irf cgraph  (eur_oirf credit credit irf)  (eur_oirf credit cip irf)  (eur_oirf credit i_netflow irf) (eur_oirf cip credit irf) (eur_oirf cip cip irf)  (eur_oirf cip i_netflow irf) , cols(3)
 	* oirf only
 	irf cgraph  (eur_oirf credit credit oirf,`graphopt')  (eur_oirf credit cip oirf,`graphopt')  (eur_oirf credit i_netflow oirf,`graphopt') (eur_oirf cip credit oirf,`graphopt') (eur_oirf cip cip oirf,`graphopt')  (eur_oirf cip i_netflow oirf,`graphopt') , cols(3) graphregion(color(white)) bgcolor(white)
+	irf cgraph  (eur_oirf credit credit oirf,`graphopt')  (eur_oirf credit cip oirf,`graphopt')  (eur_oirf credit i_netflow oirf,`graphopt') (eur_oirf cip credit oirf,`graphopt') (eur_oirf cip cip oirf,`graphopt')  (eur_oirf cip i_netflow oirf,`graphopt') (eur_oirf i_netflow credit oirf,`graphopt') (eur_oirf i_netflow  cip oirf,`graphopt') (eur_oirf i_netflow i_netflow oirf,`graphopt') , cols(3) graphregion(color(white)) bgcolor(white)
 	* graph export "../paper/figures/VAR_oirfeur_161007.eps",replace
 
 
@@ -102,7 +111,7 @@ local graphopt "title("") subtitle("") note("") legend(off) xtitle(month) graphr
 	xtvar i_netflow cip credit if inlist(strccy,"eur","gbp","jpy","chf"), lags(1) step(10) mc
 
 	* all ccy
-	xtvar i_netflow credit cip , lags(1) mc step(12)
+	xtvar i_netflow credit cip , lags(1) mc step(10) ssaving(panelvar161019)
 
 	
 	* doing the version with mu

@@ -208,8 +208,36 @@ dedupe.by.pk2<-function(dtbondref){
 	load('db/archive/bondrefall160806.RData')
 	
 	bondrefall
-	
-	
+
+
+#10/30/16 Add Moody's information
+load('db/archive/bondref160907.RData')
+require('RSQLite')
+source('util.r')
+con <- dbConnect(drv=SQLite(), dbname="../data/Moody/moody.sqlite")
+issu<-dbReadTable(con,'MAST_ISSU') %>% as.data.table()
+ids<-dbReadTable(con,'DEBT_IDS') %>% as.data.table()
+lookup<-dbReadTable(con,'LOOKUP') %>% as.data.table()
+#dtout<-dbGetQuery(con,sql) %>% as.data.table()
+dbDisconnect(con)
+
+issu %>% setkey(MAST_ISSU_NUM)
+ids %>% setkey(MAST_ISSU_NUM)
+
+# ids[ID_NUM_CD=='ISI'] %>% showdups(c('ID_NUM'))
+# ids[ID_NUM_CD=='CUS'] %>% showdups(c('ID_NUM'))
+
+mdyiss<-ids[ID_NUM_CD=='ISI',.(MAST_ISSU_NUM,isin=ID_NUM)][issu]
+mdyiss<-ids[ID_NUM_CD=='CUS',.(MAST_ISSU_NUM,cusip=ID_NUM)][mdyiss]
+mdyiss<-mdyiss[!is.na(isin) | !is.na(cusip)]
+mdyiss[,cu8:=str_sub(cusip,1,8)]
+bondref[,cu8:=str_sub(cusip9,1,8)]
+bondref %>% setkey(isin)
+mdyiss %>% setkey(isin)
+br2<-update.dt(bondref, unique(mdyiss[!is.na(isin)]), 'isin',insertnewrow = F)
+br3<-update.dt(br2,unique(mdyiss[!is.na(cu8)]),'cu8',override = T,insertnewrow = F)
+bondref<-br3	
+save(bondref,readme,file='db/bondref.RData')
 	
 # because dedup.these has 0 rows, there fore we don't really care, and so we can quickly dedupe; but we don't even have to dedupe
 	# A quick way of setting unique
