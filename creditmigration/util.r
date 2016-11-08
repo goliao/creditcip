@@ -2264,6 +2264,7 @@ neweymod<-function(dtin,formula,outformat=0,value.name=''){
     dtout[variable %like% 'Estimate',valuestr:=sprintf("%.3g",value)]
     dtout[variable %like% 'value',valuestr:=sprintf("[%.2f]",value)]
     dtout<-rbind(dtout,data.table('rn'='N','valuestr'=as.character(nrow(dtin))),fill=T)
+    dtout<-rbind(dtout,data.table('rn'='R2','valuestr'=sprintf("%.2f",summary(model)$r.squared)),fill=T)
     dtout<-rbind(dtout,data.table('rn'='Lags','valuestr'=as.character(nlag)),fill=T)
     dtout[,value:=valuestr][,valuestr:=NULL]
     
@@ -2271,7 +2272,8 @@ neweymod<-function(dtin,formula,outformat=0,value.name=''){
     dtout[,order:=1]
     dtout[rn=='const',order:=2]
     dtout[rn=='N',order:=3]
-    dtout[rn=='Lags',order:=4]
+    dtout[rn=='R2',order:=4]
+    dtout[rn=='Lags',order:=5]
     
     if(value.name!='') dtout[,varname:=value.name] #setnames(dtout,'value',value.name) #colname label
     if (outformat==0) {
@@ -2321,7 +2323,21 @@ regformat<-function(dtin,formula,value.name='',setype='HC0',regtype='felm'){
   if(value.name!='') dtout[,varname:=value.name] #setnames(dtout,'value',value.name) #colname label
   dtout
 }
-
+regformatcoef<-function(dtin,reg1,res1,value.name='reg',lags=0){
+  dtrestemp <- ((res1 %>% as.data.frame.matrix() %>% as.data.table(keep.rownames=T))[rn %nlk% '^as.factor'] %>% melt('rn'))[variable %like% 'Estimate|value'][rn=='(Intercept)',rn:='const'][order(rn)]
+  dtrestemp[variable %like% 'Estimate',valuestr:=sprintf("%.3g",value)]
+  dtrestemp[variable %like% 'value',valuestr:=sprintf("[%.2f]",value)]
+  if('const' %ni% dtrestemp$rn){
+    dtrestemp<-rbind(dtrestemp,data.table(rn='const','valuestr'=''),fill=T)
+    dtrestemp<-rbind(dtrestemp,data.table(rn='const','valuestr'=''),fill=T)
+  }
+  dtrestemp<-rbind(dtrestemp,data.table(rn='N','valuestr'=sprintf("%i",nrow(dtin))),fill=T)
+  dtrestemp<-rbind(dtrestemp,data.table(rn='R2','valuestr'=sprintf("%.2f",summary(reg1)$r.squared['rsq'])),fill=T)
+  dtrestemp<-rbind(dtrestemp,data.table(rn='Lags','valuestr'=sprintf("%i",lags)),fill=T)
+  dtrestemp<-dtrestemp[,.(rn,valuestr)]
+  dtrestemp %>% setnames('valuestr',value.name)
+  dtrestemp
+}
 regout<-function(regres.,statname='t value'){
   regsum<-summary(regres.)
   dtout<-as.data.table(regsum$coefficients,keep.rownames=T)[rn %nlk% '^factor'] 

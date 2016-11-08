@@ -15,8 +15,8 @@
 #'  gov: 'wogov'
 #'  firmlevel: 'upcusip'
 #'  mcore:  1
-#'  quickstart: TRUE # to use previously saved results in the begining
-#'  figfile:  '../paper/figures/161031/'
+#'  quickstart: FALSE # to use previously saved results in the begining
+#'  figfile:  '../paper/figures/161108/'
 #' ---
 #+ setup, include=FALSE
 library(knitr)
@@ -26,7 +26,7 @@ if (interactive()){
   print('interactive')
   setwd("/Users/gliao/Dropbox/Research/ccy basis/creditmigration")  
   source('util.r'); library(yaml)
-  #strparams<-readr::read_lines('results_161018.R',skip = 4,n_max=21);strparams<-strparams[1:grep(pattern="#' ---",strparams)-1];params<-yaml.load(str_c(strparams,collapse='\n') %>% str_replace_all("#'",""))
+  #strparams<-readr::read_lines('results_161108.R',skip = 4,n_max=21);strparams<-strparams[1:grep(pattern="#' ---",strparams)-1];params<-yaml.load(str_c(strparams,collapse='\n') %>% str_replace_all("#'",""))
   }else{
     source('util.r')    
 }
@@ -546,13 +546,13 @@ dtreg.q[ccy=='eur'][date<'2016-01-01'][,.(date,netmisp,i_netflow)] %>% felm(i_ne
 #+ echo=T,include=T
 dtreg.m[date<ymd('2016-08-01')] %>% reg.newey.all(i_netflow6mf~netmisp)
 dtreg.m %>% reg.newey.all(i_netflow6mf~netmisp+swapraterel)
-tableout<-dtreg.m %>% reg.newey.all(i_netflow6mf~netmisp+swapraterel); tableout;try(tableout %>% xlsx::write.xlsx(file='../paper/tables/activetables.xlsx',sheetName = 'issnetdev',showNA=F,append=T))
-tableout<-dtreg.m %>% reg.newey.all(I_netflow6mf~netmisp+swapraterel); tableout;try(tableout %>% xlsx::write.xlsx(file='../paper/tables/activetables.xlsx',sheetName = 'ISSnetdev',showNA=F,append=T))
+tableout<-dtreg.m %>% reg.newey.all(i_netflow6mf~netmisp+swapraterel); tableout;try(tableout %>% xlsx::write.xlsx(file=str_c(params$figfile,'activetables.xlsx'),sheetName = 'issnetdev',showNA=F,append=T))
+tableout<-dtreg.m %>% reg.newey.all(I_netflow6mf~netmisp+swapraterel); tableout;try(tableout %>% xlsx::write.xlsx(file=str_c(params$figfile,'activetables.xlsx'),sheetName = 'ISSnetdev',showNA=F,append=T))
 #dtreg.m %>% reg.newey.all(i_netflow.smooth6mf~netmisp)
 #dtreg.m %>% reg.newey.all(i_netflow.smooth6mf~netmisp+swapraterel)
 #dtreg.m %>% reg.newey.all(i_netflow6mf~credit+cip)
 tableout<-dtreg.m %>% reg.newey.all(i_netflow6mf~credit+cip+swapraterel);tableout
-try(tableout %>% xlsx::write.xlsx(file='../paper/tables/activetables.xlsx',sheetName = 'isscreditcip',showNA=F,append=T))
+try(tableout %>% xlsx::write.xlsx(file=str_c(params$figfile,'activetables.xlsx'),sheetName = 'isscreditcip',showNA=F,append=T))
 
 
 
@@ -571,9 +571,9 @@ stargazer::stargazer(reg.credit.chg,report='vct*',type='text')
 #' ## Quarterly regressions of issuance on deviations
 #+ echo=T,include=T
 dtreg.q %>% reg.newey.all(F.i_netflow~netmisp)
-tableout<-dtreg.q %>% reg.newey.all(F.i_netflow~netmisp+swapraterel);tableout;try(tableout %>% xlsx::write.xlsx(file='../paper/tables/activetables.xlsx',sheetName = 'issnetdevQ',showNA=F,append=T))
+tableout<-dtreg.q %>% reg.newey.all(F.i_netflow~netmisp+swapraterel);tableout;try(tableout %>% xlsx::write.xlsx(file=str_c(params$figfile,'activetables.xlsx'),sheetName = 'issnetdevQ',showNA=F,append=T))
 #dtreg.q %>% reg.newey.all(F.i_netflow~credit+cip)
-tableout<-dtreg.q %>% reg.newey.all(F.i_netflow~credit+cip+swapraterel);tableout;try(tableout %>% xlsx::write.xlsx(file='../paper/tables/activetables.xlsx',sheetName = 'isscreditcipQ',showNA=F,append=T))
+tableout<-dtreg.q %>% reg.newey.all(F.i_netflow~credit+cip+swapraterel);tableout;try(tableout %>% xlsx::write.xlsx(file=str_c(params$figfile,'activetables.xlsx'),sheetName = 'isscreditcipQ',showNA=F,append=T))
 #dtreg.q %>% reg.newey.all(F.I_netflow~netmisp)
 #dtreg.q %>% reg.newey.all(F.I_netflow~netmisp+swapraterel)
 #dtreg.q %>% reg.newey.all(F.I_netflow~credit+cip)
@@ -706,7 +706,7 @@ dtout3<-rbind(dtout2,rsq.dt)
 dtout4<-rbind(dtout3,n.dt)
 dtout5<-(dtout4 %>% dcast(rn+variable~reg))[order(rn,variable)]
 
-#dtout5 %>% xlsx::write.xlsx(file='../paper/tables/activetables.xlsx',sheetName = 'IVreg',showNA=F,append=T)
+#dtout5 %>% xlsx::write.xlsx(file=str_c(params$figfile,'activetables.xlsx'),sheetName = 'IVreg',showNA=F,append=T)
 
 
 
