@@ -1,5 +1,8 @@
 rm(list=ls())
 setwd("/Users/gliao/Dropbox/Research/ccy basis/creditmigration")
+rmarkdown::render('results_161108.R',clean=F)
+
+
 rmarkdown::render('results_161018.R',clean=F)
 
 

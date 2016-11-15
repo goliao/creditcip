@@ -2,7 +2,7 @@
 #' title: "Results"
 #' output: html_document
 #' params:
-#'  regversion: 4
+#'  regversion: 5
 #'  run.var: FALSE 
 #'  run.stata: FALSE
 #'  show.credit.cip: TRUE # graph credit cip, run regressoin
@@ -15,8 +15,8 @@
 #'  gov: 'wogov'
 #'  firmlevel: 'upcusip'
 #'  mcore:  1
-#'  quickstart: FALSE # to use previously saved results in the begining
-#'  figfile:  '../paper/figures/161031/'
+#'  quickstart: TRUE # to use previously saved results in the begining
+#'  figfile:  '../paper/figures/161108/'
 #' ---
 #+ setup, include=FALSE
 library(knitr)
@@ -26,7 +26,7 @@ if (interactive()){
   print('interactive')
   setwd("/Users/gliao/Dropbox/Research/ccy basis/creditmigration")  
   source('util.r'); library(yaml)
-  #strparams<-readr::read_lines('results_161018.R',skip = 4,n_max=21);strparams<-strparams[1:grep(pattern="#' ---",strparams)-1];params<-yaml.load(str_c(strparams,collapse='\n') %>% str_replace_all("#'",""))
+  #strparams<-readr::read_lines('results_161108.R',skip = 4,n_max=21);strparams<-strparams[1:grep(pattern="#' ---",strparams)-1];params<-yaml.load(str_c(strparams,collapse='\n') %>% str_replace_all("#'",""))
   }else{
     source('util.r')    
 }
@@ -47,10 +47,22 @@ if(params$quickstart){
   load('db/sdc.RData')
   source('util.r')
   # preprocessing -----------------------------------------------------------
+  
+    load('dbin/bdp_moody_augment_161110.RData')
+    for (i in 1:length(prices))
+      prices[[i]]<-prices[[i]] %>% as.data.table(keep.rownames=T)
+    dtp<-rbindlist(prices) %>% setnames('rn','pk')
+    bondref<-merge(bondref,dtp,by='pk',all.x = T)
+    bondref[PAYMENT_RANK %in% c('Secured','1st lien','2nd lien'),senior:='SS']
+    bondref[PAYMENT_RANK %in% c('SR Unsecured','Unsecured'),senior:='SU']
+    bondref[PAYMENT_RANK %like% 'Subord',senior:='SB']
+    bondref[,ccy:=str_to_lower(ccy)]
+    exchrate<-prl[ticker %in% c('eur','aud','gbp','jpy','chf','cad'),.(ISSUE_DT=date,ccy=ticker,exchrate=value)][ccy %in% c('chf','cad','jpy'),exchrate:=1/exchrate][ccy=='usd',exchrate:=1]
+    bondref<-merge(bondref,exchrate,by=c('ISSUE_DT','ccy'),all.x=T,all.y=F)
+  bondref[(is.na(amt) & !is.na(AMT_ISSUED)), amt:=exchrate*AMT_ISSUED/10^6]
   dtm<-preprocess(bondref,dtl.mo,prl,issfiltertype =4)
   save(dtm,file='preprocessedtemp.RData')
 }
-
 
 # residualize credit spread -----------------------------------------------------------
 bondref <- (bondref %>% tocusip6(field=params$firmlevel))[,upcusip:=cusip6]
@@ -68,7 +80,22 @@ if(params$gov=='woregional'){
 } else if (params$gov=='onlynatgov'){
   dtl<-dtl[tf_mid_desc %like% 'National Gov'] 
 }
-#dtl<-dtl[!is.na(amt)]
+
+dtl<- dtm$dtl4 %>% onefilter('v0')
+# 
+# b1<-dtm$br %>% onefilter()
+# b2<- dtm$br %>% issfilter(type=4)  
+# 
+# bb<-dtl[,.(pk,ccy,upcusip,ytofm,mdealtype,secur,issue_type_desc,tf_mid_desc,sic1,amt,amt_bucket,DEBT_CLASS_CD,MKT_TYP_CD,senior,rating_bucket,ytm_bucket,pub)] %>% distinct()
+
+#dtl %>% ds
+dtl<-dtl[!is.na(amt)]
+dtl[,.N]
+dtl[!is.na(amt),.N]
+dtm$br[,.N]
+dtm$br[!is.na(amt),.N]
+
+
 ys1m<-resyldsprdv4(dtl,dtm$prl,regversion=params$regversion,returndt=T,parallel.core. = mcore)
 ys1meff<-resyldsprdv4(dtl,dtm$prl,regversion=params$regversion,adjccybs=1,returndt=T,parallel.core.=mcore)
 
@@ -76,57 +103,18 @@ ys1meff<-resyldsprdv4(dtl,dtm$prl,regversion=params$regversion,adjccybs=1,return
 dtcreditcip<-create.dev.long2(prwin = dtm$prw,creditmispin = ys1m$regresult,netmispin = ys1meff$regresult)
 # cip as credit-net
 credit.cip.exact<-(ys1m$regresult[ys1meff$regresult,on=c('date','ccy')] %>% setnames(c('est','i.est'),c('credit','crediteff')))[,cip:=credit-crediteff]
-
-# individually constructing pairwise credit spread
-if (params$individual.resid){
-  ys2m<-list(); ys2meff<-list()
-  for(iccy in c('eur','gbp','jpy','aud','chf','cad')){
-    print(iccy)
-    ys2m[[length(ys2m)+1]] <- (dtl[ccy %in% c(iccy,'usd','1usd')] %>% resyldsprdv4(.,dtm$prl,regversion=4,returndt=T,parallel.core. = mcore))$regresult
-    ys2meff[[length(ys2meff)+1]] <- (dtl[ccy %in% c(iccy,'usd','1usd')] %>% resyldsprdv4(.,dtm$prl,regversion=4,adjccybs=1,returndt=T,parallel.core.=mcore))$regresult
-  }
-  ys2m.res<-rbindlist(ys2m)
-  ys2meff.res<-rbindlist(ys2meff)
-  dtcreditcip2<-create.dev.long2(prwin = dtm$prw,creditmispin = ys2m.res,netmispin = ys2meff.res)
-  print(dtcreditcip[,cor(credit,cip)])
-  print(dtcreditcip2[,cor(credit,cip)])
-  creditcip.result<-plot.panel.creditcip(dtm$prw,ys2m.res,filename='',yrstr.='5',wide=T) #../paper/figures/slides_panel2dev.pdf
-  dtcreditcip<-dtcreditcip2
-}
-
-
-#' Gov vs non-gov
-#+ eval=F
-dtl[,.(.N,sum(na.omit(amt))),tf_mid_desc][order(-V2)][tf_mid_desc %like% 'Gov']
-dtl[,.(.N,sum(na.omit(amt))),tf_mid_desc][order(-V2)][tf_mid_desc %like% '^[Reg|City|Other].+Gov']
-#dtl.gov.all<-dtl[tf_mid_desc %like% 'Gov']
-dtl.gov.all<-dtl[tf_mid_desc %like% 'Gov']
-ys.gov.all<-resyldsprdv4(dtl.gov.all,dtm$prl,regversion=4,returndt=T,parallel.core. = mcore)
-yseff.gov.all<-resyldsprdv4(dtl.gov.all,dtm$prl,regversion=4,adjccybs=1,returndt=T,parallel.core.=mcore)
-dtcreditcip.gov.all<-create.dev.long2(prwin = dtm$prw,creditmispin = ys.gov.all$regresult,netmispin = yseff.gov.all$regresult)
-creditcip.result<-plot.panel.creditcip(dtm$prw,ys.gov.all$regresult,filename='',yrstr.='5',wide=T) #../paper/figures/slides_panel2dev.pdf
-creditcip.result$dt.corr
-
-dtl.gov.nat<-dtl[tf_mid_desc %like% 'National Gov']
-ys.gov.nat<-resyldsprdv4(dtl.gov.nat,dtm$prl,regversion=4,returndt=T,parallel.core. = mcore)
-yseff.gov.nat<-resyldsprdv4(dtl.gov.nat,dtm$prl,regversion=4,adjccybs=1,returndt=T,parallel.core.=mcore)
-dtcreditcip.gov.nat<-create.dev.long2(prwin = dtm$prw,creditmispin = ys.gov.nat$regresult,netmispin = yseff.gov.nat$regresult)
-creditcip.result<-plot.panel.creditcip(dtm$prw,ys.gov.nat$regresult,filename='',yrstr.='5',wide=T) #../paper/figures/slides_panel2dev.pdf
-
-dtl.wo.gov<-dtl[tf_mid_desc %nlk% '^[Reg|City|Other].+Gov']
-dtl.wo.gov<-dtl[tf_mid_desc %nlk% 'Gov']
-ys.wo.gov<-resyldsprdv4(dtl.wo.gov,dtm$prl,regversion=4,returndt=T,parallel.core. = mcore)
-yseff.wo.gov<-resyldsprdv4(dtl.wo.gov,dtm$prl,regversion=4,adjccybs=1,returndt=T,parallel.core.=mcore)
-dtcreditcip.wo.gov<-create.dev.long2(prwin = dtm$prw,creditmispin = ys.wo.gov$regresult,netmispin = yseff.wo.gov$regresult)
-creditcip.result<-plot.panel.creditcip(dtm$prw,ys.wo.gov$regresult,filename='',yrstr.='5',wide=T) #../paper/figures/slides_panel2dev.pdf
+#'
+dtcreditcip[,.(cor(credit,cip)),ccy]
+credit.cip.exact[,.(cor(credit,cip)),ccy]
 
 # filter iss --------------------------------------------------------------
 #'
-if (params$sdc.filter=='bondrefall'){
-  dtissraw<-bondrefall %>% issfilter(type=6) 
-} else{
-  dtissraw<-sdc %>% filter.sdc(params$sdc.filter)
-}
+# if (params$sdc.filter=='bondrefall'){
+#   dtissraw<-bondrefall %>% issfilter(type=6) 
+# } else{
+#   dtissraw<-sdc %>% filter.sdc(params$sdc.filter)
+# }
+dtissraw<-sdc %>% onefilter('v0') 
 dtissraw<-dtissraw[ccy %in% c('usd','eur','gbp','jpy','aud','chf','cad')][,monthly:=floor_date(d,'month')]
 dtissraw<-(dtissraw %>% tocusip6(field=params$firmlevel))[,upcusip:=cusip6] %>% add.earlist.iss.in.ccy()
 
@@ -302,6 +290,7 @@ dtm$prw[monthenddates][date>=ymd('2004-01-01'),.(date,eubs1,bpbs1,jybs1,adbs1)] 
 
 #' Graphing CIP and credit mispriing overlay
 #+ eval=params$show.credit.cip, fig.width=8
+#'
 creditcip.result<-plot.panel.creditcip(dtm$prw,ys1m$regresult,filename=str_c(params$figfile,'active_panel_usd.pdf'),yrstr.='5',wide=T) 
 
 #' scatter
@@ -313,6 +302,7 @@ ggsave(file=str_c(params$figfile,'active_creditcipscatter.pdf'),width=9,height=6
 
 #' Net deviation
 #+ eval=params$show.credit.cip
+#'
 ys1meff$regresult %>% plot.netdev(fileout=str_c(params$figfile,'active_netdev.pdf'))
 
 #' EUR credit cip overlay
@@ -344,9 +334,6 @@ creditcip.result[[2]][ccy=='eur'] %>% ggplot(data=.,aes(x=date,y=value))+
   annotate('text',size=3.1,x=ymd('2009-02-15'),y=-90,label='liquidity\ncontraction\n in both\nmarkets')
 ggsave(file=str_c(params$figfile,'credit_cip_spillover.pdf'),width=9,height=6)
 
-
-prl[ticker=='eubs5']
-creditcip.result[[2]][ccy=='eur'][variable=='cip']
 
 #' HG LG
 #+ eval=params$show.credit.cip
@@ -402,51 +389,10 @@ regadd3 <- regformatcoef(dtin,reg3,res3,'FEfirm',lags=12)
 # regadd3
 
 tableout<-cbind(regadd1,regadd2,regadd3,regtable1)[,.(rn,Pooled,FEdate,FEfirm,eur,gbp,jpy,aud,chf,cad)];tableout
-tableout
+
 try(tableout %>% xlsx::write.xlsx(file=str_c(params$figfile,'activetables.xlsx'),sheetName = 'creditcipMolevel',showNA=F)) #no append here
 
-credit.cip<-copy(creditcip.result$dt.credit.cip)
-
-
-
-
-
-#' Monthly diff individual diff regressions with robust S.E.
-#+ eval=params$show.credit.cip
-invisible({credit.cip[,D.cip:=cip-shift(cip,n=1,type='lag'),ccy]})
-invisible({credit.cip[,D.credit:=credit-shift(credit,n=1,type='lag'),ccy]})
-reg_creditcipb<-list()
-for (iccy in c('eur','gbp','jpy','aud','chf','cad')){
- reg_creditcipb[[length(reg_creditcipb)+1]]<-credit.cip[ccy==iccy] %>% regformat(formula='D.credit~D.cip',value.name=iccy)
-}
-regtable1b<-(rbindlist(reg_creditcipb) %>% dcast(order+rn+variable~varname))[order(order,rn,variable)][,!c('order','variable'),with=F]
-regtable1b
-
-#' ### quarterly diff
-#+ eval=params$show.credit.cip,include=F
-credit.cip.q<-copy(creditcip.result$dt.credit.cip)[order(date,ccy)][,date.qrt:=floor_date(date,'quarter')][,`:=`(cip.q=first(cip),credit.q=first(credit)),.(ccy,date.qrt)][,.(date.qrt,ccy,cip.q,credit.q)] %>% unique()
-credit.cip.q[,D.cip:=cip.q-shift(cip.q,n=1,type='lag'),ccy]
-credit.cip.q[,D.credit:=credit.q-shift(credit.q,n=1,type='lag'),ccy]
-#' panel
-#+ eval=params$show.credit.cip
-credit.cip.q %>% felm(D.cip~D.credit|ccy|0|date.qrt,.) %>% stargazer(report='vct*',type='text')
-credit.cip.q %>% felm(D.credit~D.cip|ccy|0|date.qrt,.) %>% stargazer(report='vct*',type='text')
-credit.cip.q %>% felm(D.cip~D.credit|date.qrt|0|date.qrt,.) %>% stargazer(report='vct*',type='text')
-credit.cip.q %>% felm(D.credit~D.cip|date.qrt|0|date.qrt,.) %>% stargazer(report='vct*',type='text')
-
-
-
-#' individual diff regressions with robust S.E.
-#+ eval=params$show.credit.cip
-reg_creditcipb<-list()
-for (iccy in c('eur','gbp','jpy','aud','chf','cad')){
- reg_creditcipb[[length(reg_creditcipb)+1]]<-credit.cip.q[ccy==iccy] %>% regformat(formula='D.credit~D.cip',value.name=iccy)
-}
-regtable1b<-(rbindlist(reg_creditcipb) %>% dcast(order+rn+variable~varname))[order(order,rn,variable)][,!c('order','variable'),with=F]
-regtable1b
-
-
-
+credit.cip<-dtin
 
 # Credit cip against other ccys -------------------------------------------
 #' ### Credit cip against EUR
@@ -544,17 +490,17 @@ dtreg.q[ccy=='eur'][date<'2016-01-01'][,.(date,netmisp,i_netflow)] %>% felm(i_ne
 
 #' ## Monthly regressions of issuance on deviations
 #+ echo=T,include=T
-dtreg.m[date<ymd('2016-08-01')] %>% reg.newey.all(i_netflow6mf~netmisp)
-dtreg.m %>% reg.newey.all(i_netflow6mf~netmisp+swapraterel)
-tableout<-dtreg.m %>% reg.newey.all(i_netflow6mf~netmisp+swapraterel); tableout;try(tableout %>% xlsx::write.xlsx(file='../paper/tables/activetables.xlsx',sheetName = 'issnetdev',showNA=F,append=T))
-tableout<-dtreg.m %>% reg.newey.all(I_netflow6mf~netmisp+swapraterel); tableout;try(tableout %>% xlsx::write.xlsx(file='../paper/tables/activetables.xlsx',sheetName = 'ISSnetdev',showNA=F,append=T))
+#dtreg.m[date<ymd('2016-08-01')] %>% reg.newey.all(i_netflow6mf~netmisp)
+#dtreg.m %>% reg.newey.all(i_netflow6mf~netmisp+swapraterel)
+#dtreg.m[date<ymd('2016-08-01')] %>% reg.newey.all(i_netflow6mf~netmisp+swapraterel)
+tableout<-dtreg.m %>% reg.newey.all(i_netflow6mf~netmisp+swapraterel); tableout;
+try(tableout %>% xlsx::write.xlsx(file=str_c(params$figfile,'activetables.xlsx'),sheetName = 'issnetdev',showNA=F,append=T))
+#tableout<-dtreg.m %>% reg.newey.all(I_netflow6mf~netmisp+swapraterel); tableout;try(tableout %>% xlsx::write.xlsx(file=str_c(params$figfile,'activetables.xlsx'),sheetName = 'ISSnetdev',showNA=F,append=T))
 #dtreg.m %>% reg.newey.all(i_netflow.smooth6mf~netmisp)
 #dtreg.m %>% reg.newey.all(i_netflow.smooth6mf~netmisp+swapraterel)
 #dtreg.m %>% reg.newey.all(i_netflow6mf~credit+cip)
 tableout<-dtreg.m %>% reg.newey.all(i_netflow6mf~credit+cip+swapraterel);tableout
-try(tableout %>% xlsx::write.xlsx(file='../paper/tables/activetables.xlsx',sheetName = 'isscreditcip',showNA=F,append=T))
-
-
+try(tableout %>% xlsx::write.xlsx(file=str_c(params$figfile,'activetables.xlsx'),sheetName = 'isscreditcip',showNA=F,append=T))
 
 
 #' ### regression of issuance on chg in credit
@@ -570,15 +516,15 @@ stargazer::stargazer(reg.credit.chg,report='vct*',type='text')
 
 #' ## Quarterly regressions of issuance on deviations
 #+ echo=T,include=T
-dtreg.q %>% reg.newey.all(F.i_netflow~netmisp)
-tableout<-dtreg.q %>% reg.newey.all(F.i_netflow~netmisp+swapraterel);tableout;try(tableout %>% xlsx::write.xlsx(file='../paper/tables/activetables.xlsx',sheetName = 'issnetdevQ',showNA=F,append=T))
+#dtreg.q %>% reg.newey.all(F.i_netflow~netmisp)
+tableout<-dtreg.q %>% reg.newey.all(F.i_netflow~netmisp+swapraterel);tableout;try(tableout %>% xlsx::write.xlsx(file=str_c(params$figfile,'activetables.xlsx'),sheetName = 'issnetdevQ',showNA=F,append=T))
 #dtreg.q %>% reg.newey.all(F.i_netflow~credit+cip)
-tableout<-dtreg.q %>% reg.newey.all(F.i_netflow~credit+cip+swapraterel);tableout;try(tableout %>% xlsx::write.xlsx(file='../paper/tables/activetables.xlsx',sheetName = 'isscreditcipQ',showNA=F,append=T))
+tableout<-dtreg.q %>% reg.newey.all(F.i_netflow~credit+cip+swapraterel);tableout;try(tableout %>% xlsx::write.xlsx(file=str_c(params$figfile,'activetables.xlsx'),sheetName = 'isscreditcipQ',showNA=F,append=T))
 #dtreg.q %>% reg.newey.all(F.I_netflow~netmisp)
 #dtreg.q %>% reg.newey.all(F.I_netflow~netmisp+swapraterel)
 #dtreg.q %>% reg.newey.all(F.I_netflow~credit+cip)
 #dtreg.q %>% reg.newey.all(F.I_netflow~credit+cip+swapraterel)
-dtreg.q %>% reg.newey.all(i_netflow~netmisp)
+#dtreg.q %>% reg.newey.all(i_netflow~netmisp)
 dtreg.q %>% reg.newey.all(i_netflow~netmisp+swapraterel)
 
 #' #### reg flow on credit chg alone
@@ -689,7 +635,9 @@ regres[[length(regres)+1]]<-dtreg %>% felm(I_both.iss~I_both.mat |ccy| 0 | date,
 regres[[length(regres)+1]]<-dtreg %>% felm(D.abs.netmisp ~ L.D.abs.netmisp |ccy| (I_both.iss~I_both.mat) | rn,.)
 regres[[length(regres)+1]]<-dtreg %>% felm(D.abs.netmisp ~ L.D.abs.netmisp |ccy| (I_both.iss~I_both.mat) | date,.)
 stargazer(regres,type='text',report='*vct*',order=c('I_both.iss','I_both.mat','`I_both.iss(fit)`','L.D.abs.netmisp'),column.labels=c('reducedform','ols','1ststg','iv','ivtclust'))
-dtreg[,.(sd(I_both.iss),sd(I_both.mat))] 
+
+#dtreg[,.(sd(I_both.iss),sd(I_both.mat))] 
+#saving to excel
 regres.ls<-list();rsq.ls<-list();n.ls<-list()
 for (iregres in regres){
  regres.ls[[length(regres.ls)+1]]<-((iregres %>% summary)$coef %>% as.data.table(keep.rownames=T))[,reg:=length(regres.ls)+1]
@@ -697,18 +645,15 @@ for (iregres in regres){
  n.ls[[length(n.ls)+1]]<-as.data.table((iregres %>% summary)$df[1:2] %>% sum())[,reg:=length(n.ls)+1]
 }
 dtout<-rbindlist(regres.ls)
-dtout[,`t value`:=sprintf("[%.2f]",`t value`)]
-dtout[,Estimate:=sprintf('%.3g',Estimate)]
+invisible(dtout[,`t value`:=sprintf("[%.2f]",`t value`)])
+invisible(dtout[,Estimate:=sprintf('%.3g',Estimate)])
 dtout2<-(dtout %>% melt(id.vars=c('rn','reg'),measure.vars=c('Estimate','t value')))[order(-rn)] 
 rsq.dt<-(rsq.ls %>% rbindlist)[,.(rn='zRsq',reg,variable='Rsq',value=sprintf('%.2f',V1))]
 n.dt<-(n.ls %>% rbindlist)[,.(rn='zzN',reg,variable='N',value=sprintf('%.2f',V1))]
 dtout3<-rbind(dtout2,rsq.dt)
 dtout4<-rbind(dtout3,n.dt)
 dtout5<-(dtout4 %>% dcast(rn+variable~reg))[order(rn,variable)]
-
-#dtout5 %>% xlsx::write.xlsx(file='../paper/tables/activetables.xlsx',sheetName = 'IVreg',showNA=F,append=T)
-
-
+dtout5 %>% xlsx::write.xlsx(file=str_c(params$figfile,'activetables.xlsx'),sheetName = 'IVreg',showNA=F,append=T)
 
 
 #' #### control for rates?

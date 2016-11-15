@@ -34,7 +34,7 @@ require(data.table)
 require(stringr)
 require(doParallel)
 #options(width=as.integer(Sys.getenv("COLUMNS")))
-require(sandwich);require(lmtest)
+require(sandwich);require(lmtest);require(plm)
 
 packages.do.export<-c('data.table','dplyr','stringr','lfe','lubridate','beepr','lmtest','sandwich')
 
@@ -217,6 +217,19 @@ filter.sdc<-function(sdc,type.=1){
   }
   sdc.1
 }
+
+onefilter<-function(dtin,type.='v1'){
+  # single filter for both pricing and issuance
+  dtin.0<-dtin %>% as.data.table %>%  copy()
+  dtin.0<-dtin.0[str_to_lower(ccy) %in% c('usd','eur','gbp','jpy','aud','chf','cad')]
+  if (type. %like% 'v0'){
+    dtin.1<-dtin.0[amt>=50 | is.na(amt)][ytofm>=1][ytofm<=99999][mdealtype %ni% c("P","ANPX","M","EP","CEP","TM","PP")][str_to_lower(secur) %nlk% 'mtg|pdf|sh|mortg|eqt|pass|islamic|step|pfanbriefe|cont|perp|loan|extendible|pik|pfd|stk']
+  }else if (type. %like% 'v1'){  # rid of zero/floating rate, etc
+    dtin.1<-dtin.0[amt>=50][ytofm>=1][ytofm<=99999][mdealtype %ni% c("P","ANPX","M","EP","CEP","TM","PP","R144P")][str_to_lower(tf_mid_desc) %nlk% "govern"][str_to_lower(secur) %nlk% 'mtg|pdf|sh|mortg|eqt|pass|islamic|step|pfanbriefe|cont|perp|loan|extendible|pik|pfd|zero|fr|fl|var|stk'][issue_type_desc %nlk% 'backed']
+  }
+  dtin.1
+}
+
 issfilter<-function(dtin,type=1,desc=F){
   dtout<-copy(dtin)
   if (desc==T){
@@ -256,15 +269,19 @@ issfilter<-function(dtin,type=1,desc=F){
     dt.filter.summary<-dt.criteria[,counthelper(dtin,dt.criteria,.BY),criteria]
     print(dt.filter.summary)
   }
-  dtout %<>% filter(
-     amt >= 50 | is.na(amt),
-     ytofm >= 1,
-     ytofm <= 99999,
-     mdealtype %ni% c("P", "ANPX", "M", "EP", "CEP", "TM", "PP"),
-     secur %ni% c("Cum Red Pfd Shs","Non-Cum Pref Sh" ,"Preferred Shs" ,"Pfd Stk,Com Stk"),
-     !grepl('Government Sponsored Enterprises',tf_mid_desc),!grepl('Flt', secur),!grepl('Zero Cpn', secur),!grepl('Float', secur),!grepl('Fl', descr),
-     !grepl('Zero Cpn', descr),!grepl('Mortgage-backed', issue_type_desc),!grepl('Asset-backed', issue_type_desc),!grepl('Federal Credit Agency', issue_type_desc),!grepl('Loan', descr)
-   ) 
+  if(type!=0){
+    dtout %<>% filter(
+       amt >= 50 | is.na(amt),
+       ytofm >= 1,
+       ytofm <= 99999,
+       mdealtype %ni% c("P", "ANPX", "M", "EP", "CEP", "TM", "PP"),
+       secur %ni% c("Cum Red Pfd Shs","Non-Cum Pref Sh" ,"Preferred Shs" ,"Pfd Stk,Com Stk"),
+       !grepl('Government Sponsored Enterprises',tf_mid_desc),!grepl('Flt', secur),!grepl('Zero Cpn', secur),!grepl('Float', secur),!grepl('Fl', descr),
+       !grepl('Zero Cpn', descr),!grepl('Mortgage-backed', issue_type_desc),!grepl('Asset-backed', issue_type_desc),!grepl('Federal Credit Agency', issue_type_desc),!grepl('Loan', descr)
+     ) 
+  } else{
+    dtout<-dtin
+  }
   if (type==2){
     dtout %<>% filter(amt>=100)
   } else if (type==3){
@@ -576,7 +593,7 @@ preprocess<-function(bondref,dtl,prl,monthlyonly=TRUE,issfiltertype=2,ccyfilter=
   br[amt<100,amt_bucket:=0]
   br[is.na(amt),amt_bucket:=-1]
   
-  dtl2<-dtl[br[,.(ccy,mat2,nrating,upcusip,cu,pk,ytofm,issue_type_desc,pub,tf_mid_desc,sic1,amt,amt_bucket,DEBT_CLASS_CD,MKT_TYP_CD,senior)],nomatch=0]
+  dtl2<-dtl[br[,.(ccy,mat2,nrating,upcusip,cu,pk,ytofm,mdealtype,secur,issue_type_desc,pub,tf_mid_desc,sic1,amt,amt_bucket,DEBT_CLASS_CD,MKT_TYP_CD,senior)],nomatch=0]
   dtl2[,ytm:=as.numeric((mat2-date)/365)]
   dtl3<-dtl2[ytm >.05]
   dtl3[is.na(nrating),nrating:=0]
@@ -587,7 +604,7 @@ preprocess<-function(bondref,dtl,prl,monthlyonly=TRUE,issfiltertype=2,ccyfilter=
   prw<-prl %>% distinct() %>% data.table::dcast.data.table(.,date~ticker,value.var = 'value')
   dtl3<-dtl3[date>'2004-01-01']
   dtl3[,liq:=ytm/ytofm]
-  dtl3<-dtl3[liq %between% c(0.05,1.0)]
+  dtl3<-dtl3[liq %between% c(0.1,1.0)]
   dtl3[liq<.25,liq_bucket:=0] # more illiq
   dtl3[liq>=.25 & liq<.5,liq_bucket:=1] # more illiq
   dtl3[liq>=.5 & liq<.75,liq_bucket:=2] # liq
@@ -660,7 +677,7 @@ regfun<-function(dt,ccylist='',regversion=4,bylist='',lhs.,mainccy.){
     } else if (regversion==4){
       reg<-felm(eval(exparse(lhs.))~ccy | upcusip+ytm_bucket+rating_bucket | 0 | upcusip, data=dt)
     } else if (regversion==4.5){
-      reg<-felm(eval(exparse(lhs.))~ccy+ytm | upcusip+rating_bucket | 0 | upcusip, data=dt)
+      reg<-felm(eval(exparse(lhs.))~ccy | upcusip+rating_bucket+ytm_bucket +liq_bucket+amt_bucket | 0 | upcusip, data=dt)
     } else if (regversion==5){
       reg<-felm(eval(exparse(lhs.))~ccy +liq+amt| upcusip+ytm_bucket+rating_bucket+senior | 0 | upcusip, data=dt)
     } else if (regversion==5.5){
@@ -712,10 +729,10 @@ getccyFE2<-function(dfin,fieldstr='OAS_SPREAD_BID',version=2,winsor=.025,paralle
     df2[ccy==mainccy,ccy:=str_c(1,mainccy)]
     
   # introduce liquidity measure based on bond age
-      df2[,liq:=ytm/ytofm]
-      df2<-df2[liq %between% c(0,1.1)]
-      df2[liq<.5,liq_bucket:=0] # more illiq
-      df2[liq>=.5,liq_bucket:=1] # liq
+      #df2[,liq:=ytm/ytofm]
+      #df2<-df2[liq %between% c(0,1.1)]
+      #df2[liq<.5,liq_bucket:=0] # more illiq
+      #df2[liq>=.5,liq_bucket:=1] # liq
       ccylist<-(df2 %>% distinct(ccy) %>% select(ccy))[[1]]
     if (parallel.core>1){     
       require(doParallel) 
@@ -1750,6 +1767,56 @@ bucketytofm<-function(dtlin){
   dtlin[ytofm >10,ytofm_bucket:=4]
   #dtlin[,ytofm_bucket:=factor(ytofm_bucket)]
   dtlin
+}
+
+bdpgl<-function(tickers,filestr=str_c('bbg_',today(),'.RData'),fieldstr=c('PX_LAST'),splitN=1){
+  require(Rblpapi); require(data.table); require(lubridate); require(dplyr)
+  if (is.data.table(tickers)) {
+    tickers<-tickers[,.(pk)]
+  } else{
+    tickers<-data.table('pk'=tickers)
+  }
+  
+  if (tickers[1]=='restart'){ # if ticker=='restart', then restart using temp_bbgdownload_restart.RData file
+    if (filestr==str_c('bbg_',today(),'.RData')){ 
+      print('restarting from temp_bbgdownload_restart.RData')
+      load('temp_bbgdownload_restart.RData')
+    } else{
+      print(str_c('restarting from ',filestr))
+      load(filestr)
+    }
+    istart<-i
+    message('restarting from batch ',i, ' out of total ',splitN)
+  } else{ # regular new download
+    tickers$batchfactor<-sample(1:splitN,size=nrow(tickers),replace=T)
+    tickerslist<-split(as.character(tickers$pk),tickers$batchfactor)
+    opt <- c('')
+    istart<-1
+    prices<-list()
+  }
+  
+  con <- Rblpapi::blpConnect()     # automatic if option("blpAutoConnect") is TRUE
+  for (i in istart:splitN) {
+    print(i)
+    if (length(tickerslist[[i]])==0) {error('no tickers error'); browser()}
+    tryCatch({
+       prices[[i]]<-bdp(tickerslist[[i]], fieldstr)  
+      # browser()
+    }, error=function(err){
+      print(err)
+      message('Limit Hit on ', i, ' consider restarting download on another machine or another day')
+      save(prices,tickers,tickerslist,i,fieldstr,opt,splitN,filestr,file='temp_bbgdownload_restart.RData')
+      #browser()
+      blpDisconnect(con)      
+      stop(err)
+    }
+    )
+    # will remove this following line later
+    save(prices,tickers,tickerslist,i,fieldstr,opt,splitN,filestr,file=str_c('temp_',filestr))
+  }
+  blpDisconnect(con)
+  save(prices,file=filestr)
+  rbindlist(prices)
 }
 
 

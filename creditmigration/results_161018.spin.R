@@ -2,7 +2,7 @@
 #' title: "Results"
 #' output: html_document
 #' params:
-#'  regversion: 5
+#'  regversion: 4
 #'  run.var: FALSE 
 #'  run.stata: FALSE
 #'  show.credit.cip: TRUE # graph credit cip, run regressoin
@@ -15,7 +15,7 @@
 #'  gov: 'wogov'
 #'  firmlevel: 'upcusip'
 #'  mcore:  1
-#'  quickstart: TRUE # to use previously saved results in the begining
+#'  quickstart: FALSE # to use previously saved results in the begining
 #'  figfile:  '../paper/figures/161031/'
 #' ---
 #+ setup, include=FALSE
@@ -68,7 +68,7 @@ if(params$gov=='woregional'){
 } else if (params$gov=='onlynatgov'){
   dtl<-dtl[tf_mid_desc %like% 'National Gov'] 
 }
-
+#dtl<-dtl[!is.na(amt)]
 ys1m<-resyldsprdv4(dtl,dtm$prl,regversion=params$regversion,returndt=T,parallel.core. = mcore)
 ys1meff<-resyldsprdv4(dtl,dtm$prl,regversion=params$regversion,adjccybs=1,returndt=T,parallel.core.=mcore)
 
@@ -280,6 +280,12 @@ cbind(lefthalf,righthalf)
 
 # Credit CIP -------------------------------------------------------------------
 #' ## Graphs
+#' Extension
+#+ eval=params$show.credit.cip
+ys1mb<-resyldsprdv4(dtl[!is.na(DEBT_CLASS_CD)],dtm$prl,regversion=5,returndt=F,parallel.core. = mcore)
+figext<-ggplotw.comp2(ys1m$regcoef,ys1mb,c('residualized credit spread diff.','with additional controls'))
+ggsave(plot=figext,file=str_c(params$figfile,'extensioncomp.pdf'),width=10.5,height=6.5)
+
 #' credit deviations
 #+ eval=params$show.credit.cip
 dtcreditcip[ccy %in% c('eur','gbp','jpy','aud')] %>% ggplot(data=.,aes(x=date,y=credit))+geom_line(aes(linetype=ccy,colour=ccy))+xlab('')+ylab('Residualized credit spread relative to USD in bps')+geom_hline(yintercept=0,colour='grey')+scale_x_date(breaks=scales::pretty_breaks(n=10)) + scale_y_continuous(breaks=scales::pretty_breaks(n=10))+theme_few()+scale_colour_discrete(name='',labels=c("AUD", "GBP",'EUR','JPY'),breaks=c('aud','gbp','eur','jpy'))+scale_linetype_discrete(name='',labels=c("AUD", "GBP",'EUR','JPY'),breaks=c('aud','gbp','eur','jpy'))
@@ -370,33 +376,51 @@ for (iccy in c('eur','gbp','jpy','aud','chf','cad')){
  reg_creditcip[[length(reg_creditcip)+1]]<-creditcip.result$dt.credit.cip[ccy==iccy] %>% neweymod('credit~cip',value.name=iccy)
 }
 regtable1<-(rbindlist(reg_creditcip) %>% dcast(order+rn+variable~varname))[order(order,rn,variable)][,!c('order','variable'),with=F]
-tableout<-regtable1[,.(rn,eur,gbp,jpy,aud,chf,cad)];tableout
-try(tableout %>% xlsx::write.xlsx(file='../paper/tables/activetables.xlsx',sheetName = 'creditcipMolevel',showNA=F)) #no append here
+
+#'
+# panel with correct standard errors
+dtin<-creditcip.result$dt.credit.cip
+dtin %>% write.dta(file = 'temp.dta')
+require(plm)
+# pooled 
+reg1<-dtin %>% plm(credit~cip,.,index=c('ccy','date'),model='pooling') 
+res1<-coeftest(reg1,vcov=vcovSCC(reg1,type='sss',maxlag=12))
+regadd1 <- regformatcoef(dtin,reg1,res1,'Pooled',lags=12)
+# regadd1
+
+# FE on date
+reg2<-dtin %>% plm(credit~cip+as.factor(date),.,index=c('ccy','date'),model='pooling') 
+res2<-coeftest(reg2,vcovSCC(reg2,type='sss',maxlag = 12))
+regadd2 <- regformatcoef(dtin,reg2,res2,'FEdate',lags=12)[rn=='const',FEdate:='']
+# regadd2
+
+#FE on firm
+reg3<-dtin %>% plm(credit~cip,.,index=c('ccy','date'),model='within') 
+# res3<-coeftest(reg1,vcovNW(reg3,type="HC3",maxlag=12)) 
+res3<-coeftest(reg3,vcovSCC(reg3,type='sss',maxlag = 12))
+regadd3 <- regformatcoef(dtin,reg3,res3,'FEfirm',lags=12)
+# regadd3
+
+tableout<-cbind(regadd1,regadd2,regadd3,regtable1)[,.(rn,Pooled,FEdate,FEfirm,eur,gbp,jpy,aud,chf,cad)];tableout
+tableout
+try(tableout %>% xlsx::write.xlsx(file=str_c(params$figfile,'activetables.xlsx'),sheetName = 'creditcipMolevel',showNA=F)) #no append here
+
 credit.cip<-copy(creditcip.result$dt.credit.cip)
 
 
 
 
-#+ eval=params$show.credit.cip,include=F
+
+#' Monthly diff individual diff regressions with robust S.E.
+#+ eval=params$show.credit.cip
 invisible({credit.cip[,D.cip:=cip-shift(cip,n=1,type='lag'),ccy]})
 invisible({credit.cip[,D.credit:=credit-shift(credit,n=1,type='lag'),ccy]})
-# individual diff regressions with robust S.E.
 reg_creditcipb<-list()
 for (iccy in c('eur','gbp','jpy','aud','chf','cad')){
  reg_creditcipb[[length(reg_creditcipb)+1]]<-credit.cip[ccy==iccy] %>% regformat(formula='D.credit~D.cip',value.name=iccy)
 }
 regtable1b<-(rbindlist(reg_creditcipb) %>% dcast(order+rn+variable~varname))[order(order,rn,variable)][,!c('order','variable'),with=F]
-#' Monthly diff
-#+ eval=params$show.credit.cip
 regtable1b
-
-creditcip.result$dt.credit.cip %>% write.dta('temp.dta')
-creditcip.result$dt.credit.cip %>% felm(credit~cip|date|0|0,.) %>% summary
-creditcip.result$dt.credit.cip %>% felm(credit~cip|date|0|date+ccy,.) %>% summary
-creditcip.result$dt.credit.cip %>% felm(credit~cip|ccy|0|date+ccy,.) %>% summary
-
-
-
 
 #' ### quarterly diff
 #+ eval=params$show.credit.cip,include=F
