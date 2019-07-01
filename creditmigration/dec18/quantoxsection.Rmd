@@ -1,0 +1,89 @@
+---
+  title: "BD"
+geometry: left=1cm,right=1cm,top=1cm,bottom=1.5cm
+output:
+  pdf_document:
+  keep_tex: yes
+toc: yes
+number_sections: true
+header-includes:
+  - \usepackage[section]{placeins}
+editor_options: 
+  chunk_output_type: console
+---
+  
+  \FloatBarrier
+```{r setup, eval=F,message=FALSE, warning=FALSE, paged.print=FALSE,echo=FALSE}
+knitr::opts_chunk$set(message = F,warning = F,echo = F,size='small')
+
+
+setwd('/if/udata/m1gyl00/exploration/')
+source('../glutil.R')
+require(policyPlot)
+ymd <- lubridate::ymd
+ggplot2::theme_set(ggthemes::theme_few())
+load('../corpbasis/img_calc.RData')
+
+
+source('/if/udata/m1gyl00/fxdebtimpact/fxutil.R')
+fx <- getfxrate(19960101)
+ccy6=c('AUD','EUR','GBP','JPY','CHF','CAD')
+fx <- fx[ccy %in% ccy6]
+
+corp <- fame2dt(list(corpind='FDJTCT'),'ifhaver_daily')
+
+
+fxm <- fx[,.SD[.N],.(date=floor_date(date,'month'),ccy)]
+corpm <- corp[,.SD[.N],.(date=floor_date(date,'month'))]
+
+#save(fxm,corpm,file='../fxcorp.xz',compress='xz')
+```
+
+
+
+\FloatBarrier
+```{r setup, message=FALSE, warning=FALSE, paged.print=FALSE,echo=FALSE}
+knitr::opts_chunk$set(message = F,warning = F,echo = F,size='small')
+
+ymd <- lubridate::ymd
+ggplot2::theme_set(ggthemes::theme_few())
+require(data.table)
+
+ccy6=c('AUD','EUR','GBP','JPY','CHF','CAD')
+
+load('fxcorp.xz')
+fxm[ccy=='JPY',.(date,fx)] %>% ggplotw()+geom_vline(xintercept = ymd(20130101))
+px <- px0[date>=ymd(19990101) & date<=ymd(20161201)]
+nperiod=1
+px[,crret:=log(corpind/shift(corpind,n=nperiod,type='lag')),ccy]
+px[,tret:=log(treasind/shift(treasind,n=nperiod,type='lag')),ccy]
+px[,cret:=crret-tret]
+px[,fret:=log(fx/shift(fx,n=nperiod,type='lag')),ccy]
+
+
+
+tmplist <- list()
+for (iccy in ccy6){
+  tmp <- (px[ccy==iccy] %>% lm(fret~cret,data = .) %>% summary())$coef[,'Estimate'] 
+  tmp$ccy <- iccy
+  tmp$fretmean <- px[!is.na(fret) & ccy==iccy,.(mean(fret))]$V1
+  tmplist[[length(tmplist)+1]] <- as.data.table(tmp)
+}  
+
+dt <- rbindlist(tmplist)
+
+dt2 <- merge(dt,credit.cip.exact[,.(kappa=mean(credit),psi=mean(crediteff),cip=mean(cip)),.(ccy=toupper(ccy))],by='ccy')
+
+dt2 %>% lm(kappa~cret,data=.) %>% summary()
+dt2 %>% lm(psi~cret,data=.) %>% summary()
+dt2 %>% lm(kappa~cret+cip,data=.) %>% summary()
+
+
+require(latex2exp)
+dt2
+dt2 %>% ggplot(aes(x=cret,y=kappa,label=ccy))+geom_point()+ geom_text(aes(label=ccy),hjust=.12,vjust=-.40)+geom_smooth(method='lm',se=F)+xlab(TeX('$\\hat{\\beta}_{r_{fx},r_{credit}}$'))+ylab(TeX('$\\bar{\\kappa}$'))+theme(text=element_text(size=16))
+
+ggsave('../../paper/figures/quantoxsection.pdf',width=6.5,height=5)
+dt2 %>% ggplot(aes(x=cret,y=psi,label=ccy))+geom_point()+ geom_text(aes(label=ccy))+geom_smooth(method='lm',se=F)
+
+```
