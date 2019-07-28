@@ -15,7 +15,7 @@
 #'  gov: 'wogov'
 #'  firmlevel: 'upcusip'
 #'  mcore:  1
-#'  quickstart: FALSE # to use previously saved results in the begining
+#'  quickstart: TRUE # to use previously saved results in the begining
 #'  figfile:  '../paper/figures/161031/'
 #' ---
 #+ setup, include=FALSE
@@ -545,7 +545,7 @@ dtreg.q[ccy=='eur'][date<'2016-01-01'][,.(date,netmisp,i_netflow)] %>% felm(i_ne
 #' ## Monthly regressions of issuance on deviations
 #+ echo=T,include=T
 dtreg.m[date<ymd('2016-08-01')] %>% reg.newey.all(i_netflow6mf~netmisp)
-dtreg.m %>% reg.newey.all(i_netflow6mf~netmisp+swapraterel)
+dtreg.m[date<ymd('2016-08-01')] %>% reg.newey.all(i_netflow6mf~netmisp+swapraterel)
 tableout<-dtreg.m %>% reg.newey.all(i_netflow6mf~netmisp+swapraterel); tableout;try(tableout %>% xlsx::write.xlsx(file='../paper/tables/activetables.xlsx',sheetName = 'issnetdev',showNA=F,append=T))
 tableout<-dtreg.m %>% reg.newey.all(I_netflow6mf~netmisp+swapraterel); tableout;try(tableout %>% xlsx::write.xlsx(file='../paper/tables/activetables.xlsx',sheetName = 'ISSnetdev',showNA=F,append=T))
 #dtreg.m %>% reg.newey.all(i_netflow.smooth6mf~netmisp)
@@ -689,6 +689,7 @@ regres[[length(regres)+1]]<-dtreg %>% felm(I_both.iss~I_both.mat |ccy| 0 | date,
 regres[[length(regres)+1]]<-dtreg %>% felm(D.abs.netmisp ~ L.D.abs.netmisp |ccy| (I_both.iss~I_both.mat) | rn,.)
 regres[[length(regres)+1]]<-dtreg %>% felm(D.abs.netmisp ~ L.D.abs.netmisp |ccy| (I_both.iss~I_both.mat) | date,.)
 stargazer(regres,type='text',report='*vct*',order=c('I_both.iss','I_both.mat','`I_both.iss(fit)`','L.D.abs.netmisp'),column.labels=c('reducedform','ols','1ststg','iv','ivtclust'))
+
 dtreg[,.(sd(I_both.iss),sd(I_both.mat))] 
 regres.ls<-list();rsq.ls<-list();n.ls<-list()
 for (iregres in regres){

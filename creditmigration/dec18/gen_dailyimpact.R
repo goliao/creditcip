@@ -106,12 +106,12 @@ eslong[,var:=str_c(event,variable)]
 
 Lcolor=c('red','red','red','blue','blue','blue');Ltype=c('dashed','solid','dashed','dashed','solid','dashed')
 Labels=c('Yankee issue 97.5%','Yankee issue mean', 'Yankee issue 2.5%','Reverse Yankee issue 97.5%','Reverse Yankee issue mean','Reverse Yankee issue 2.5%')
-eslong[,.(time,var,value)] %>% ggplot(aes(x=time,y=value))+geom_line(aes(linetype=var,colour=var))+theme_few()+scale_linetype_manual('',labels =Labels,values=Ltype)+theme(legend.position = 'none')+geom_hline(yintercept = 0)+geom_vline(xintercept = 0)+xlab('Days from issuance date')+ylab('Change in FX basis (basis points)')+geom_point(aes(shape=var,size=var,colour=var))+ scale_shape_manual(values=c(0,1,0,0,1,0)) +scale_size_manual(values=c(0,3,0,0,3,0)) +scale_color_manual('',labels =Labels,values=Lcolor) + annotate('text',size=5,x=8.5,y=1.25,label='Yankee bond issuance',colour='red')+ annotate('text',size=5,x=8,y=-1.3,label='Reverse Yankee bond issuance',colour='blue')+annotate('text',size=4,x=-11,y=1.7,label='Increase in expense to \n swap to foreign currency')+annotate('text',size=4,x=-12,y=-1.7,label='Increase in expense\n to swap to USD')
+eslong[,.(time,var,value)] %>% ggplot(aes(x=time,y=-value))+geom_line(aes(linetype=var,colour=var))+theme_few()+scale_linetype_manual('',labels =Labels,values=Ltype)+theme(legend.position = 'none')+geom_hline(yintercept = 0)+geom_vline(xintercept = 0)+xlab('Days from issuance date')+ylab('Change in CIP deviation (basis points)')+geom_point(aes(shape=var,size=var,colour=var))+ scale_shape_manual(values=c(0,1,0,0,1,0)) +scale_size_manual(values=c(0,3,0,0,3,0)) +scale_color_manual('',labels =Labels,values=Lcolor) + annotate('text',size=5,x=8.5,y=-1.25,label='Yankee bond issuance',colour='red')+ annotate('text',size=5,x=8,y=1.3,label='Reverse Yankee bond issuance',colour='blue')+annotate('text',size=4,x=-11,y=-1.,label='Increase in expense to \n swap to foreign currency')+annotate('text',size=4,x=-12,y=1.7,label='Increase in expense\n to swap to USD')
 beepr::beep()
 
 
 
-#ggsave('../figures/dailyissuanceimpact.pdf',height=5,width=7)
+ggsave('../figures/dailyissuanceimpact.pdf',height=5,width=7)
 tmp<-list()
 for (i in c('aud','eur','gbp','jpy','chf','cad')){
   tmp[[length(tmp)+1]]<-data.table(ccy=i,yankee=dtreg[ccy==i & fUSDevent==1,.N]/dtreg[ccy==i,.N],reverseyankee=dtreg[ccy==i & usFevent==1,.N]/dtreg[ccy==i,.N])

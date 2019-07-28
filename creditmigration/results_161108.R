@@ -60,7 +60,7 @@ if(params$quickstart){
     exchrate<-prl[ticker %in% c('eur','aud','gbp','jpy','chf','cad'),.(ISSUE_DT=date,ccy=ticker,exchrate=value)][ccy %in% c('chf','cad','jpy'),exchrate:=1/exchrate][ccy=='usd',exchrate:=1]
     bondref<-merge(bondref,exchrate,by=c('ISSUE_DT','ccy'),all.x=T,all.y=F)
   bondref[(is.na(amt) & !is.na(AMT_ISSUED)), amt:=exchrate*AMT_ISSUED/10^6]
-  dtm<-preprocess(bondref,dtl.mo,prl,issfiltertype =0)
+  dtm<-preprocess(bondref,dtl.mo,prl,issfiltertype =4)
   save(dtm,file='preprocessedtemp.RData')
 }
 
@@ -84,6 +84,12 @@ bondrefall<-bondrefall[,ccy:=str_to_lower(ccy)][ccy %in% c('usd','eur','gbp','jp
 
 # 
 dtl<- dtm$dtl4[ccy %in% c('usd','eur','gbp','jpy','aud','chf','cad')][amt>=50][ytofm>=1][ytofm<99][mdealtype %ni% c("P","ANPX","M","EP","CEP","TM","PP","R144P")][str_to_lower(tf_mid_desc) %nlk% "govern"][str_to_lower(secur) %nlk% 'mtg|pdf|sh|mortg|eqt|pass|islamic|step|pfanbriefe|cont|perp|loan|extendible|pik|pfd|zero|fr|fl|var|stk'][issue_type_desc %nlk% 'backed'][nrating<=16][nrating!=0]
+
+dtm$br[,.N]
+dtm$br[senior=='UN',.N]
+dtm$br[is.na(amt),.N]
+
+
 
 
 ys1m<-resyldsprdv4(dtl,dtm$prl,regversion=4,returndt=T,parallel.core. = mcore)

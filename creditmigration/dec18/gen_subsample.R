@@ -13,8 +13,17 @@ corpbasis_HG=ysHG$regresult[ccy=='eur',.(date,`High Grade`=est)]
 ysLG<-resyldsprdv4(dtl[(rating_bucket==2 | rating_bucket==1)],dtm$prl,regversion=3,adjccybs=1,returndt=T,parallel.core.=1)
 corpbasis_LG=ysLG$regresult[ccy=='eur',.(date,`Low Grade`=est)]
 
+
+psi_rating <- rbindlist(list('High Grade'=ysHG$regresult[,.(date,ccy,est)],'Low Grade'=ysLG$regresult[,.(date,ccy,est)]),idcol = 'type')
+
+psi_rating[ccy=='eur'] %>% ggplot(aes(x=date,y=est,colour=type))+geom_line()+theme_few()+xlab('date')+ylab('basis points')+theme(legend.position='bottom',legend.title=element_text(colour='white'))+ labs(fill='')+scale_x_date(breaks=scales::pretty_breaks(n=7))+geom_hline(yintercept = 0,colour='grey')+ scale_color_manual(values=Lcolor)
+
+#ggsave('ratingcomp.pdf',width=4, height=4,units='in')
+
+
 corpbasis_eur_hglg=merge(corpbasis_HG,corpbasis_LG,by='date')
-corpbasis_eur_hglg %>% ggplotw()+theme_few()+xlab('date')+ylab('basis points')+theme(legend.position='bottom',legend.title=element_text(colour='white'))+ labs(fill='')+scale_x_date(breaks=scales::pretty_breaks(n=7))
+Lcolor=c('red','dark blue')
+corpbasis_eur_hglg %>% ggplotw()+theme_few()+xlab('date')+ylab('basis points')+theme(legend.position='bottom',legend.title=element_text(colour='white'))+ labs(fill='')+scale_x_date(breaks=scales::pretty_breaks(n=7))+geom_hline(yintercept = 0,colour='grey')+ scale_color_manual(values=Lcolor)
 ggsave('ratingcomp.pdf',width=4, height=4,units='in')
 
 ## Long vs Short split for EUR
@@ -25,8 +34,62 @@ ysLong<-resyldsprdv4(dtl[(ytm_bucket!=1)],dtm$prl,regversion=3.5,adjccybs=1,retu
 corpbasis_long=ysLong$regresult[ccy=='eur',.(date,`Long Maturity`=est)]
 
 corpbasis_eur_shortlong=merge(corpbasis_short,corpbasis_long,by='date')
-corpbasis_eur_shortlong %>% ggplotw()+theme_few()+xlab('date')+ylab('basis points')+theme(legend.position='bottom',legend.title=element_text(colour='white'))+ labs(fill='')+scale_x_date(breaks=scales::pretty_breaks(n=7))
+corpbasis_eur_shortlong %>% ggplotw()+theme_few()+xlab('date')+ylab('basis points')+theme(legend.position='bottom',legend.title=element_text(colour='white'))+ labs(fill='')+scale_x_date(breaks=scales::pretty_breaks(n=7))+geom_hline(yintercept = 0,colour='grey')+ scale_color_manual(values=Lcolor)
 ggsave('maturitycomp.pdf',width=4, height=4,units='in')
+###
+#########################
+## financial vs non-financial
+#############################
+dtl %>% ds
+dtl[,.N,sic1][order(-N)]
+
+dtl[,.N,.(sic1==6)]
+dtl[,.N,issue_type_desc]
+
+yslist <- list();
+psi <- list()
+
+#dtl<-dtl[ccy %in% c('usd','eur')]
+
+yslist[['fin']]<-resyldsprdv4(dtl[sic1==6],dtm$prl,regversion=4,adjccybs=1,returndt=T,parallel.core.=1)
+psi[['Financials']]=yslist[['fin']]$regresult[ccy=='eur',.(date,est)]
+
+yslist[['nonfin']]<-resyldsprdv4(dtl[(sic1!=6)],dtm$prl,regversion=4,adjccybs=1,returndt=T,parallel.core.=1)
+psi[['Non-Finacials']]=yslist[['nonfin']]$regresult[ccy=='eur',.(date,est)]
+# 
+yslist[['supr']]<-resyldsprdv4(dtl[(sic1==9)],dtm$prl,regversion=4,adjccybs=1,returndt=T,parallel.core.=1)
+psi[['Supras']]=yslist[['supr']]$regresult[ccy=='eur',.(date,est)]
+
+
+yslist[['tele']]<-resyldsprdv4(dtl[(sic1==4)],dtm$prl,regversion=4,adjccybs=1,returndt=T,parallel.core.=1)
+psi[['Telecomm']]=yslist[['tele']]$regresult[ccy=='eur',.(date,est)]
+
+
+yslist[['manu']]<-resyldsprdv4(dtl[(sic1==2 | sic1==3)],dtm$prl,regversion=4,adjccybs=1,returndt=T,parallel.core.=1)
+psi[['Manufacturing']]=yslist[['manu']]$regresult[ccy=='eur',.(date,est)]
+
+
+
+yslist[['others']]<-resyldsprdv4(dtl[(sic1 %ni% c(2,3,4,6,9))],dtm$prl,regversion=4,adjccybs=1,returndt=T,parallel.core.=1)
+psi[['Others']]=yslist[['others']]$regresult[ccy=='eur',.(date,est)]
+
+
+
+#psim=merge(psi[['fin']],psi[['nonfin']],by='date')
+psim=rbindlist(psi,idcol = 'type')
+psim[,.N,type]
+Lcolor=c('red','dark blue')
+psim[type %in% c('Financials','Supras','Telecomm','Manufacturing','Others')] %>% ggplot(aes(x=date,y=est,color=type))+geom_line()+theme_few()+xlab('date')+ylab('basis points')+theme(legend.position='bottom',legend.title=element_text(colour='white'))+ labs(fill='')+scale_x_date(breaks=scales::pretty_breaks(n=7))+geom_hline(yintercept = 0,colour='grey')#+ scale_color_manual(values=Lcolor)
+ggsave('psi_4sectors.pdf',width=4, height=4,units='in')
+
+Lcolor=c('red','dark blue')
+psim[type %in% c('Financials','Non-Finacials')] %>% ggplot(aes(x=date,y=est,color=type))+geom_line()+theme_few()+xlab('date')+ylab('basis points')+theme(legend.position='bottom',legend.title=element_text(colour='white'))+ labs(fill='')+scale_x_date(breaks=scales::pretty_breaks(n=7))+geom_hline(yintercept = 0,colour='grey')+ scale_color_manual(values=Lcolor)
+ggsave('psi_by_sector.pdf',width=4, height=4,units='in')
+
+
+
+
+####################
 
 ###
 shortHG<-resyldsprdv4(dtl[rating_bucket==3 & ytm_bucket==1],dtm$prl,regversion=1,adjccybs=1,returndt=T,parallel.core.=1)
@@ -46,13 +109,13 @@ tb<-tb[date %in% tb[,max(date),floor_date(date,'month')]$V1]
 
 tbjkl<-fread('jkldata.csv')[,.(date=mdy(date),basisjkl=-10000*basis)][date>=ymd('2004-01-01')]
 
-#merge(tb,tbjkl,by='date') %>% ggplotw()
+#merge(tb,tbjkl,by='date',rolling=T) %>% ggplotw()
 
 bases_corp_trea<-merge(corpbasis[,.(date=floor_date(date,'month'),`1-3Y Corp`=`Corporate Basis`)],tbjkl[,.(date=floor_date(date,'month'),`Treasury`=basisjkl)],by='date',all=TRUE);bases_corp_trea<-merge(bases_corp_trea,corpbasis2,by='date',all=TRUE)
 baseslong<-bases_corp_trea %>% melt(id.var='date') %>% na.omit()
 baseslong$variable<-factor(baseslong$variable,levels=c( "Treasury","1-3Y Corp", "1-7Y Corp"))
 
-baseslong[date<=ymd('2016-12-01')] %>% ggplot(aes(x=date,y=value,colour=variable))+geom_line()+theme_few()+xlab('date')+ylab('basis points')+theme(legend.position='right',legend.title=element_text(colour='white'))+ labs(fill='')+scale_x_date(breaks=scales::pretty_breaks(n=7))
+baseslong[date<=ymd('2016-12-01')] %>% ggplot(aes(x=date,y=value,colour=variable))+geom_line()+theme_few()+xlab('date')+ylab('basis points')+theme(legend.position='right',legend.title=element_text(colour='white'))+ labs(fill='')+scale_x_date(breaks=scales::pretty_breaks(n=7))+geom_hline(yintercept = 0,colour='grey')
 
 pdt_convyld<-baseslong[date<=ymd('2016-12-01')]
 pdt_convyld %>% fwrite('plotdata_convyld.csv')
@@ -60,8 +123,30 @@ pdt_convyld %>% fwrite('plotdata_convyld.csv')
 # bases_corp_trea %>% cor()
 
 
+
 ggsave('treasuryvscorpbasis.pdf',width=6*3/4, height=3,units='in')
 ggsave('../../paper/figures/treasuryvscorpbasis.pdf',width=6, height=4,units='in')
+
+
+cip10 <- prl[ticker %in% c('eubs1','jybs1','adbs1','sfbs1','cdbs1','bpbs1','dkbs1','skbs1','nkbs1','ndbs1') & monthend==1,.(cip=mean(value)),.(date)]
+
+cip6 <- prl[ticker %in% c('eubs1','jybs1','adbs1','sfbs1','cdbs1','bpbs1') & monthend==1,.(cip=mean(value)),.(date)]
+
+merge(cip10,cip6,by='date') %>% ggplotw()
+
+baseslong[date<=ymd('2016-12-01')] %>% ggplot(aes(x=date,y=value,colour=variable))+geom_line()+scale_fill_manual(values=c('blue','blue','grey','red'))
+
+dtA <-  baseslong[date<=ymd('2016-12-01')]
+dtB <- cip6[year(date)>2003,.(date,variable='CIP deviation',value=-cip)]
+
+save(dtA,dtB,file='data_treasury_corp_basis.RData')
+plt1 <-dtA %>% ggplot(aes(x=date,y=value,colour=variable))+geom_area(data=dtB,aes(x=date,y=value),alpha=.25,fill='gray',linetype='blank')+xlab('date')+ylab('basis points')+ labs(fill='white')+scale_x_date(breaks=scales::pretty_breaks(n=7))+geom_hline(yintercept = 0,colour='grey')+geom_line()+theme_few()+theme(legend.position='right',legend.title=element_text(colour='white'))
+plt1
+plt1 %>% ggsave(filename = 'treasurycorp2.pdf',plot=.,width=6, height=4,units='in')
+
+plt1+ scale_color_manual(values=c('green','blue','white','red'))+scale_fill_manual(values=c('white','white','grey','white'))
+
+merge(baseslong[date<=ymd('2016-12-01')],cip6[year(date)>2003,.(date,cip=-cip)],by='date',all=T) %>% ggplot(aes(x=date,y=value,colour=variable))+geom_line()+theme_few()+xlab('date')+ylab('basis points')+theme(legend.position='right',legend.title=element_text(colour='white'))+ labs(fill='')+scale_x_date(breaks=scales::pretty_breaks(n=7))+geom_hline(yintercept = 0,colour='grey')+geom_area(aes(x=date,y=value),alpha=.05)
 
 ############################
 ############################
@@ -147,17 +232,18 @@ ys1meff$regcoef %>% ggplotw()
 ################################################
 # ultimate parent == US vs not equal to US
 #############################################
+
 upnationlookup=bondrefall[,.N,.(upcusip,upnat)]
 
 dtl2<-merge(dtl,upnationlookup[,.(upcusip,upnat)],by = 'upcusip')
 
-nonUS<-resyldsprdv4(dtl2[rating_bucket==3 & ytm_bucket==1 & upnat!='United States'],dtm$prl,regversion=1,adjccybs=1,returndt=T,parallel.core.=1)
+nonUS<-resyldsprdv4(dtl2[upnat!='United States'],dtm$prl,regversion=4,adjccybs=1,returndt=T,parallel.core.=1)
 #nonUS<-resyldsprdv4(dtl2[upnat!='United States'],dtm$prl,regversion=4,adjccybs=1,returndt=T,parallel.core.=1)
-corpbasis_nonUS_eur<-nonUS$regresult[ccy=='eur',.(date,corpbasis_nonUS=-est)]
+corpbasis_nonUS_eur<-nonUS$regresult[ccy=='eur',.(date,corpbasis_nonUS=est)]
 
-US<-resyldsprdv4(dtl2[rating_bucket==3 & ytm_bucket==1 & upnat=='United States'],dtm$prl,regversion=1,adjccybs=1,returndt=T,parallel.core.=1)
+US<-resyldsprdv4(dtl2[upnat=='United States'],dtm$prl,regversion=4,adjccybs=1,returndt=T,parallel.core.=1)
 #US<-resyldsprdv4(dtl2[upnat=='United States'],dtm$prl,regversion=4,adjccybs=1,returndt=T,parallel.core.=1)
-corpbasis_US_eur<-US$regresult[ccy=='eur',.(date,corpbasis_US=-est)]
+corpbasis_US_eur<-US$regresult[ccy=='eur',.(date,corpbasis_US=est)]
 
 corpbasis_eur=merge(corpbasis_US_eur,corpbasis_nonUS_eur,by='date')
 corpbasis_eur  %>% ggplotw() +theme_few()+geom_hline(yintercept = 0)+xlab('')+ylab('basis points')+theme(legend.position='bottom',legend.title=element_text(colour='white'))+ labs(fill='')

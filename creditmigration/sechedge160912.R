@@ -57,8 +57,8 @@ rm(list=ls(all=TRUE));
 
 		dt.hedge.result.notxt<-copy(dt.hedge.result)
 		dt.hedge.result.notxt[,para:=NULL]
-		save(dt.hedge.result.notxt,file='sec_hedge_result_10k_notxt.RData')		
-
+#		save(dt.hedge.result.notxt,file='sec_hedge_result_10k_notxt.RData')		
+load('../db/sec_hedge_result_10k_notxt.RData')
 
 		dt.hedge.result.notxt %>% setkey(cik)
 		dt.hedge.result.notxt[,year:=year(date)]
@@ -74,8 +74,8 @@ rm(list=ls(all=TRUE));
 
 		aa[,hedged:=0]
 		aa[xhedg & xdebt & xcswp & xcurr,hedged:=1]
-		aa[type=='sents',.(hedged=max(hedged)),.(year,cik)][,.(pcthedged=mean(hedged)),.(year)][order(year)] %>% ggplot(aes(x=year,y=pcthedged))+geom_line()+theme_bw()
-		ggsave('figs/hedging_ratio.pdf')
+		aa[type=='sents',.(hedged=max(hedged)),.(year,cik)][,.(pcthedged=100*mean(hedged)),.(year)][order(year)] %>% ggplot(aes(x=year,y=pcthedged))+geom_line()+theme_bw()+xlab('year')+ylab('Percent of firms mentioning currency-hedged debt')
+		ggsave('hedging_ratio.pdf',width=6,height=4,unit='in')
 
 		aa[,hedged:=0]
 		aa[xhedg & xdebt & (xcurr | xeur),hedged:=1]

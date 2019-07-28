@@ -70,6 +70,9 @@ toc <- function(){
   # beep()
   invisible(toc)
 }
+wclip <- function(x,row.names=FALSE,col.names=TRUE,...) {
+  write.table(x,"clipboard",sep="\t",row.names=row.names,col.names=col.names,...)
+}
 
   plot.event.study<-function(dtin, event.dates,type.=1){
     if (type.==1)
@@ -81,9 +84,9 @@ toc <- function(){
   }
 
 
- plot.irf<-function(resirf,v1='credit',v2='cip',v3='i_netflow',filename=''){
+ plot.irf<-function(resirf,v1='credit',v2='cip',v3='i_netflow',filename='',naturalarrange=F){
     require(latex2exp)
-    labelv1<-'$c$'
+    labelv1<-'$\\kappa$'
     labelv2<-'$b$'
     labelv3<-'$\\mu$'
     dttemp<-list()
@@ -100,7 +103,12 @@ toc <- function(){
     figirf[[4]]<-dtirf[variable==str_c(v2,'.',v1)] %>% ggplot(data=.,aes(x=rn,y=irf,group=1))+geom_line()+geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=.3,colour=NA)+ggtitle(TeX(str_c(labelv2,' $\\rightarrow$ ',labelv1)))+xlab('')+ylab('')+geom_hline(yintercept=0,colour='lightblue')+theme_few()+theme(legend.position='none')
     figirf[[5]]<-dtirf[variable==str_c(v2,'.',v2)] %>% ggplot(data=.,aes(x=rn,y=irf,group=1))+geom_line()+geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=.3,colour=NA)+ggtitle(TeX(str_c(labelv2,' $\\rightarrow$ ',labelv2)))+xlab('')+ylab('')+geom_hline(yintercept=0,colour='lightblue')+theme_few()+theme(legend.position='none')
     figirf[[6]]<-dtirf[variable==str_c(v2,'.',v3)] %>% ggplot(data=.,aes(x=rn,y=irf,group=1))+geom_line()+geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=.3,colour=NA)+ggtitle(TeX(str_c(labelv2,' $\\rightarrow$ ',labelv3)))+xlab('')+ylab('')+geom_hline(yintercept=0,colour='lightblue')+theme_few()+theme(legend.position='none')
-    figirf.all<-grid.arrange(figirf[[1]],figirf[[2]],figirf[[3]],figirf[[4]],figirf[[5]],figirf[[6]],ncol=3,nrow=2,layout_matrix=rbind(c(1,2,3),c(4,5,6)),heights=c(2.25,2.25))
+    
+    if (!naturalarrange){
+      figirf.all<-grid.arrange(figirf[[1]],figirf[[2]],figirf[[3]],figirf[[4]],figirf[[5]],figirf[[6]],ncol=3,nrow=2,layout_matrix=rbind(c(1,2,3),c(4,5,6)),heights=c(2.25,2.25))
+    } else {
+      figirf.all<-grid.arrange(figirf[[1]],figirf[[3]],figirf[[2]],figirf[[5]],figirf[[6]],figirf[[4]],ncol=3,nrow=2,layout_matrix=rbind(c(1,2,3),c(4,5,6)),heights=c(2.25,2.25))
+    }
     #if(filename!='') ggsave(file=filename,figirf.all,width=8,height=5)
     figirf.all
   } 
@@ -177,14 +185,15 @@ plot.netdev<-function(yseff.result,fileout=''){
   yseff.result[,cimax:=est+1.96*se][,cimin:=est-1.96*se]
   require('gridExtra')
   fig7<-list()
-  fig7[[1]]<-yseff.result[ccy=='eur'] %>% ggplot(data=.,aes(x=date,y=est))+geom_line(colour='blue') +geom_errorbar(aes(ymin=cimin,ymax=cimax),colour='lightgrey',alpha=.5) +xlab('')+ylab('bps')+geom_hline(yintercept=0,colour='lightblue')+ scale_color_discrete('',labels = c('Net deviation (credit diff.- CIP)'))+scale_linetype_discrete('',labels = c('Net deviation (credit diff.- CIP)'))+ ggtitle('EUR')+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=7))+theme(legend.position='none')
-  fig7[[2]]<-yseff.result[ccy=='gbp'] %>% ggplot(data=.,aes(x=date,y=est))+geom_line(colour='blue') +geom_errorbar(aes(ymin=cimin,ymax=cimax),colour='lightgrey',alpha=.5) +xlab('')+ylab('')+geom_hline(yintercept=0,colour='lightblue')+ ggtitle('GBP')+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=7))+theme(legend.position='none')
-  fig7[[3]]<-yseff.result[ccy=='jpy'] %>% ggplot(data=.,aes(x=date,y=est))+geom_line(colour='blue') +geom_errorbar(aes(ymin=cimin,ymax=cimax),colour='lightgrey',alpha=.5) +xlab('')+ylab('')+geom_hline(yintercept=0,colour='lightblue')+ ggtitle('JPY')+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=7))+theme(legend.position='none')
-  fig7[[4]]<-yseff.result[ccy=='aud'] %>% ggplot(data=.,aes(x=date,y=est))+geom_line(colour='blue') +geom_errorbar(aes(ymin=cimin,ymax=cimax),colour='lightgrey',alpha=.5) +xlab('')+ylab('bps')+geom_hline(yintercept=0,colour='lightblue')+ ggtitle('AUD')+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=7))+theme(legend.position='none')
-  fig7[[5]]<-yseff.result[ccy=='chf'] %>% ggplot(data=.,aes(x=date,y=est))+geom_line(colour='blue') +geom_errorbar(aes(ymin=cimin,ymax=cimax),colour='lightgrey',alpha=.5) +xlab('')+ylab('')+geom_hline(yintercept=0,colour='lightblue')+ ggtitle('CHF')+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=7))+theme(legend.position='none')
-  fig7[[6]]<-yseff.result[ccy=='cad'] %>% ggplot(data=.,aes(x=date,y=est))+geom_line(colour='blue') +geom_errorbar(aes(ymin=cimin,ymax=cimax),colour='lightgrey',alpha=.5) +xlab('')+ylab('')+geom_hline(yintercept=0,colour='lightblue')+ ggtitle('CAD')+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=7))+theme(legend.position='none')
+  lcolor='darkblue';barcolor='lightgrey'
+  fig7[[1]]<-yseff.result[ccy=='eur'] %>% ggplot(data=.,aes(x=date,y=est))+geom_line(colour=lcolor) +geom_errorbar(aes(ymin=cimin,ymax=cimax),colour=barcolor,alpha=.5,size=1.1) +xlab('')+ylab('basis points')+ scale_color_discrete('',labels = c('Net deviation (credit diff.- CIP)'))+scale_linetype_discrete('',labels = c('Net deviation (credit diff.- CIP)'))+ ggtitle('EUR')+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=5))+theme(legend.position='none')#+geom_hline(yintercept=0,colour='lightblue')
+  fig7[[2]]<-yseff.result[ccy=='gbp'] %>% ggplot(data=.,aes(x=date,y=est))+geom_line(colour=lcolor) +geom_errorbar(aes(ymin=cimin,ymax=cimax),colour=barcolor,alpha=.5,size=1.1) +xlab('')+ylab('')+ ggtitle('GBP')+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=5))+theme(legend.position='none')#+geom_hline(yintercept=0,colour='lightblue')
+  fig7[[3]]<-yseff.result[ccy=='jpy'] %>% ggplot(data=.,aes(x=date,y=est))+geom_line(colour=lcolor) +geom_errorbar(aes(ymin=cimin,ymax=cimax),colour=barcolor,alpha=.5,size=1.1) +xlab('')+ylab('')+ ggtitle('JPY')+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=5))+theme(legend.position='none')#+geom_hline(yintercept=0,colour='lightblue')
+  fig7[[4]]<-yseff.result[ccy=='aud'] %>% ggplot(data=.,aes(x=date,y=est))+geom_line(colour=lcolor) +geom_errorbar(aes(ymin=cimin,ymax=cimax),colour=barcolor,alpha=.5,size=1.1) +xlab('')+ylab('basis points')+ ggtitle('AUD')+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=5))+theme(legend.position='none')#+geom_hline(yintercept=0,colour='lightblue')
+  fig7[[5]]<-yseff.result[ccy=='chf'] %>% ggplot(data=.,aes(x=date,y=est))+geom_line(colour=lcolor) +geom_errorbar(aes(ymin=cimin,ymax=cimax),colour=barcolor,alpha=.5,size=1.1) +xlab('')+ylab('')+ ggtitle('CHF')+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=5))+theme(legend.position='none')#+geom_hline(yintercept=0,colour='lightblue')
+  fig7[[6]]<-yseff.result[ccy=='cad'] %>% ggplot(data=.,aes(x=date,y=est))+geom_line(colour=lcolor) +geom_errorbar(aes(ymin=cimin,ymax=cimax),colour=barcolor,alpha=.5,size=1.1) +xlab('')+ylab('')+ ggtitle('CAD')+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=5))+theme(legend.position='none')#+geom_hline(yintercept=0,colour='lightblue')
   fig7all<-grid.arrange(fig7[[1]],fig7[[2]],fig7[[3]],fig7[[4]],fig7[[5]],fig7[[6]],ncol=3,nrow=2,layout_matrix=rbind(c(1,2,3),c(4,5,6)),heights=c(2.25,2.25)) 
-  if(fileout!='') ggsave(file=fileout,fig7all,width=10.5,height=6.5)
+  if(fileout!='') ggsave(file=fileout,fig7all,width=8,height=5)
 }
 
 
@@ -397,16 +406,18 @@ plot.panel.creditcip<-function(prw=dtm$prw,rys=ys1m$regresult, filename='',x11.=
     return(legend)
   }
   require('gridExtra')
+  
+  Labels=c('CIP deviation (5 yr)','Residualized credit spread differential'); Ltype=c('solid','dashed'); Lcolor=c('red','darkblue')
   fig6<-list()
   if (x11.) X11(width=7,height=9)
-  fig6[[1]]<-dtcreditcip.plot[ccy=='eur'] %>% ggplot(data=.,aes(x=date,y=value))+geom_line(aes(linetype=variable,colour=variable)) +geom_errorbar(aes(ymin=cimin,ymax=cimax),colour='lightgrey',alpha=.5) +xlab('')+ylab('basis points')+geom_hline(yintercept=0,colour='lightblue')+ scale_color_discrete('',labels = c('CIP','Credit Spread Diff.'))+scale_linetype_discrete('',labels = c('CIP','Credit Spread Diff.'))+ggtitle('EUR')+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=7))+theme(legend.position='bottom')+annotate('text',x=ymd('2015-06-01'),y=10,label=str_c('cor=',as.character(round(dt.corr.ccy[ccy=='eur',corr],2))))
+  fig6[[1]]<-dtcreditcip.plot[ccy=='eur'] %>% ggplot(data=.,aes(x=date,y=value))+geom_line(aes(linetype=variable,colour=variable)) +geom_errorbar(aes(ymin=cimin,ymax=cimax),colour='lightgrey',alpha=.5) +xlab('')+ylab('basis points')+ scale_color_manual('',labels =Labels,values=Lcolor)+scale_linetype_manual('',labels =Labels,values=Ltype)+ggtitle('EUR')+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=5))+theme(legend.position='bottom')+annotate('text',x=ymd('2015-01-01'),y=10,label=str_c('cor=',as.character(round(dt.corr.ccy[ccy=='eur',corr],2))))#+geom_hline(yintercept=0,colour='lightblue')
   legendcommon<-get_legend(fig6[[1]])
   fig6[[1]]<-fig6[[1]]+theme(legend.position='none')
-  fig6[[2]]<-dtcreditcip.plot[ccy=='gbp'] %>% ggplot(data=.,aes(x=date,y=value))+geom_line(aes(linetype=variable,colour=variable)) +geom_errorbar(aes(ymin=cimin,ymax=cimax),colour='lightgrey',alpha=.5) +xlab('')+ylab('')+geom_hline(yintercept=0,colour='lightblue')+ scale_color_discrete('',labels = c('CIP','Credit Spread Diff.'))+scale_linetype_discrete('',labels = c('CIP','Credit Spread Diff.'))+ggtitle('GBP')+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=7))+theme(legend.position='none')+annotate('text',x=ymd('2015-06-01'),y=10,label=str_c('cor=',as.character(round(dt.corr.ccy[ccy=='gbp',corr],2))))+theme(axis.title.y=element_blank())
-  fig6[[3]]<-dtcreditcip.plot[ccy=='jpy'] %>% ggplot(data=.,aes(x=date,y=value))+geom_line(aes(linetype=variable,colour=variable)) +geom_errorbar(aes(ymin=cimin,ymax=cimax),colour='lightgrey',alpha=.5) +xlab('')+ylab('')+geom_hline(yintercept=0,colour='lightblue')+ scale_color_discrete('',labels = c('CIP','Credit Spread Diff.'))+scale_linetype_discrete('',labels = c('CIP','Credit Spread Diff.'))+ggtitle('JPY')+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=7))+theme(legend.position='none')+annotate('text',x=ymd('2015-06-01'),y=10,label=str_c('cor=',as.character(round(dt.corr.ccy[ccy=='jpy',corr],2))))+theme(axis.title.y=element_blank())
-  fig6[[4]]<-dtcreditcip.plot[ccy=='aud'] %>% ggplot(data=.,aes(x=date,y=value))+geom_line(aes(linetype=variable,colour=variable)) +geom_errorbar(aes(ymin=cimin,ymax=cimax),colour='lightgrey',alpha=.5) +xlab('')+ylab('basis points')+geom_hline(yintercept=0,colour='lightblue')+ scale_color_discrete('',labels = c('CIP','Credit Spread Diff.'))+scale_linetype_discrete('',labels = c('CIP','Credit Spread Diff.'))+ggtitle('AUD')+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=7))+theme(legend.position='none')+annotate('text',x=ymd('2015-06-01'),y=10,label=str_c('cor=',as.character(round(dt.corr.ccy[ccy=='aud',corr],2))))
-  fig6[[5]]<-dtcreditcip.plot[ccy=='chf'] %>% ggplot(data=.,aes(x=date,y=value))+geom_line(aes(linetype=variable,colour=variable)) +geom_errorbar(aes(ymin=cimin,ymax=cimax),colour='lightgrey',alpha=.5) +xlab('')+ylab('')+geom_hline(yintercept=0,colour='lightblue')+ scale_color_discrete('',labels = c('CIP','Credit Spread Diff.'))+scale_linetype_discrete('',labels = c('CIP','Credit Spread Diff.'))+ggtitle('CHF')+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=7))+theme(legend.position='none')+annotate('text',x=ymd('2015-06-01'),y=10,label=str_c('cor=',as.character(round(dt.corr.ccy[ccy=='chf',corr],2))))+theme(axis.title.y=element_blank())
-  fig6[[6]]<-dtcreditcip.plot[ccy=='cad'] %>% ggplot(data=.,aes(x=date,y=value))+geom_line(aes(linetype=variable,colour=variable)) +geom_errorbar(aes(ymin=cimin,ymax=cimax),colour='lightgrey',alpha=.5) +xlab('')+ylab('')+geom_hline(yintercept=0,colour='lightblue')+ scale_color_discrete('',labels = c('CIP','Credit Spread Diff.'))+scale_linetype_discrete('',labels = c('CIP','Credit Spread Diff.'))+ggtitle('CAD')+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=7))+theme(legend.position='none')+annotate('text',x=ymd('2015-06-01'),y=10,label=str_c('cor=',as.character(round(dt.corr.ccy[ccy=='cad',corr],2))))+theme(axis.title.y=element_blank())
+  fig6[[2]]<-dtcreditcip.plot[ccy=='gbp'] %>% ggplot(data=.,aes(x=date,y=value))+geom_line(aes(linetype=variable,colour=variable)) +geom_errorbar(aes(ymin=cimin,ymax=cimax),colour='lightgrey',alpha=.5) +xlab('')+ylab('')+ scale_color_manual('',labels =Labels,values=Lcolor)+scale_linetype_manual('',labels =Labels,values=Ltype)+ggtitle('GBP')+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=5))+theme(legend.position='none')+annotate('text',x=ymd('2015-01-01'),y=10,label=str_c('cor=',as.character(round(dt.corr.ccy[ccy=='gbp',corr],2))))+theme(axis.title.y=element_blank())#+geom_hline(yintercept=0,colour='lightblue')
+  fig6[[3]]<-dtcreditcip.plot[ccy=='jpy'] %>% ggplot(data=.,aes(x=date,y=value))+geom_line(aes(linetype=variable,colour=variable)) +geom_errorbar(aes(ymin=cimin,ymax=cimax),colour='lightgrey',alpha=.5) +xlab('')+ylab('')+ scale_color_manual('',labels =Labels,values=Lcolor)+scale_linetype_manual('',labels =Labels,values=Ltype)+ggtitle('JPY')+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=5))+theme(legend.position='none')+annotate('text',x=ymd('2015-01-01'),y=10,label=str_c('cor=',as.character(round(dt.corr.ccy[ccy=='jpy',corr],2))))+theme(axis.title.y=element_blank())#+geom_hline(yintercept=0,colour='lightblue')
+  fig6[[4]]<-dtcreditcip.plot[ccy=='aud'] %>% ggplot(data=.,aes(x=date,y=value))+geom_line(aes(linetype=variable,colour=variable)) +geom_errorbar(aes(ymin=cimin,ymax=cimax),colour='lightgrey',alpha=.5) +xlab('')+ylab('basis points')+ scale_color_manual('',labels =Labels,values=Lcolor)+scale_linetype_manual('',labels =Labels,values=Ltype)+ggtitle('AUD')+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=5))+theme(legend.position='none')+annotate('text',x=ymd('2015-01-01'),y=-50,label=str_c('cor=',as.character(round(dt.corr.ccy[ccy=='aud',corr],2))))#+geom_hline(yintercept=0,colour='lightblue')
+  fig6[[5]]<-dtcreditcip.plot[ccy=='chf'] %>% ggplot(data=.,aes(x=date,y=value))+geom_line(aes(linetype=variable,colour=variable)) +geom_errorbar(aes(ymin=cimin,ymax=cimax),colour='lightgrey',alpha=.5) +xlab('')+ylab('')+ scale_color_manual('',labels =Labels,values=Lcolor)+scale_linetype_manual('',labels =Labels,values=Ltype)+ggtitle('CHF')+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=5))+theme(legend.position='none')+annotate('text',x=ymd('2015-01-01'),y=10,label=str_c('cor=',as.character(round(dt.corr.ccy[ccy=='chf',corr],2))))+theme(axis.title.y=element_blank())#+geom_hline(yintercept=0,colour='lightblue')
+  fig6[[6]]<-dtcreditcip.plot[ccy=='cad'] %>% ggplot(data=.,aes(x=date,y=value))+geom_line(aes(linetype=variable,colour=variable)) +geom_errorbar(aes(ymin=cimin,ymax=cimax),colour='lightgrey',alpha=.5) +xlab('')+ylab('')+ scale_color_manual('',labels =Labels,values=Lcolor)+scale_linetype_manual('',labels =Labels,values=Ltype)+ggtitle('CAD')+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=5))+theme(legend.position='none')+annotate('text',x=ymd('2015-01-01'),y=20,label=str_c('cor=',as.character(round(dt.corr.ccy[ccy=='cad',corr],2))))+theme(axis.title.y=element_blank())#+geom_hline(yintercept=0,colour='lightblue')
   if (wide){
     fig6all<-grid.arrange(fig6[[1]],fig6[[2]],fig6[[3]],fig6[[4]],fig6[[5]],fig6[[6]],legendcommon,ncol=3,nrow=3,layout_matrix=rbind(c(1,2,3),c(4,5,6),c(7,7,7)),heights=c(2.25,2.25,.25))
   } else{
@@ -414,7 +425,7 @@ plot.panel.creditcip<-function(prw=dtm$prw,rys=ys1m$regresult, filename='',x11.=
   }
   fig6all 
   if (filename!=''){
-    if (wide) ggsave(file=filename,fig6all,width=10.5,height=6.5) 
+    if (wide) ggsave(file=filename,fig6all,width=8,height=5) 
     else ggsave(file=filename,fig6all,width=7,height=9)
   }
   list('dt.credit.cip'=dt.merged,'dt.credit.cip.l'=dtcreditcip.plot,'dt.corr'=dt.corr.ccy)  
@@ -520,7 +531,11 @@ add.earlist.iss.in.ccy <- function(dtin,bondrefall.=FALSE){
 
 create.dev.long<-function(prwin=prw,dtregresult,yrstr='5'){
   # exclude net deviation
-  cip<-copy(prwin[,.(date,eval(exparse(str_c('eubs',yrstr))),eval(exparse(str_c('bpbs',yrstr))),eval(exparse(str_c('jybs',yrstr))),eval(exparse(str_c('adbs',yrstr))),eval(exparse(str_c('sfbs',yrstr))),eval(exparse(str_c('cdbs',yrstr))))])
+  #cip<-copy(prwin[,.(date,eval(exparse(str_c('eubs',yrstr))),eval(exparse(str_c('bpbs',yrstr))),eval(exparse(str_c('jybs',yrstr))),eval(exparse(str_c('adbs',yrstr))),eval(exparse(str_c('sfbs',yrstr))),eval(exparse(str_c('cdbs',yrstr))))])
+  # new version Jan 2019
+  cip<-copy(prwin[,c('date',str_c('eubs',yrstr),str_c('bpbs',yrstr),str_c('jybs',yrstr),str_c('adbs',yrstr),str_c('sfbs',yrstr),str_c('cdbs',yrstr)),with=FALSE])
+
+  #browser()
   cip %>% setnames(str_c(c('eubs','bpbs','jybs','adbs','sfbs','cdbs'),yrstr),c('eur','gbp','jpy','aud','chf','cad'))
   cipl<-melt(cip,id.vars=c('date'),variable.name='ccy',value.name='cip')
   cipl %>% setkey(date,ccy)
@@ -533,7 +548,8 @@ create.dev.long<-function(prwin=prw,dtregresult,yrstr='5'){
 }
 create.dev.long2<-function(prwin=prw,creditmispin,netmispin,yrstr='5'){
   # include net dev
-    cip<-copy(prwin[,.(date,eval(exparse(str_c('eubs',yrstr))),eval(exparse(str_c('bpbs',yrstr))),eval(exparse(str_c('jybs',yrstr))),eval(exparse(str_c('adbs',yrstr))),eval(exparse(str_c('sfbs',yrstr))),eval(exparse(str_c('cdbs',yrstr))))])
+    # cip<-copy(prwin[,.(date,eval(exparse(str_c('eubs',yrstr))),eval(exparse(str_c('bpbs',yrstr))),eval(exparse(str_c('jybs',yrstr))),eval(exparse(str_c('adbs',yrstr))),eval(exparse(str_c('sfbs',yrstr))),eval(exparse(str_c('cdbs',yrstr))))])
+  cip<-copy(prwin[,c('date',str_c('eubs',yrstr),str_c('bpbs',yrstr),str_c('jybs',yrstr),str_c('adbs',yrstr),str_c('sfbs',yrstr),str_c('cdbs',yrstr)),with=FALSE])
   creditmisp=copy(creditmispin)
   netmisp=copy(netmispin)
   cip %>% setnames(str_c(c('eubs','bpbs','jybs','adbs','sfbs','cdbs'),yrstr),c('eur','gbp','jpy','aud','chf','cad'))
@@ -670,14 +686,20 @@ regfun<-function(dt,ccylist='',regversion=4,bylist='',lhs.,mainccy.){
   tc.ret<-tryCatch({
     if (regversion==1){
       reg<-felm(eval(exparse(lhs.))~ccy |upcusip |0 | upcusip,data=dt)
+    } else if (regversion==2){
+      reg<-felm(eval(exparse(lhs.))~ccy | ytm_bucket+rating_bucket | 0 | upcusip, data=dt)
     } else if (regversion==3){
       reg<-felm(eval(exparse(lhs.))~ccy | upcusip+ytm_bucket | 0 | upcusip, data=dt)
+    } else if (regversion==3.5){
+      reg<-felm(eval(exparse(lhs.))~ccy | upcusip+rating_bucket | 0 | upcusip, data=dt)
     } else if (regversion==-4){
-      reg<-felm(eval(exparse(lhs.))~0 | upcusip+ytm_bucket+rating_bucket | 0 | upcusip, data=dt)
+      reg<-felm(eval(exparse(lhs.))~1 | upcusip+ytm_bucket+rating_bucket | 0 | upcusip, data=dt)
     } else if (regversion==4){
       reg<-felm(eval(exparse(lhs.))~ccy | upcusip+ytm_bucket+rating_bucket | 0 | upcusip, data=dt)
     } else if (regversion==4.5){
       reg<-felm(eval(exparse(lhs.))~ccy | upcusip+rating_bucket+ytm_bucket +liq_bucket+amt_bucket | 0 | upcusip, data=dt)
+    } else if (regversion==4.6){
+      reg<-felm(eval(exparse(lhs.))~ccy | upcusip+rating_bucket+ytm_bucket +liq_bucket+amt_bucket+Eglaw | 0 | upcusip, data=dt)
     } else if (regversion==5){
       reg<-felm(eval(exparse(lhs.))~ccy +liq+amt| upcusip+ytm_bucket+rating_bucket+senior | 0 | upcusip, data=dt)
     } else if (regversion==5.5){
@@ -695,7 +717,16 @@ regfun<-function(dt,ccylist='',regversion=4,bylist='',lhs.,mainccy.){
     print(err);print(bylist)
   })
   if (exists('reg')){
-    if (regversion==9){dtcoef2<-(coef(summary(reg)) %>% as.data.table(keep.rownames=T))[rn %like% '^ccy' | rn %like% '^rating'][,.(ccy=rn,est=Estimate,se=`Cluster s.e.`)]} else{
+    if (regversion==9){
+      dtcoef2<-(coef(summary(reg)) %>% as.data.table(keep.rownames=T))[rn %like% '^ccy' | rn %like% '^rating'][,.(ccy=rn,est=Estimate,se=`Cluster s.e.`)]} 
+    else if (regversion==-4){
+      
+      dtcoef2 <- data.table(ccy='none','N'=reg$N,'rsq'=summary(reg)$r2adj)
+      dtccy<-data.table('ccy'=ccylist);dtccy %>% setkey(ccy)
+      dtcoef2 %>% setkey(ccy)
+      dtcoef2 <- dtcoef2[dtccy[ccy!=str_c(1,mainccy.)]]
+    }
+    else{
       dtcoef2<-(coef(summary(reg)) %>% as.data.table(keep.rownames=T))[rn %like% '^ccy',.(ccy=str_sub(rn,4),est=Estimate,se=`Cluster s.e.`)]
       dtcoef2 <- cbind(dtcoef2,data.table('N'=reg$N,'rsq'=summary(reg)$r2adj))
       dtccy<-data.table('ccy'=ccylist);dtccy %>% setkey(ccy)
@@ -1010,6 +1041,26 @@ icollapse.againstall<-function(dtin.,ccyA='eur',collapse.freq='month',filter=0){
       else if (ccyA=='aud') natA<-'australia'
       else if (ccyA=='chf') natA<-'switzerland'
       else if (ccyA=='cad') natA<-'canada'
+      else if (ccyA=='sek') natA='sweden'
+      else if (ccyA=='krw') natA='south korea'
+      else if (ccyA=='nok') natA='norway'
+      else if (ccyA=='brl') natA='brazil'
+      else if (ccyA=='mxn') natA='mexico'
+      else if (ccyA=='rub') natA='russian fed'
+      else if (ccyA=='ind') natA='india'
+      else if (ccyA=='myr') natA='malaysia'
+      else if (ccyA=='clp') natA='chile'
+      else if (ccyA=='nzd') natA='new zealand'
+      else if (ccyA=='inr') natA='indonesia'
+      else if (ccyA=='thb') natA='thailand'
+      else if (ccyA=='cop') natA='colombia'
+      else if (ccyA=='php') natA='philippines'
+      else if (ccyA=='twd') natA='taiwan'
+      else if (ccyA=='huf') natA='hungary'
+      else if (ccyA=='pen') natA='peru'
+      else if (ccyA=='zar') natA='south africa'
+      else if (ccyA=='pln') natA='poland'
+      else if (ccyA=='ngn') natA='nigeria'
       else if (ccyA=='usd') return(data.table(NA))
       else stop(str_c('no ccy country match: ',ccyA))
 
@@ -1042,7 +1093,7 @@ icollapse.againstall<-function(dtin.,ccyA='eur',collapse.freq='month',filter=0){
       # first collapse into unique values by all columns, but each of the variables appear on a different row
       dt2<-dtin[,.(date,I_fUSD,I_usF,I_both,I_usd_tot)] %>% unique()    
       # get rid of NAs by combining rows of identical yrmo, first melt into long, get rid of NAs, then cast back to wide
-      dtout<-(dt2[order(date)] %>% melt(id.vars=c('date')))[!is.na(value)] %>% dcast.data.table(date~variable,fun=function(x) {if(length(unique(x))>1) {print('error with collapsing'); browser()}; first(x)})
+      dtout<-(dt2[order(date)] %>% melt(id.vars=c('date')))[!is.na(value)] %>% dcast.data.table(date~variable,fun=function(x) {if(length(unique(x))>1) {print('error with collapsing'); browser()}; median(x)})
       
       # when there are no flow for a certain month, use zero
       dtout[is.na(I_fUSD),I_fUSD:=0][is.na(I_usF),I_usF:=0][is.na(I_usd_tot),I_usd_tot:=0]
@@ -1109,8 +1160,8 @@ icollapse.againstall<-function(dtin.,ccyA='eur',collapse.freq='month',filter=0){
       # first collapse into unique values by all columns, but each of the variables appear on a different row
       dt2<-dtin[,.(date,I_fUSD,I_usF,I_both,I_usd_tot)] %>% unique()    
       # get rid of NAs by combining rows of identical yrmo, first melt into long, get rid of NAs, then cast back to wide
-      dtout<-(dt2[order(date)] %>% melt(id.vars=c('date')))[!is.na(value)] %>% dcast.data.table(date~variable,fun=function(x) {if(length(unique(x))>1) {print('error with collapsing'); browser()}; first(x)})
-      
+      #dtout<-(dt2[order(date)] %>% melt(id.vars=c('date')))[!is.na(value)] %>% dcast.data.table(date~variable,fun=function(x) {if(length(unique(x))>1) {print('error with collapsing'); browser()}; first(x)})
+      dtout<-(dt2[order(date)] %>% melt(id.vars=c('date')) %>% unique())[!is.na(value)] %>% dcast(date~variable)
       # when there are no flow for a certain month, use zero
       dtout[is.na(I_fUSD),I_fUSD:=0][is.na(I_usF),I_usF:=0][is.na(I_usd_tot),I_usd_tot:=0]
       
@@ -1742,8 +1793,8 @@ bucketrating<-function(dtlin){
   # creates new column called rating bucket as factor with 4 levels 
   #dtlout<-dtlin
   #fread('rating.csv') %>% dt2clip
-  dtlin[nrating %between% c(1,4),rating_bucket:=3]
-  dtlin[nrating %between% c(5,10),rating_bucket:=2]
+  dtlin[nrating %between% c(1,4),rating_bucket:=3] #AA- or better
+  dtlin[nrating %between% c(5,10),rating_bucket:=2] #BBB- or better
   dtlin[nrating>10,rating_bucket:=1]
   dtlin[nrating==0,rating_bucket:=0]
   dtlin[is.na(nrating),rating_bucket:=0]
@@ -1768,6 +1819,7 @@ bucketytofm<-function(dtlin){
   #dtlin[,ytofm_bucket:=factor(ytofm_bucket)]
   dtlin
 }
+
 
 bdpgl<-function(tickers,filestr=str_c('bbg_',today(),'.RData'),fieldstr=c('PX_LAST'),splitN=1){
   require(Rblpapi); require(data.table); require(lubridate); require(dplyr)
@@ -2169,12 +2221,14 @@ ggplotw.comp2<-function(dtA,dtB,labout=c('Main Result','Additional Controls')){
 }
 
 dt2clip = function(x,sep="\t",col.names=T,...) { 
-  write.table(x
-             ,file = pipe("pbcopy")
-             ,sep=sep
-             ,col.names = col.names
-             ,row.names = F
-             ,quote = F,...)
+  # write.table(x
+  #            ,file = pipe("pbcopy")
+  #            ,sep=sep
+  #            ,col.names = col.names
+  #            ,row.names = F
+  #            ,quote = F,...)
+  write.table(x, "clipboard", sep="\t")
+
 }
 get.dt.class<-function(dtin){
   data.table('columnname'=ds(dtin),'classtype'=unlist(lapply(dtin,class)))
@@ -2253,15 +2307,23 @@ compare.dt<-function(A,B, bykey.=key(A),mask=T,unique.=T){
     A<-unique(A)
     B<-unique(B)
   }
-  Acount<-A[,.N,bykey.][,.N]; print(str_c('A N.= ',Acount))
-  Bcount<-B[,.N,bykey.][,.N]; print(str_c('B N.= ',Bcount))
-  AB.intersect<-A[B,nomatch=0]; print(str_c('AB intersect N.= ',AB.intersect[,.N]))
-  AnotB <- A[!B]; print(str_c('A not in B N.= ',AnotB[,.N]))
-  BnotA <- B[!A]; print(str_c('B not in A N.= ',BnotA[,.N]))
+  A.N<-A[,.N,bykey.][,.N]; print(str_c('A N.= ',A.N))
+  B.N<-B[,.N,bykey.][,.N]; print(str_c('B N.= ',B.N))
+  AB.intersect<-A[B,nomatch=0]; AB.intersect.N=AB.intersect[,.N]; print(str_c('AB intersect N.= ',AB.intersect.N))
+  AnotB <- A[!B]; AnotB.N=AnotB[,.N];print(str_c('A not in B N.= ',AnotB.N))
+  BnotA <- B[!A]; BnotA.N=BnotA[,.N];print(str_c('B not in A N.= ',BnotA.N))
+  AB.union.N<-AB.intersect.N+AnotB.N+BnotA.N; print(str_c('AB union N= ',AB.union.N)); if (AB.union.N>(A.N+B.N)) warning('AB.union > A+B; likely non unique observations in either A or B')
+  # an additional check
+    AB.union=rbindlist(list(AB.intersect,AnotB,BnotA),fill=T)
+    if (AB.union[,.N]!=AB.union.N) warning('Union incorrect')
+  print(str_c('A/AB.union :',  round(A.N/AB.union.N,2)))
+  print(str_c('B/AB.union :',  round(B.N/AB.union.N,2)))
+  print(str_c('overlap :', round(AB.intersect.N/AB.union.N,2)))
+
   if (mask) 
     return(NULL)
   else
-    list('AB'=AB.intersect,'AniB'=AnotB,'BniA'=BnotA,'A.N'=Acount,'B.N'=Bcount,'AB.N'=AB.intersect[,.N],'AniB.N'=AnotB[,.N],'BniA.N'=BnotA[,.N])
+    list('AB.union'=AB.union,'AB.intersect'=AB.intersect,'AniB'=AnotB,'BniA'=BnotA,'A.N'=A.N,'B.N'=B.N,'AB.N'=AB.intersect[,.N],'AniB.N'=AnotB[,.N],'BniA.N'=BnotA[,.N])
 }
 
 fread.xls<-function(path,sheet.=excel_sheets(path)){

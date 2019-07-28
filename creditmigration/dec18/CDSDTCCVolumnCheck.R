@@ -10,7 +10,7 @@ dt[,notl2:=as.numeric(stringr::str_replace_all(notl,',',''))]
 dt[,.N,REGION]
 dt
 
-eurfirm <- dt[REGION %in% c('EUROPE')][order(-Dealers)] %>% head(140)
+eurfirm <- dt[REGION %in% c('EUROPE')][order(-Dealers)] %>% head(147)
 eurfirm[,.(mean(notl2),mean(Dealers),mean(ntrades),mean(DEALERSAVG))]
 dt[ent %in% EU][,.(mean(notl2),mean(Dealers),mean(ntrades),mean(DEALERSAVG))]
 

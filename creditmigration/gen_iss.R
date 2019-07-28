@@ -105,18 +105,50 @@ sdc.3<-sdc.1
 
 # filtering into sdc clean3---------------------------------------------------------------
 rm(list=ls());source('util.r');load('db/sdc.RData')
+require(magrittr)
 
-sdc.1<-sdc %>% filter.sdc(2)
+filter.sdc<-function(sdc,type.=1){
+  # filter the sdc database based on criteria 10/05/2016
+  flds.keep<-c("amt","btypc","c","ccy","country_of_incorp","cu","cusip9","d","deal_no","descr","foreign","glaw","i","isin","issue_type_desc","mat","mat2","mdealtype","mkt","modnat","modupnat","monthly","nat","natccy","nrating","pub","rule144a","secur","settlement2","sicp","supranational","tf_macro_desc","tf_mid_desc","tic","uop","upcusip","upforeign","upnames","upnatccy","upsicp","upsupranational","ytofm")
+  sdc.0<-sdc[,c(flds.keep),with=F] %>% as.data.frame %>% as.data.table %>%  copy()
+  if(type. %like% '6ccy'){
+    print('6 ccy only')
+    sdc.0<-sdc.0[ccy %in% c('usd','eur','gbp','jpy','aud','chf','cad')]
+  } 
+  if (type. %like% 'v1'){
+    print('v1')
+    # the version that matches stata filter exactly to generate sdc96_clean
+    dtiss.stata.match<-sdc.0[amt>=50][ytofm>=2][ytofm<99][nrating<=16][nrating!=0][nrating!=1][pub %in% c('Public','Sub.')][mdealtype %ni% c("P","ANPX","M","EP","CEP","TM","PP","R144P")][tf_mid_desc!="Government Sponsored Enterprises"][secur %ni% stringr::str_to_lower(c("Cum Red Pfd Shs", "Non-Cum Pref Sh" ,"Preferred Shs" ,"Pfd Stk,Com Stk"))]
+    sdc.1<-dtiss.stata.match
+    # aa<-read.dta13('sdc96_clean3.dta') %>% as.data.table();
+    #compare.dt(aa,dtiss.stata.match[d>=ymd('1996-01-01') & d<ymd('2016-07-01')],'deal_no') 
+  } else if(type. %like% 'v2'){
+    print('v2')
+    # better version? NO, worse
+    sdc.1<-sdc.0[amt>=50][ytofm>=2][ytofm<99][nrating<=16][nrating!=0][nrating!=1][pub %in% c('Public','Sub.')][mdealtype %ni% c("P","ANPX","M","EP","CEP","TM","PP","R144P")][tf_mid_desc!="Government Sponsored Enterprises"][secur %nlk% 'fl|mtg|pdf|sh|zero|fr|index|mortg|eqt|pass|islamic|step|pfanbriefe|cont|var|perp|loan|extendible|pik']
+    sdc.1[,acq:=ifelse(str_to_lower(uop) %like% 'acq',1,0)]
+    sdc.1[str_to_lower(i) %like% 'acqs|acquisition',acq:=1]
+    sdc.1<-sdc.1[acq==0]
+  } else if(type. %like% 'v3'){
+    print('v3')
+    # more generous, include floating, gov sectors, etc
+    sdc.1<-sdc.0[amt>=50][ytofm>=1][ytofm<99][nrating<=16][nrating!=0][nrating!=0][mdealtype %ni% c("P","ANPX","M","EP","CEP","TM","PP","R144P")][str_to_lower(tf_mid_desc) %nlk% "govern"][secur %nlk% 'mtg|pdf|sh|mortg|eqt|pass|islamic|step|pfanbriefe|cont|perp|loan|extendible|pik']
+  }
+  sdc.1
+}
+
+sdc.1<-sdc %>% filter.sdc('v1')
 # sdc.1[,.(sumamt=sum(amt)/1000,N=.N),secur] %T>% dt2clip()
 # sdc.1[,.(sumamt=sum(amt)/1000,N=.N),tf_macro_desc] %T>% dt2clip()
 # sdc.1[,.(sumamt=sum(amt)/1000,N=.N),tf_mid_desc] %T>% dt2clip()
 # bb<-sdc.1[,.(sum(amt)/1000),.(monthly,ccy)] 
 # bb %>% ggplot(aes(x=monthly,y=V1,colour=ccy))+geom_line()
 
-registerDoParallel(1)
-dtiss.collapse.m <- foreach(iccy=c('eur','gbp','jpy','aud','chf','cad')) %dopar% {
-  sdc.1 %>% icollapse4(.,iccy,collapse.freq = 'month',filter=0)
-} %>% rbindlist()
+tmplist <- list()
+for(iccy in c('eur','gbp','jpy','aud','chf','cad')) {
+  tmplist[[length(tmplist)+1]] <- sdc.1 %>% icollapse4(.,iccy,collapse.freq = 'month',filter=0)
+}
+dtiss.collapse.m <- tmplist %>% rbindlist()
 dtiss.collapse.m %>% setkey(date,ccy)
 
 

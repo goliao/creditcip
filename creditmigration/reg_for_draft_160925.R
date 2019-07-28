@@ -97,7 +97,7 @@ if (bool.ind.resid){
   credit.cip.exact[,ccy:=factor(ccy)] %>% write.dta('temp.dta')
   dtcreditcip.m<-copy(credit.cip.exact)[order(date)][,date:=lubridate::floor_date(date,'month')][,.SD[1],.(date,ccy)]
   
-  dtin2<-dtissraw %>% add.earlist.iss.in.ccy(.,dtissraw)
+  dtin2<-dtissraw %>% add.earlist.iss.in.ccy(.)
   dtin2 %>% setkey(upcusip,ccy)
   # limiting to relevent bonds: sol1: just merge with with ys1m$dtreg
   # dtin2<-dtin2 %>% semi_join(ys1m$dtreg[,.N,upcusip],by='upcusip') %>% as.data.table()
@@ -287,7 +287,7 @@ for(iccy in c('eur','gbp','jpy','aud','chf','cad')){
 # level
 reg_creditcip<-list()
 for (iccy in c('eur','gbp','jpy','aud','chf','cad')){
-  reg_creditcip[[length(reg_creditcip)+1]]<-creditcip.result$dt.credit.cip[ccy==iccy] %>% neweymod('credit~cip',value.name=iccy)
+  reg_creditcip[[length(reg_creditcip)+1]]<-creditcip.result$dt.credit.cip[ccy==iccy & date<'2016-08-01'] %>% neweymod('credit~cip',value.name=iccy)
 }
 regtable1<-(rbindlist(reg_creditcip) %>% dcast(order+rn+variable~varname))[order(order,rn,variable)][,!c('order','variable'),with=F]
 regtable1[,.(rn,eur,gbp,jpy,aud,chf,cad)] %T>% dt2clip 
@@ -327,8 +327,8 @@ regtable1b
 # issuance flow and net dev -----------------------------------------------
 # still need to floor month to get date at the begining of the month
 dtcreditcip.m<-copy(dtcreditcip)[order(date)][,date:=lubridate::floor_date(date,'month')][,.SD[1],.(date,ccy)]
-
-dtin2<-dtissraw %>% add.earlist.iss.in.ccy(.,dtissraw)
+dtcreditcip.m[date<'2016-08-01']
+dtin2<-dtissraw %>% add.earlist.iss.in.ccy(.)
 dtin2 %>% setkey(upcusip,ccy)
 # limiting to relevent bonds: sol1: just merge with with ys1m$dtreg
 # dtin2<-dtin2 %>% semi_join(ys1m$dtreg[,.N,upcusip],by='upcusip') %>% as.data.table()
