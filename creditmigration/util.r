@@ -435,17 +435,19 @@ plot.panel.creditcip.any.ccy<-function(ys,yseff, filename='',wide=F){
   credit.cip.exact.ccy<-(ys$regresult[yseff$regresult,on=c('date','ccy')] %>% setnames(c('est','i.est'),c('credit','crediteff')))[,cip:=credit-crediteff]
   invisible(credit.cip.exact.ccy[,cimax:=credit+1.96*se][,cimin:=credit-1.96*se])
   
+  credit.cip.exact.ccy[,cip:=-cip]
   dtcreditcip.plot<-credit.cip.exact.ccy %>% melt(.,id.vars=c('date','ccy','se','cimin','cimax'),measure.vars=c('cip','credit'))   
   
   #dtcreditcip.plot[ccy=='usd'] %>% ggplot(data=.,aes(x=date,y=value))+geom_line(aes(linetype=variable,colour=variable)) +geom_errorbar(aes(ymin=cimin,ymax=cimax),colour='lightgrey',alpha=.5) +xlab('')+ylab('bps')+geom_hline(yintercept=0,colour='lightblue')+ scale_color_discrete('',labels = c('CIP','Credit Spread Diff.'))+scale_linetype_discrete('',labels = c('CIP','Credit Spread Diff.'))+theme_classic()+theme(legend.position='bottom')
-  
+
   dt.corr.ccy<-credit.cip.exact.ccy[,.(corr=cor(cip,credit)),ccy]
   print(str_c('corr:',credit.cip.exact.ccy[,.(corr=cor(cip,credit))]))
-  
+    Labels=c('CIP deviation','Residualized credit spread differential'); Ltype=c('solid','dashed'); Lcolor=c('red','darkblue')
+
   require('gridExtra')
   fig<-list()
   for (iccy in credit.cip.exact.ccy[,.N,ccy]$ccy){
-    fig[[length(fig)+1]]<-dtcreditcip.plot[ccy==iccy] %>% ggplot(data=.,aes(x=date,y=value))+geom_line(aes(linetype=variable,colour=variable)) +geom_errorbar(aes(ymin=cimin,ymax=cimax),colour='lightgrey',alpha=.5) +xlab('')+ylab('')+geom_hline(yintercept=0,colour='lightblue')+ scale_color_discrete('',labels = c('CIP','Credit Spread Diff.'))+scale_linetype_discrete('',labels = c('CIP','Credit Spread Diff.'))+ggtitle(str_to_upper(iccy))+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=7))+theme(legend.position='none')+annotate('text',x=ymd('2015-06-01'),y=10,label=str_c('cor=',as.character(round(dt.corr.ccy[ccy==iccy,corr],2))))+theme(axis.title.y=element_blank())  
+    fig[[length(fig)+1]]<-dtcreditcip.plot[ccy==iccy] %>% ggplot(data=.,aes(x=date,y=value))+geom_line(aes(linetype=variable,colour=variable)) +geom_errorbar(aes(ymin=cimin,ymax=cimax),colour='lightgrey',alpha=.5) +xlab('')+ylab('')+theme_few()+ scale_color_manual('',labels =Labels,values=Lcolor)+scale_linetype_manual('',labels =Labels,values=Ltype)+ggtitle(str_to_upper(iccy))+theme_few()+scale_x_date(breaks=scales::pretty_breaks(n=5))+theme(legend.position='none')+annotate('text',x=ymd('2015-06-01'),y=10,label=str_c('cor=',as.character(round(dt.corr.ccy[ccy==iccy,corr],2))))+theme(axis.title.y=element_blank())  
   }
   
   legendcommon<-get_legend(fig[[1]]+theme(legend.position='bottom'))

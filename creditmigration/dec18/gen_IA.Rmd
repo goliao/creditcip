@@ -1,0 +1,282 @@
+---
+title: "credit cip extensions"
+output:
+  html_document: default
+editor_options: 
+  chunk_output_type: console
+---
+  
+\FloatBarrier
+```{r setup, eval=T,message=FALSE, warning=FALSE, paged.print=FALSE,echo=FALSE}
+knitr::opts_chunk$set(message = F,warning = F,echo = F,size='small')
+
+pwd="C:/Users/Gordon/Dropbox/Research/ccy basis/creditmigration/dec18"
+knitr::opts_knit$set(root.dir = pwd)
+setwd(pwd)
+
+# opt
+opt_calc=0
+
+if (opt_calc==1) source('setupcalc.R') else load('img_calc.RData')
+source('../util.r')
+```
+
+
+
+
+```{r}
+# Credit cip against other ccys -------------------------------------------
+#' ### Credit cip against EUR
+#+ eval=getOption('gl')$show.credit.cip
+ys.eur<-resyldsprdv4(dtl,dtm$prl,regversion=4,returndt=T,mainccyin = 'eur')
+ys.eur.eff<-resyldsprdv4(dtl,dtm$prl,regversion=4,adjccybs=1,returndt=T,mainccyin = 'eur')
+credit.cip.exact.eur<-(ys.eur$regresult[ys.eur.eff$regresult,on=c('date','ccy')] %>% setnames(c('est','i.est'),c('credit','crediteff')))[,cip:=credit-crediteff]
+
+zz<-plot.panel.creditcip.any.ccy(ys.eur,ys.eur.eff,wide=T,filename='../../paper/figures/ia_panel_eur.pdf')
+
+#' ### Credit cip against GBP
+#+ eval=getOption('gl')$show.credit.cip
+ys.gbp<-resyldsprdv4(dtl,dtm$prl,regversion=4,returndt=T,mainccyin = 'gbp')
+ys.gbp.eff<-resyldsprdv4(dtl,dtm$prl,regversion=4,adjccybs=1,returndt=T,mainccyin = 'gbp')
+
+zz<-plot.panel.creditcip.any.ccy(ys.gbp,ys.gbp.eff,wide=T,filename='../../paper/figures/ia_panel_gbp.pdf')
+```
+
+# var with partial identification
+```{r}
+
+
+dtissraw<-dtissraw[ccy %in% c('usd','eur','gbp','jpy','aud','chf','cad')][,monthly:=floor_date(d,'month')]
+dtissraw<-(dtissraw %>% tocusip6(field=firmlevel))[,upcusip:=cusip6] %>% add.earlist.iss.in.ccy()
+#'
+# VAR  ---------------------------------------------------------
+#+ VAR calc, include=FALSE,eval=getOption('gl')$run.var
+gl <- list('run.var'=TRUE, 
+           'run.stata'=TRUE,
+           'show.credit.cip'=TRUE, # graph credit cip, run regressoin
+           'individual.resid'=FALSE,# individually generated residualized spread or generated together
+           'sdc.filter'='6ccyv3',# set iss filter options: bondrefall, 6ccyv1 6ccyv2 # this is first step filter
+           'sdc.filter.var'=list('restrict.to.dtl'=TRUE,'collapse.filter'=1), # issfiltertype:# collapse filter = 0,1,2  for upcusips that might/mightnot issued in ccy before or after, isssued in 2nd ccy previously, or issued in 2nd ccy anytime before or after current issuance
+           'sdc.filter.iss.reg'=list('restrict.to.dtl'=TRUE,'collapse.filter'=0),
+           'sdc.filter.iv.reg'=list('restrict.to.dtl'=TRUE,'collapse.filter'=1),
+           'gov'='wogov',
+           'firmlevel'='upcusip',
+           'mcore'= 4,
+           'quickstart'=FALSE # to use previously saved results in the begining
+)
+options(gl=gl)
+
+
+
+plot.irf<-function(resirf,v1='credit',v2='cip',v3='i_netflow',filename='',naturalarrange=F){
+  require(latex2exp)
+  labelv1<-'$\\kappa$'
+  labelv2<-'$x$'
+  labelv3<-'$\\mu$'
+  dttemp<-list()
+  dttemp[[1]]<-(resirf$irf %>% as.data.frame(keep.rownames=T) %>% as.data.table(keep.rownames=T))[,type:="irf"]
+  dttemp[[2]]<-(resirf$Upper %>% as.data.frame(keep.rownames=T) %>% as.data.table(keep.rownames=T))[,type:="Upper"]
+  dttemp[[3]]<-(resirf$Lower %>% as.data.frame(keep.rownames=T) %>% as.data.table(keep.rownames=T))[,type:="Lower"]
+  dtirf<-(dttemp %>% rbindlist %>% melt(id.vars=c('rn','type')) %>% dcast(rn+variable~type))[,rn:=as.numeric(rn)][order(rn)]  
+  par(ask=F)  
+  require('gridExtra')
+  figirf<-list()
+  figirf[[1]]<-dtirf[variable==str_c(v1,'.',v1)] %>% ggplot(data=.,aes(x=rn,y=irf,group=1))+geom_line()+geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=.3,colour=NA)+ggtitle(TeX(str_c(labelv1,' $\\rightarrow$ ',labelv1)))+xlab('')+ylab('')+geom_hline(yintercept=0,colour='lightblue')+theme_few()+theme(legend.position='none')
+  figirf[[3]]<-dtirf[variable==str_c(v1,'.',v2)] %>% ggplot(data=.,aes(x=rn,y=irf,group=1))+geom_line()+geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=.3,colour=NA)+ggtitle(TeX(str_c(labelv1,' $\\rightarrow$ ',labelv2)))+xlab('')+ylab('')+geom_hline(yintercept=0,colour='lightblue')+theme_few()+theme(legend.position='none')
+  figirf[[2]]<-dtirf[variable==str_c(v1,'.',v3)] %>% ggplot(data=.,aes(x=rn,y=irf,group=1))+geom_line()+geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=.3,colour=NA)+ggtitle(TeX(str_c(labelv1,' $\\rightarrow$ ',labelv3)))+xlab('')+ylab('')+geom_hline(yintercept=0,colour='lightblue')+theme_few()+theme(legend.position='none')
+  figirf[[6]]<-dtirf[variable==str_c(v2,'.',v1)] %>% ggplot(data=.,aes(x=rn,y=irf,group=1))+geom_line()+geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=.3,colour=NA)+ggtitle(TeX(str_c(labelv2,' $\\rightarrow$ ',labelv1)))+xlab('')+ylab('')+geom_hline(yintercept=0,colour='lightblue')+theme_few()+theme(legend.position='none')
+  figirf[[4]]<-dtirf[variable==str_c(v2,'.',v2)] %>% ggplot(data=.,aes(x=rn,y=irf,group=1))+geom_line()+geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=.3,colour=NA)+ggtitle(TeX(str_c(labelv2,' $\\rightarrow$ ',labelv2)))+xlab('')+ylab('')+geom_hline(yintercept=0,colour='lightblue')+theme_few()+theme(legend.position='none')
+  figirf[[5]]<-dtirf[variable==str_c(v2,'.',v3)] %>% ggplot(data=.,aes(x=rn,y=irf,group=1))+geom_line()+geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=.3,colour=NA)+ggtitle(TeX(str_c(labelv2,' $\\rightarrow$ ',labelv3)))+xlab('')+ylab('')+geom_hline(yintercept=0,colour='lightblue')+theme_few()+theme(legend.position='none')
+  
+  if (!naturalarrange){
+    figirf.all<-grid.arrange(figirf[[1]],figirf[[2]],figirf[[3]],figirf[[4]],figirf[[5]],figirf[[6]],ncol=3,nrow=2,layout_matrix=rbind(c(1,2,3),c(4,5,6)),heights=c(2.25,2.25))
+  } else {
+    figirf.all<-grid.arrange(figirf[[1]],figirf[[3]],figirf[[2]],figirf[[5]],figirf[[6]],figirf[[4]],ncol=3,nrow=2,layout_matrix=rbind(c(1,2,3),c(4,5,6)),heights=c(2.25,2.25))
+  }
+  #if(filename!='') ggsave(file=filename,figirf.all,width=8,height=5)
+  figirf.all
+} 
+
+version.var.data<-'pairwise,exact'
+if (version.var.data=='original'){
+  dtcreditcip.m<-copy(credit.cip.exact)[order(date)][,date:=lubridate::floor_date(date,'month')][,.SD[1],.(date,ccy)]
+} else if (version.var.data %like% 'original_approx'){
+  # the non-exact version works etter with ordering of flow credit cip
+  #dtcreditcip.m<-copy(dtcreditcip)[order(date)][,date:=lubridate::floor_date(date,'month')][,.SD[1],.(date,ccy)]
+} else if (version.var.data %like% 'pairwise'){
+  # just pairwise eurusd
+  iccy <- 'eur'
+  yseurusd <- (dtl[ccy %in% c(iccy,'usd','1usd')] %>% resyldsprdv4(.,dtm$prl,regversion=4,returndt=T,parallel.core. = 1))$regresult
+  yseurusdeff <- (dtl[ccy %in% c(iccy,'usd','1usd')] %>% resyldsprdv4(.,dtm$prl,regversion=4,adjccybs=1,returndt=T,parallel.core.=1))$regresult
+  creditsingle<-create.dev.long2(prwin = dtm$prw,creditmispin = yseurusd,netmispin = yseurusdeff)
+  # use exact
+  if (version.var.data %like% 'exact') creditsingle[,cip:=credit-netmisp]
+  dtcreditcip.m<-copy(creditsingle)[order(date)][,date:=lubridate::floor_date(date,'month')][,.SD[1],.(date,ccy)]
+}
+
+if (getOption('gl')$sdc.filter.var$restrict.to.dtl){ # limiting to relevent bonds: sol1: just merge with with ys1m$dtreg
+  dtiss.in<-dtissraw %>% semi_join(ys1m$dtreg[,.N,upcusip],by='upcusip') %>% as.data.table()
+} else {dtiss.in<-dtissraw}
+dtiss.collapse.m <- foreach(iccy=c('eur')) %do% {
+  dtiss.in %>% icollapse4(iccy,collapse.freq = 'month',filter=getOption('gl')$sdc.filter.var$collapse.filter)
+} %>% rbindlist() %>% setkey(date,ccy)
+dtcreditcip.m %>% setkey(date,ccy); dtiss.collapse.m %>% setkey(date,ccy)
+dtreg.m<-dtcreditcip.m[dtiss.collapse.m,nomatch=0]; # dtreg.m  %>% write.dta('vardatain_1007.dta')
+
+
+```
+
+## A
+
+```{r}
+dtvar<-dtreg.m[date<'2016-09-01'][ccy=='eur'][,.(i_netflow,cip=-cip,credit)]
+res1<-vars::VAR(dtvar,1)
+
+#' ### SVAR using R with partial identification
+#+ eval=getOption('gl')$run.var
+amat <- diag(3)
+diag(amat) <- 1
+amat[2,1] <- NA
+amat[3,1] <- NA
+amat[3,2] <- NA
+amat[2,3] <- NA
+## A matrix
+res2<-vars::SVAR(res1,Amat=amat,estmethod = 'direct')
+resirf<-vars::irf(res2,runs=500) 
+resirf %>% plot.irf() %>% ggsave(file='../../figures/active_oirf_partial.pdf',.,width=8,height=5)
+```
+
+
+## B
+
+```{r}
+dtvar<-dtreg.m[date<'2016-09-01'][ccy=='eur'][,.(i_netflow,credit,cip=-cip)]
+res1<-vars::VAR(dtvar,1)
+
+#' ### SVAR using R with partial identification
+#+ eval=getOption('gl')$run.var
+amat <- diag(3)
+diag(amat) <- 1
+amat[2,1] <- NA
+amat[3,1] <- NA
+amat[3,2] <- NA
+amat[2,3] <- NA
+## A matrix
+res2<-vars::SVAR(res1,Amat=amat,estmethod = 'direct')
+resirf<-vars::irf(res2,runs=500) 
+resirf %>% plot.irf() %>% ggsave(file='../../figures/active_oirf_partialb.pdf',.,width=8,height=5)
+```
+
+
+# with additional control 
+*   ccy +liq+amt| upcusip+ytm_bucket+rating_bucket+senior 
+
+
+```{r}
+ys1mb<-resyldsprdv4(dtl[!is.na(DEBT_CLASS_CD)],dtm$prl,regversion=5,returndt=F,parallel.core. = 1)
+figext<-ggplotw.comp2(ys1m$regcoef,ys1mb,c('residualized credit spread diff.','with additional controls'))
+
+figext
+```
+
+
+# with additional control 
+*   ccy | upcusip+ytm_bucket+rating_bucket+senior+liq_bucket+amt_bucket
+
+
+```{r}
+ys1mb<-resyldsprdv4(dtl[!is.na(DEBT_CLASS_CD)],dtm$prl,regversion=6,returndt=F,parallel.core. = 1)
+figext<-ggplotw.comp2(ys1m$regcoef,ys1mb,c('residualized credit spread diff.','with additional controls'))
+
+figext
+```
+
+
+```{r,echo=F}
+
+regfun<-function(dt,ccylist='',regversion=4,bylist='',lhs.,mainccy.){
+  tc.ret<-tryCatch({
+    if (regversion==1){
+      reg<-felm(eval(exparse(lhs.))~ccy |upcusip |0 | upcusip,data=dt)
+    } else if (regversion==2){
+      reg<-felm(eval(exparse(lhs.))~ccy | ytm_bucket+rating_bucket | 0 | upcusip, data=dt)
+    } else if (regversion==3){
+      reg<-felm(eval(exparse(lhs.))~ccy | upcusip+ytm_bucket | 0 | upcusip, data=dt)
+    } else if (regversion==3.5){
+      reg<-felm(eval(exparse(lhs.))~ccy | upcusip+rating_bucket | 0 | upcusip, data=dt)
+    } else if (regversion==-4){
+      reg<-felm(eval(exparse(lhs.))~1 | upcusip+ytm_bucket+rating_bucket | 0 | upcusip, data=dt)
+    } else if (regversion==4){
+      reg<-felm(eval(exparse(lhs.))~ccy | upcusip+ytm_bucket+rating_bucket | 0 | upcusip, data=dt)
+    } else if (regversion==4.5){
+      reg<-felm(eval(exparse(lhs.))~ccy | upcusip+rating_bucket+ytm_bucket +liq_bucket+amt_bucket | 0 | upcusip, data=dt)
+    } else if (regversion==4.7){
+      reg<-felm(eval(exparse(lhs.))~ccy | upcusip+rating_bucket+ytm_bucket+Eglaw+liq_bucket+amt_bucket | 0 | upcusip, data=dt)
+    } else if (regversion==5){
+      reg<-felm(eval(exparse(lhs.))~ccy +liq+amt| upcusip+ytm_bucket+rating_bucket+senior | 0 | upcusip, data=dt)
+    } else if (regversion==5.5){
+      reg<-felm(eval(exparse(lhs.))~ccy +liq+amt+ytm| upcusip+rating_bucket+senior | 0 | upcusip, data=dt)
+    } else if (regversion==6){
+      reg<-felm(eval(exparse(lhs.))~ccy | upcusip+ytm_bucket+rating_bucket+senior+liq_bucket+amt_bucket | 0 | upcusip, data=dt)
+    } else if (regversion==7){
+      reg<-felm(eval(exparse(lhs.))~ccy | upcusip+ytm_bucket+rating_bucket+liq_bucket|0|upcusip,data=dt)
+    } else if (regversion==8){
+      reg<-lm(eval(exparse(lhs.))~ccy | upcusip+ytm_bucket+liq_bucket|0|upcusip,data=dt)
+    } else if (regversion==9){
+      reg<-lm(eval(exparse(lhs.))~ccy | upcusip+ytm_bucket+ccy*rating_bucket| 0 | upcusip,data=dt)
+    }
+  }, error=function(err){
+    print(err);print(bylist)
+  })
+  if (exists('reg')){
+    if (regversion==9){
+      dtcoef2<-(coef(summary(reg)) %>% as.data.table(keep.rownames=T))[rn %like% '^ccy' | rn %like% '^rating'][,.(ccy=rn,est=Estimate,se=`Cluster s.e.`)]} 
+    else if (regversion==-4){
+      
+      dtcoef2 <- data.table(ccy='none','N'=reg$N,'rsq'=summary(reg)$r2adj)
+      dtccy<-data.table('ccy'=ccylist);dtccy %>% setkey(ccy)
+      dtcoef2 %>% setkey(ccy)
+      dtcoef2 <- dtcoef2[dtccy[ccy!=str_c(1,mainccy.)]]
+    }
+    else{
+      dtcoef2<-(coef(summary(reg)) %>% as.data.table(keep.rownames=T))[rn %like% '^ccy',.(ccy=str_sub(rn,4),est=Estimate,se=`Cluster s.e.`)]
+      dtcoef2 <- cbind(dtcoef2,data.table('N'=reg$N,'rsq'=summary(reg)$r2adj))
+      dtccy<-data.table('ccy'=ccylist);dtccy %>% setkey(ccy)
+      dtcoef2 %>% setkey(ccy)
+      dtcoef2 <- dtcoef2[dtccy[ccy!=str_c(1,mainccy.)]]
+    } 
+    dtcoef2
+  } else {
+    browser('error in regfun')
+    return(data.table('ccy'='eur','est'=as.numeric(NA),se=as.numeric(NA)))
+  }
+}
+```
+
+
+# with additional control: Eglaw
+*  ccy | upcusip+rating_bucket+ytm_bucket + Eglaw | 0 | upcusip
+
+```{r}
+G6 <- c('United Kingdom','Japan','United States','Switzerland','Australia','Canada','Europe')
+glaw<-merge(bondref[,.(pk,deal_no)],dtissraw[!is.na(Eglaw) & Eglaw!='NA',.(deal_no,Eglaw)],by='deal_no',all.x=T)
+dtllaw<-merge(dtl,glaw[,.(pk,Eglaw)],by='pk')
+
+EULaw <- c('Germany','France','Netherlands','Spain','Italy','Luxembourg','Belgium','Austria','Denmark','Ireland-Rep','Portugal','East Germany')
+
+
+dtllaw[Eglaw %in% EULaw,Eglaw:='Europe']
+dtllaw[Eglaw %ni% G6,Eglaw:='NA']
+
+#dtllaw[,.N,.(Eglaw)][order(-N)]
+
+
+ysglaw<-NA
+ysglaw<-resyldsprdv4(dtllaw,dtm$prl,regversion=4.7,returndt=T,parallel.core. = 1)
+
+figext<-ggplotw.comp2(ys1m$regcoef,ysglaw$regcoef,c('residualized credit spread diff.','with additional controls'))
+figext
+```
+
+
+
