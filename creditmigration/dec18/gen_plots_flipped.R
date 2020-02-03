@@ -1,5 +1,5 @@
 
-figurespath='../../figures/'
+figurespath=''
 source('../util.r')
 creditcip.result<-plot.panel.creditcip(dtm$prw,ys1m$regresult,filename=str_c('fig_panel_usd_flipped.pdf'),yrstr.='5',wide=T) 
 

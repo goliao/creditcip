@@ -1,6 +1,6 @@
 source('../util.r')
 require(xlsx)
-
+Lcolor=c('red','dark blue')
 dtl[,.(.N,min(ytm),max(ytm)),ytm_bucket][order(ytm_bucket)]
 # 1: 1-3 yr
 # 2: 3-7 yr
@@ -27,7 +27,7 @@ corpbasis_LG=ysLG$regresult[ccy=='eur',.(date,`Low Grade`=est)]
 
 psi_rating <- rbindlist(list('High Grade'=ysHG$regresult[,.(date,ccy,est)],'Low Grade'=ysLG$regresult[,.(date,ccy,est)]),idcol = 'type')
 
-psi_rating[ccy=='eur'] %>% ggplot(aes(x=date,y=est,colour=type))+geom_line()+theme_few()+xlab('date')+ylab('basis points')+theme(legend.position='bottom',legend.title=element_text(colour='white'))+ labs(fill='')+scale_x_date(breaks=scales::pretty_breaks(n=7))+geom_hline(yintercept = 0,colour='grey')+ scale_color_manual(values=Lcolor)
+psi_rating[ccy=='eur'] %>% ggplot(aes(x=date,y=est,colour=type))+geom_line()+theme_few()+xlab('')+ylab('basis points')+theme(legend.position='bottom',legend.title=element_text(colour='white'))+ labs(fill='')+scale_x_date(breaks=scales::pretty_breaks(n=7))+geom_hline(yintercept = 0,colour='grey')+ scale_color_manual(values=Lcolor)
 
 ggsave('ratingcomp.pdf',width=4, height=4,units='in')
 
@@ -50,7 +50,7 @@ ysLong<-resyldsprdv4(dtl[(ytm>=7)],dtm$prl,regversion=3.5,adjccybs=1,returndt=T,
 corpbasis_long=ysLong$regresult[ccy=='eur',.(date,`Long Maturity`=est)]
 
 corpbasis_eur_shortlong=merge(corpbasis_short,corpbasis_long,by='date')
-corpbasis_eur_shortlong %>% ggplotw()+theme_few()+xlab('date')+ylab('basis points')+theme(legend.position='bottom',legend.title=element_text(colour='white'))+ labs(fill='')+scale_x_date(breaks=scales::pretty_breaks(n=7))+geom_hline(yintercept = 0,colour='grey')+ scale_color_manual(values=Lcolor)
+corpbasis_eur_shortlong %>% ggplotw()+theme_few()+xlab('')+ylab('basis points')+theme(legend.position='bottom',legend.title=element_text(colour='white'))+ labs(fill='')+scale_x_date(breaks=scales::pretty_breaks(n=7))+geom_hline(yintercept = 0,colour='grey')+ scale_color_manual(values=Lcolor)
 ggsave('maturitycomp.pdf',width=4, height=4,units='in')
 ###
 #########################
@@ -99,7 +99,7 @@ psim[,.N,type]
 # ggsave('psi_4sectors.pdf',width=4, height=4,units='in')
 
 Lcolor=c('red','dark blue')
-psim[type %in% c('Financials','Non-Finacials')] %>% ggplot(aes(x=date,y=est,color=type))+geom_line()+theme_few()+xlab('date')+ylab('basis points')+theme(legend.position='bottom',legend.title=element_text(colour='white'))+ labs(fill='')+scale_x_date(breaks=scales::pretty_breaks(n=7))+geom_hline(yintercept = 0,colour='grey')+ scale_color_manual(values=Lcolor)
+psim[type %in% c('Financials','Non-Finacials')] %>% ggplot(aes(x=date,y=est,color=type))+geom_line()+theme_few()+xlab('')+ylab('basis points')+theme(legend.position='bottom',legend.title=element_text(colour='white'))+ labs(fill='')+scale_x_date(breaks=scales::pretty_breaks(n=7))+geom_hline(yintercept = 0,colour='grey')+ scale_color_manual(values=Lcolor)
 ggsave('psi_by_sector.pdf',width=4, height=4,units='in')
 
 
@@ -208,8 +208,8 @@ plot1 <- ggplot() +
   geom_area(data=dtB,aes(x=date,y=value, fill= "CIP Deviation"), alpha=0.5) +
   geom_line(data=dtA,aes(x=date,y=value,color=factors), size = 0.5)+
   
-  xlab('Year') +
-  ylab('Basis Points')+ labs(fill='white') +
+  xlab('') +
+  ylab('basis points')+ labs(fill='white') +
   scale_x_date(breaks=scales::pretty_breaks(n=7))+geom_hline(yintercept = 0,colour='grey') +
   geom_line(size=1) +
   scale_fill_manual(values="gray")+

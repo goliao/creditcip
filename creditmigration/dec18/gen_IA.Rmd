@@ -81,12 +81,12 @@ plot.irf<-function(resirf,v1='credit',v2='cip',v3='i_netflow',filename='',natura
   par(ask=F)  
   require('gridExtra')
   figirf<-list()
-  figirf[[1]]<-dtirf[variable==str_c(v1,'.',v1)] %>% ggplot(data=.,aes(x=rn,y=irf,group=1))+geom_line()+geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=.3,colour=NA)+ggtitle(TeX(str_c(labelv1,' $\\rightarrow$ ',labelv1)))+xlab('')+ylab('')+geom_hline(yintercept=0,colour='lightblue')+theme_few()+theme(legend.position='none')
-  figirf[[3]]<-dtirf[variable==str_c(v1,'.',v2)] %>% ggplot(data=.,aes(x=rn,y=irf,group=1))+geom_line()+geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=.3,colour=NA)+ggtitle(TeX(str_c(labelv1,' $\\rightarrow$ ',labelv2)))+xlab('')+ylab('')+geom_hline(yintercept=0,colour='lightblue')+theme_few()+theme(legend.position='none')
-  figirf[[2]]<-dtirf[variable==str_c(v1,'.',v3)] %>% ggplot(data=.,aes(x=rn,y=irf,group=1))+geom_line()+geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=.3,colour=NA)+ggtitle(TeX(str_c(labelv1,' $\\rightarrow$ ',labelv3)))+xlab('')+ylab('')+geom_hline(yintercept=0,colour='lightblue')+theme_few()+theme(legend.position='none')
-  figirf[[6]]<-dtirf[variable==str_c(v2,'.',v1)] %>% ggplot(data=.,aes(x=rn,y=irf,group=1))+geom_line()+geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=.3,colour=NA)+ggtitle(TeX(str_c(labelv2,' $\\rightarrow$ ',labelv1)))+xlab('')+ylab('')+geom_hline(yintercept=0,colour='lightblue')+theme_few()+theme(legend.position='none')
-  figirf[[4]]<-dtirf[variable==str_c(v2,'.',v2)] %>% ggplot(data=.,aes(x=rn,y=irf,group=1))+geom_line()+geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=.3,colour=NA)+ggtitle(TeX(str_c(labelv2,' $\\rightarrow$ ',labelv2)))+xlab('')+ylab('')+geom_hline(yintercept=0,colour='lightblue')+theme_few()+theme(legend.position='none')
-  figirf[[5]]<-dtirf[variable==str_c(v2,'.',v3)] %>% ggplot(data=.,aes(x=rn,y=irf,group=1))+geom_line()+geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=.3,colour=NA)+ggtitle(TeX(str_c(labelv2,' $\\rightarrow$ ',labelv3)))+xlab('')+ylab('')+geom_hline(yintercept=0,colour='lightblue')+theme_few()+theme(legend.position='none')
+  figirf[[1]]<-dtirf[variable==str_c(v1,'.',v1)] %>% ggplot(data=.,aes(x=rn,y=irf,group=1))+geom_line()+geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=.3,colour=NA)+ggtitle(TeX(str_c(labelv1,' $\\rightarrow$ ',labelv1)))+xlab('')+ylab('')+geom_hline(yintercept=0,colour='darkblue')+theme_few()+theme(legend.position='none')
+  figirf[[3]]<-dtirf[variable==str_c(v1,'.',v2)] %>% ggplot(data=.,aes(x=rn,y=irf,group=1))+geom_line()+geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=.3,colour=NA)+ggtitle(TeX(str_c(labelv1,' $\\rightarrow$ ',labelv2)))+xlab('')+ylab('')+geom_hline(yintercept=0,colour='darkblue')+theme_few()+theme(legend.position='none')
+  figirf[[2]]<-dtirf[variable==str_c(v1,'.',v3)] %>% ggplot(data=.,aes(x=rn,y=irf,group=1))+geom_line()+geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=.3,colour=NA)+ggtitle(TeX(str_c(labelv1,' $\\rightarrow$ ',labelv3)))+xlab('')+ylab('')+geom_hline(yintercept=0,colour='darkblue')+theme_few()+theme(legend.position='none')
+  figirf[[6]]<-dtirf[variable==str_c(v2,'.',v1)] %>% ggplot(data=.,aes(x=rn,y=irf,group=1))+geom_line()+geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=.3,colour=NA)+ggtitle(TeX(str_c(labelv2,' $\\rightarrow$ ',labelv1)))+xlab('')+ylab('')+geom_hline(yintercept=0,colour='darkblue')+theme_few()+theme(legend.position='none')
+  figirf[[4]]<-dtirf[variable==str_c(v2,'.',v2)] %>% ggplot(data=.,aes(x=rn,y=irf,group=1))+geom_line()+geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=.3,colour=NA)+ggtitle(TeX(str_c(labelv2,' $\\rightarrow$ ',labelv2)))+xlab('')+ylab('')+geom_hline(yintercept=0,colour='darkblue')+theme_few()+theme(legend.position='none')
+  figirf[[5]]<-dtirf[variable==str_c(v2,'.',v3)] %>% ggplot(data=.,aes(x=rn,y=irf,group=1))+geom_line()+geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=.3,colour=NA)+ggtitle(TeX(str_c(labelv2,' $\\rightarrow$ ',labelv3)))+xlab('')+ylab('')+geom_hline(yintercept=0,colour='darkblue')+theme_few()+theme(legend.position='none')
   
   if (!naturalarrange){
     figirf.all<-grid.arrange(figirf[[1]],figirf[[2]],figirf[[3]],figirf[[4]],figirf[[5]],figirf[[6]],ncol=3,nrow=2,layout_matrix=rbind(c(1,2,3),c(4,5,6)),heights=c(2.25,2.25))
@@ -117,10 +117,13 @@ if (version.var.data=='original'){
 if (getOption('gl')$sdc.filter.var$restrict.to.dtl){ # limiting to relevent bonds: sol1: just merge with with ys1m$dtreg
   dtiss.in<-dtissraw %>% semi_join(ys1m$dtreg[,.N,upcusip],by='upcusip') %>% as.data.table()
 } else {dtiss.in<-dtissraw}
-dtiss.collapse.m <- foreach(iccy=c('eur')) %do% {
-  dtiss.in %>% icollapse4(iccy,collapse.freq = 'month',filter=getOption('gl')$sdc.filter.var$collapse.filter)
-} %>% rbindlist() %>% setkey(date,ccy)
-dtcreditcip.m %>% setkey(date,ccy); dtiss.collapse.m %>% setkey(date,ccy)
+
+  tmplist=list()
+  for(iccy in c('eur')) {
+  tmplist[[length(tmplist)+1]] <-  dtiss.in %>% icollapse4(iccy,collapse.freq = 'month',filter=getOption('gl')$sdc.filter.var$collapse.filter)
+} 
+dtiss.collapse.m <- tmplist %>% rbindlist() %>% setkey(date,ccy)
+  dtcreditcip.m %>% setkey(date,ccy); dtiss.collapse.m %>% setkey(date,ccy)
 dtreg.m<-dtcreditcip.m[dtiss.collapse.m,nomatch=0]; # dtreg.m  %>% write.dta('vardatain_1007.dta')
 
 
@@ -129,10 +132,50 @@ dtreg.m<-dtcreditcip.m[dtiss.collapse.m,nomatch=0]; # dtreg.m  %>% write.dta('va
 ## A
 
 ```{r}
-dtvar<-dtreg.m[date<'2016-09-01'][ccy=='eur'][,.(i_netflow,cip=-cip,credit)]
+
+
+plot.irf<-function(resirf,v1='credit',v2='cip',v3='i_netflow',filename='',naturalarrange=F){
+  require(latex2exp)
+  labelv1<-'$\\kappa$'; labelv1epsilon='$\\epsilon_\\kappa$'
+  labelv2<-'$x$'; labelv2epsilon='$\\epsilon_x$'
+  labelv3<-'$\\mu$'
+  dttemp<-list()
+  dttemp[[1]]<-(resirf$irf %>% as.data.frame(keep.rownames=T) %>% as.data.table(keep.rownames=T))[,type:="irf"]
+  dttemp[[2]]<-(resirf$Upper %>% as.data.frame(keep.rownames=T) %>% as.data.table(keep.rownames=T))[,type:="Upper"]
+  dttemp[[3]]<-(resirf$Lower %>% as.data.frame(keep.rownames=T) %>% as.data.table(keep.rownames=T))[,type:="Lower"]
+  dtirf<-(dttemp %>% rbindlist %>% melt(id.vars=c('rn','type')) %>% dcast(rn+variable~type))[,rn:=as.numeric(rn)][order(rn)]  
+  par(ask=F)  
+  require('gridExtra')
+  figirf<-list()
+  figirf[[1]]<-dtirf[variable==str_c(v1,'.',v1)] %>% ggplot(data=.,aes(x=rn,y=irf,group=1))+geom_line()+geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=.3,colour=NA)+xlab('')+ylab('')+geom_hline(yintercept=0,colour='darkred',size=1)+theme_few()+theme(legend.position='none')#+ggtitle(TeX(str_c(labelv1epsilon,' $\\rightarrow$ ',labelv1)))
+  figirf[[3]]<-dtirf[variable==str_c(v1,'.',v2)] %>% ggplot(data=.,aes(x=rn,y=irf,group=1))+geom_line()+geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=.3,colour=NA)+xlab('')+ylab('')+geom_hline(yintercept=0,colour='darkred',size=1)+theme_few()+theme(legend.position='none')#+ggtitle(TeX(str_c(labelv1epsilon,' $\\rightarrow$ ',labelv2)))
+  figirf[[2]]<-dtirf[variable==str_c(v1,'.',v3)] %>% ggplot(data=.,aes(x=rn,y=irf,group=1))+geom_line()+geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=.3,colour=NA)+xlab('')+ylab('')+geom_hline(yintercept=0,colour='darkred',size=1)+theme_few()+theme(legend.position='none')#+ggtitle(TeX(str_c(labelv1epsilon,' $\\rightarrow$ ',labelv3)))
+  figirf[[6]]<-dtirf[variable==str_c(v2,'.',v1)] %>% ggplot(data=.,aes(x=rn,y=irf,group=1))+geom_line()+geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=.3,colour=NA)+xlab('')+ylab('')+geom_hline(yintercept=0,colour='darkred',size=1)+theme_few()+theme(legend.position='none')#+ggtitle(TeX(str_c(labelv2epsilon,' $\\rightarrow$ ',labelv1)))
+  figirf[[4]]<-dtirf[variable==str_c(v2,'.',v2)] %>% ggplot(data=.,aes(x=rn,y=irf,group=1))+geom_line()+geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=.3,colour=NA)+xlab('')+ylab('')+geom_hline(yintercept=0,colour='darkred',size=1)+theme_few()+theme(legend.position='none')#+ggtitle(TeX(str_c(labelv2epsilon,' $\\rightarrow$ ',labelv2)))
+  figirf[[5]]<-dtirf[variable==str_c(v2,'.',v3)] %>% ggplot(data=.,aes(x=rn,y=irf,group=1))+geom_line()+geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=.3,colour=NA)+xlab('')+ylab('')+geom_hline(yintercept=0,colour='darkred',size=1)+theme_few()+theme(legend.position='none')#+ggtitle(TeX(str_c(labelv2epsilon,' $\\rightarrow$ ',labelv3)))
+  
+  if (!naturalarrange){
+    figirf.all<-grid.arrange(figirf[[1]],figirf[[2]],figirf[[3]],figirf[[4]],figirf[[5]],figirf[[6]],ncol=3,nrow=2,layout_matrix=rbind(c(1,2,3),c(4,5,6)),heights=c(2.25,2.25))
+    
+    figirf.A<-grid.arrange(figirf[[1]],figirf[[2]],figirf[[3]],ncol=3,nrow=1,layout_matrix=rbind(c(1,2,3)),heights=c(2.25))
+    
+    figirf.B<-grid.arrange(figirf[[4]],figirf[[5]],figirf[[6]],ncol=3,nrow=1,layout_matrix=rbind(c(4,5,6)),heights=c(2.25))
+    
+  } else {
+    figirf.all<-grid.arrange(figirf[[1]],figirf[[3]],figirf[[2]],figirf[[5]],figirf[[6]],figirf[[4]],ncol=3,nrow=2,layout_matrix=rbind(c(1,2,3),c(4,5,6)),heights=c(2.25,2.25))
+  }
+  #if(filename!='') ggsave(file=filename,figirf.all,width=8,height=5)
+  list('all'=figirf.all,'A'=figirf.A,'B'=figirf.B)
+} 
+
+
+
+
+#%in% c('eur','aud','cad','gbp','jpy','chf'
+dtvar<-dtreg.m[date<'2016-09-01'][ccy=='eur'][,.(i_netflow,cip=-cip,credit=credit)]
 res1<-vars::VAR(dtvar,1)
 
-#' ### SVAR using R with partial identification
+# ### SVAR using R with partial identification
 #+ eval=getOption('gl')$run.var
 amat <- diag(3)
 diag(amat) <- 1
@@ -140,10 +183,25 @@ amat[2,1] <- NA
 amat[3,1] <- NA
 amat[3,2] <- NA
 amat[2,3] <- NA
+amat
 ## A matrix
 res2<-vars::SVAR(res1,Amat=amat,estmethod = 'direct')
 resirf<-vars::irf(res2,runs=500) 
-resirf %>% plot.irf() %>% ggsave(file='../../figures/active_oirf_partial.pdf',.,width=8,height=5)
+
+resirf$irf$credit <- -resirf$irf$credit
+resirf$Upper$credit <- -resirf$Upper$credit
+resirf$Lower$credit <- -resirf$Lower$credit
+
+
+fig <- resirf %>% plot.irf()
+fig[['all']]
+fig[['all']] %>% ggsave(file='../../figures/active_oirf_partial.pdf',.,width=8,height=5)
+fig[['A']] %>% ggsave(file='../../figures/active_oirf_partialA.pdf',.,width=8,height=2.5)
+fig[['B']] %>% ggsave(file='../../figures/active_oirf_partialB.pdf',.,width=8,height=2.5)
+
+fig[['all']] %>% ggsave(file='../../figures/active_oirf_partial.eps',.,width=8,height=5)
+fig[['A']] %>% ggsave(file='../../figures/active_oirf_partialA.eps',.,width=8,height=2.5)
+fig[['B']] %>% ggsave(file='../../figures/active_oirf_partialB.eps',.,width=8,height=2.5)
 ```
 
 
